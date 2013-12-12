@@ -1,0 +1,12 @@
+Lima plugins to be written:
+===========================
+
+1) HDF5 file writer for a burst of 2048 frames. Considering a SINK plugin
+
+2) Alarm plugin that warns the beamline sequencer if something is definitely 
+wrong in the experiment to kill the beam to protect the detector from damage
+
+3) Visualization plugin: sends the current image to the visualization workstation, 
+with a maximum framerate.
+
+   
