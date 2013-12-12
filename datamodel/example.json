@@ -1,0 +1,13 @@
+# Typical 
+{
+datafile: /path/to/Metadata.h5, #this ontains links to raw images data.
+processing: {
+    do_dark: true/false,
+    do_flat: true/false,
+    do_distortion: true/false,
+    save_distortion: true/false,
+    do_variance: true/false,
+    ....
+    }
+}
+ 
