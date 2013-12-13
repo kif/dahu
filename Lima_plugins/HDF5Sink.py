@@ -50,6 +50,17 @@ class StartAcqCallback(Core.SoftCallback):
     ctrl.startAcq()
 
     """
+    CONFIG_ITEMS = {"dimX": None,
+                    "dimY":None,
+                    "binX": None,
+                    "binY":None,
+                    "directory": None,
+                    "prefix": None,
+                    "start_index": None,
+                    "number_of_frames":None,
+                    "exposure_time": None,
+                     }
+
     def __init__(self, control, task=None):
         """
         
@@ -67,17 +78,25 @@ class StartAcqCallback(Core.SoftCallback):
 
         im = self._control.image()
         imdim = im.getImageDim().getSize()
-
         x = imdim.getWidth()
         y = imdim.getHeight()
         bin = im.getBin()
         binX = bin.getX()
         binY = bin.getY()
+        flip = im.getFlip()
+        roi = im.getRoi()
         lima_cfg = {"dimX":x,
                     "dimY":y,
                     "binX":binX,
-                    "binY":binY}
-
+                    "binY":binY,
+                    "flipX":flip.x,
+                    "flipY":flip.y,
+                    "rotation":im.getRotation(),
+                    "mode": im.getMode(),
+                    "image_type": im.getImageType()}
+        if roi.isActive():
+            lima_cfg["OffsetX"] = roi.getTopLeft().x
+            lima_cfg["OffsetY"] = roi.getTopLeft().y
         saving = self._control.saving()
         sav_parms = saving.getParameters()
         lima_cfg["directory"] = sav_parms.directory
@@ -89,27 +108,9 @@ class StartAcqCallback(Core.SoftCallback):
         lima_cfg["number_of_frames"] = acq.getAcqNbFrames() #to check.
         lima_cfg["exposure_time"] = acq.getAcqExpoTime()
         #ROI see: https://github.com/esrf-bliss/Lima/blob/master/control/include/CtAcquisition.h
-        print("self._task._worker: %s" % self._task._worker)
-        if (self._task._worker) is None :
-            centerX = x // 2
-            centerY = y // 2
-            ai = pyFAI.AzimuthalIntegrator()
-            ai.setFit2D(1000, centerX=centerX, centerY=centerY, pixelX=1, pixelY=1)
-            worker = pyFAI.worker.Worker(ai)
-            worker.unit = "r_mm"
-            worker.method = "lut_ocl_gpu"
-            worker.nbpt_azim = 360
-            worker.nbpt_rad = 500
-            worker.output = "numpy"
-            print("Worker updated")
-            self._task._worker = worker
-        else:
-            worker = self._task._worker
-        worker.reconfig(shape=(y, x), sync=True)
         if self._task._writer:
-            config = self._task._worker.get_config()
-            self._task._writer.init(fai_cfg=config, lima_cfg=lima_cfg)
-            self._task._writer.flush(worker.radial, worker.azimuthal)
+            self._task._writer.init(lima_cfg=lima_cfg)
+            self._task._writer.flush()
 
 
 class HDF5Sink(Core.Processlib.SinkTaskBase):
@@ -118,7 +119,7 @@ class HDF5Sink(Core.Processlib.SinkTaskBase):
     it saves the image into a HDF5 stack.
     
     """
-    
+
     def __init__(self, worker=None, writer=None):
         Core.Processlib.SinkTaskBase.__init__(self)
         self._config = {}
@@ -147,16 +148,30 @@ class HDF5Sink(Core.Processlib.SinkTaskBase):
             self._writer.write(rData.buffer, rData.frameNumber)
 
 
-    def setJsonConfig(self, jsonconfig):
-        self._writer.setJsonConfig(jsonconfig)
+    def setConfig(self, config_dict=None):
+        """
+        Set the "static" configuration like filename and so on.
+        
+        @param config_dict: dict or json-serialized dict or file containing this dict.
+        """
+        self._writer.setConfig(jsonconfig)
 
 class HDF5Writer(object):
     """
     Class allowing to write HDF5 Files.    
     """
-    CONFIG_ITEMS = ["filename", "dirname", "extension", "subdir", "hpath"]
-    DATASET_NAME = "data"
-    def __init__(self, filename, hpath="data", burst=None):
+    CONFIG_ITEMS = {"filename": None,
+                    "dirname":None,
+                    "extension": ".h5",
+                    "subdir":None,
+                    "hpath": "raw",
+                    "dataset_name": "data",
+                    "compression": None,
+                    "min_size":1,
+                    "detector_name": "LImA Detector",
+                     }
+
+    def __init__(self, **config):
         """
         Constructor of an HDF5 writer:
         
@@ -164,118 +179,59 @@ class HDF5Writer(object):
         @param hpath: name of the group: it will contain data (2-4D dataset), [tth|q|r] and pyFAI, group containing the configuration
         @param burst: exprected size of the dataset 
         """
-        self.filename = filename
         self._sem = threading.Semaphore()
-        self.dirname = None
-        self.subdir = None
-        self.extension = extension
-        self.fai_cfg = {}
-        self.lima_cfg = {}
-        self.hpath = hpath
+        self._initialized = False
+        for kw, defval in self.CONFIG_ITEMS.items():
+            self.__setattr__(kw, defval)
         self.hdf5 = None
         self.group = None
         self.dataset = None
         self.chunk = None
         self.shape = None
-        self.ndim = None
 
     def __repr__(self):
-        return "HDF5 writer on file %s:%s %sinitialized" % (self.filename, self.hpath, "" if self._initialized else "un")
+        out = ["HDF5 writer  %sinitialized" % ("" if self._initialized else "un")] + \
+        ["%s: %s" % (k, self.__getattribute__(k)) for k in self.CONFIG_ITEMS]
+        return os.linesep.join(out)
 
-    def init(self, fai_cfg=None, lima_cfg=None):
+    def init(self, lima_cfg=None):
         """
-        Initializes the HDF5 file for writing
-        @param fai_cfg: the configuration of the worker as a dictionary
+        Initializes the HDF5 file for writing. Part of prepareAcq.
+        
+        @param lima_cfg: dictionnary with parameters coming from Lima at the "prepareAcq" 
         """
-        Writer.init(self, fai_cfg, lima_cfg)
         with self._sem:
-            #TODO: this is Debug statement
-            open("fai_cfg.json", "w").write(json.dumps(self.fai_cfg, indent=4))
-            open("lima_cfg.json", "w").write(json.dumps(self.lima_cfg, indent=4))
-            self.fai_cfg["nbpt_rad"] = self.fai_cfg.get("nbpt_rad", 1000)
             if h5py:
                 try:
                     self.hdf5 = h5py.File(self.filename)
-                except IOError: #typically a corrupted HDF5 file !
+                except IOError:
+                    logger.error("typically a corrupted HDF5 file ! : %s" % self.filename)
                     os.unlink(self.filename)
                     self.hdf5 = h5py.File(self.filename)
             else:
-                logger.error("No h5py library, no chance")
-                raise RuntimeError("No h5py library, no chance")
+                err = "No h5py library, no chance"
+                logger.error(err)
+                raise RuntimeError(err)
             self.group = self.hdf5.require_group(self.hpath)
             self.group.attrs["NX_class"] = "NXentry"
-            self.pyFAI_grp = self.hdf5.require_group(posixpath.join(self.hpath, self.CONFIG))
-            self.pyFAI_grp.attrs["desc"] = "PyFAI worker configuration"
-            for key, value in self.fai_cfg.items():
-                if value is None:
-                    continue
-                try:
-                    self.pyFAI_grp[key] = value
-                except:
-                    print("Unable to set %s: %s" % (key, value))
-                    self.close()
-                    sys.exit(1)
-            rad_name, rad_unit = str(self.fai_cfg.get("unit", "2th_deg")).split("_", 1)
-            self.radial_values = self.group.require_dataset(rad_name, (self.fai_cfg["nbpt_rad"],), numpy.float32)
-            if self.fai_cfg.get("nbpt_azim", 0) > 1:
-                self.azimuthal_values = self.group.require_dataset("chi", (self.fai_cfg["nbpt_azim"],), numpy.float32)
-                self.azimuthal_values.attrs["unit"] = "deg"
-                self.radial_values.attrs["interpretation"] = "scalar"
-                self.radial_values.attrs["long name"] = "Azimuthal angle"
-
-            self.radial_values.attrs["unit"] = rad_unit
-            self.radial_values.attrs["interpretation"] = "scalar"
-            self.radial_values.attrs["long name"] = "diffraction radial direction"
-            if self.fast_scan_width:
-                self.fast_motor = self.group.require_dataset("fast", (self.fast_scan_width,) , numpy.float32)
-                self.fast_motor.attrs["long name"] = "Fast motor position"
-                self.fast_motor.attrs["interpretation"] = "scalar"
-                self.fast_motor.attrs["axis"] = "1"
-                self.radial_values.attrs["axis"] = "2"
-                if self.azimuthal_values is not None:
-                    chunk = 1, self.fast_scan_width, self.fai_cfg["nbpt_azim"], self.fai_cfg["nbpt_rad"]
-                    self.ndim = 4
-                    self.azimuthal_values.attrs["axis"] = "3"
-                else:
-                    chunk = 1, self.fast_scan_width, self.fai_cfg["nbpt_rad"]
-                    self.ndim = 3
-            else:
-                self.radial_values.attrs["axis"] = "1"
-                if self.azimuthal_values is not None:
-                    chunk = 1, self.fai_cfg["nbpt_azim"], self.fai_cfg["nbpt_rad"]
-                    self.ndim = 3
-                    self.azimuthal_values.attrs["axis"] = "2"
-                else:
-                    chunk = 1, self.fai_cfg["nbpt_rad"]
-                    self.ndim = 2
-
-            if self.DATASET_NAME in self.group:
-                del self.group[self.DATASET_NAME]
-            shape = list(chunk)
-            if self.lima_cfg.get("number_of_frames", 0) > 0:
-                if self.fast_scan_width is not None:
-                    size[0] = 1 + self.lima_cfg["number_of_frames"] // self.fast_scan_width
-                else:
-                    size[0] = self.lima_cfg["number_of_frames"]
-            self.dataset = self.group.require_dataset(self.DATASET_NAME, shape, dtype=numpy.float32, chunks=chunk,
+            cfg_grp = self.hdf5.require_group(posixpath.join(self.hpath, "detector_config"))
+            cfg_grp["detector_name"] = self.detector_name
+            for k, v in lima_cfg.items:
+                cfg_grp[k] = v
+            #TODO: calculate chunks, size and datatype ...
+            self.dataset = self.group.require_dataset(self.dataset_name, self.shape, dtype=numpy.float32, chunks=chunk,
                                                       maxshape=(None,) + chunk[1:])
-            if self.fai_cfg.get("nbpt_azim", 0) > 1:
-                self.dataset.attrs["interpretation"] = "image"
-            else:
-                self.dataset.attrs["interpretation"] = "spectrum"
+            self.dataset.attrs["interpretation"] = "image"
             self.dataset.attrs["signal"] = "1"
             self.chunk = chunk
             self.shape = chunk
-            name = "Mapping " if self.fast_scan_width else "Scanning "
-            name += "2D" if self.fai_cfg.get("nbpt_azim", 0) > 1 else "1D"
-            name += " experiment"
-            self.group["title"] = name
-            self.group["program"] = "PyFAI"
+            self.group["title"] = "Raw frames"
+            self.group["program"] = "LImA"
             self.group["start_time"] = getIsoTime()
 
 
 
-    def flush(self, radial=None, azimuthal=None):
+    def flush(self):
         """
         Update some data like axis units and so on.
         
@@ -284,17 +240,10 @@ class HDF5Writer(object):
         """
         with self._sem:
             if not self.hdf5:
-                raise RuntimeError('No opened file')
-            if radial is not None:
-                if radial.shape == self.radial_values.shape:
-                    self.radial_values[:] = radial
-                else:
-                    logger.warning("Unable to assign radial axis position")
-            if azimuthal is not None:
-                if azimuthal.shape == self.azimuthal_values.shape:
-                    self.azimuthal_values[:] = azimuthal
-                else:
-                    logger.warning("Unable to assign azimuthal axis position")
+                err = 'No opened file'
+                logger.error(err)
+                raise RuntimeError(err)
+            self.group["stop_time"] = getIsoTime()
             self.hdf5.flush()
 
     def close(self):
@@ -303,6 +252,10 @@ class HDF5Writer(object):
                 self.flush()
                 self.hdf5.close()
                 self.hdf5 = None
+                self.group = None
+                self.dataset = None
+                self.chunk = None
+                self.size = None
 
     def write(self, data, index=0):
         """
@@ -312,14 +265,24 @@ class HDF5Writer(object):
             if self.dataset is None:
                 logger.warning("Writer not initialized !")
                 return
-            if self.azimuthal_values is None:
-                data = data[:, 1] #take the second column only aka I
-            if self.fast_scan_width:
-                index0, index1 = (index // self.fast_scan_width, index % self.fast_scan_width)
-                if index0 >= self.dataset.shape[0]:
-                    self.dataset.resize(index0 + 1, axis=0)
-                self.dataset[index0, index1] = data
+            if index >= self.dataset.shape[0]:
+                self.dataset.resize(index + 1, axis=0)
+            self.dataset[index] = data
+
+    def setConfig(self, config_dict=None):
+        """
+        Set the "static" configuration like filename and so on.
+        
+        @param config_dict: dict or JSON-serialized dict or file containing this dict.
+        """
+
+        if type(config_dict) in types.StringTypes:
+            if os.path.isfile(config_dict):
+                config = json.load(open(config_dict, "r"))
             else:
-                if index >= self.dataset.shape[0]:
-                    self.dataset.resize(index + 1, axis=0)
-                self.dataset[index] = data
+                 config = json.loads(config_dict)
+        else:
+            config = dict(config_dict)
+        for k, v in  config.items():
+            if k in self.CONFIG_ITEMS:
+                self.__setattr__(k, v)
