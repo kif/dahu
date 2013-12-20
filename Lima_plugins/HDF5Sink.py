@@ -15,17 +15,13 @@ __date__ = "12/12/2013"
 __status__ = "beta"
 __docformat__ = 'restructuredtext'
 
-import os, json, distutils.util, sys, threading, logging
+import os, json, threading, logging, posixpath, time, types
 logger = logging.getLogger("lima.hdf5")
 # set loglevel at least at INFO
 if logger.getEffectiveLevel() > logging.INFO:
     logger.setLevel(logging.INFO)
 import numpy
 from Lima import Core
-#from Utils import BasePostProcess
-import sys
-import os, json, distutils.util
-from os.path import dirname
 from pyFAI.io import getIsoTime
 import h5py
 
@@ -60,7 +56,24 @@ class StartAcqCallback(Core.SoftCallback):
                     "number_of_frames":None,
                     "exposure_time": None,
                      }
-
+    LIMA_DTYPE = {Core.Bpp10:   "uint16",
+                  Core.Bpp10S:   "int16",
+                  Core.Bpp12:   "uint16",
+                  Core.Bpp12S:   "int16",
+                  Core.Bpp14:   "uint16",
+                  Core.Bpp14S:   "int16",
+                  Core.Bpp16:   "uint16",
+                  Core.Bpp16S:   "int16",
+                  Core.Bpp32:   "uint32",
+                  Core.Bpp32S:   "int32",
+                  Core.Bpp8:    "uint8",
+                  Core.Bpp8S:   "int8"
+                  }
+    LIMA_ROTATION = {Core.Rotation_0: "no_rot",
+                     Core.Rotation_90: "rot_90_cw",
+                     Core.Rotation_270: "rot_90_ccw",
+                     Core.Rotation_180: "rot_180",
+                     }
     def __init__(self, control, task=None):
         """
         
@@ -91,9 +104,9 @@ class StartAcqCallback(Core.SoftCallback):
                     "binY":binY,
                     "flipX":flip.x,
                     "flipY":flip.y,
-                    "rotation":im.getRotation(),
+                    "rotation":self.LIMA_ROTATION[im.getRotation()],
                     "mode": im.getMode(),
-                    "image_type": im.getImageType()}
+                    "dtype": self.LIMA_DTYPE[im.getImageType()]}
         if roi.isActive():
             lima_cfg["OffsetX"] = roi.getTopLeft().x
             lima_cfg["OffsetY"] = roi.getTopLeft().y
@@ -109,6 +122,7 @@ class StartAcqCallback(Core.SoftCallback):
         lima_cfg["exposure_time"] = acq.getAcqExpoTime()
         #ROI see: https://github.com/esrf-bliss/Lima/blob/master/control/include/CtAcquisition.h
         if self._task._writer:
+#            print(lima_cfg)
             self._task._writer.init(lima_cfg=lima_cfg)
             self._task._writer.flush()
 
@@ -120,12 +134,14 @@ class HDF5Sink(Core.Processlib.SinkTaskBase):
     
     """
 
-    def __init__(self, worker=None, writer=None):
+    def __init__(self, writer=None):
         Core.Processlib.SinkTaskBase.__init__(self)
-        self._config = {}
-        self._writer = writer
-        if writer  is None:
-            logger.error("Without a writer, SinkPyFAI will just dump all data")
+#        self._config = {}
+        if writer is None:
+            logger.error("Without a writer, SinkPyFAI will just dump all data to /tmp")
+            self._writer = HDF5Writer(filename="/tmp/LImA_default.h5")
+        else:
+            self._writer = writer
 
     def __repr__(self):
         """
@@ -141,11 +157,11 @@ class HDF5Sink(Core.Processlib.SinkTaskBase):
         
         Called for every frame in a different C++ thread.
         """
-        rData = Core.Processlib.Data()
-        rData.frameNumber = data.frameNumber
-        rData.buffer = self._worker.process(data.buffer)
+        logger.debug("in Sink.process")
         if self._writer: #optional HDF5 writer
-            self._writer.write(rData.buffer, rData.frameNumber)
+            self._writer.write(data.buffer, data.frameNumber)
+        else:
+            logger.warning("No writer defined !!!")
 
 
     def setConfig(self, config_dict=None):
@@ -164,11 +180,13 @@ class HDF5Writer(object):
                     "dirname":None,
                     "extension": ".h5",
                     "subdir":None,
-                    "hpath": "raw",
+                    "hpath": "entry_",
+                    "lima_grp": "LImA_DATA",
                     "dataset_name": "data",
                     "compression": None,
                     "min_size":1,
                     "detector_name": "LImA Detector",
+                    "metadata_grp": "detector_config"
                      }
 
     def __init__(self, **config):
@@ -181,8 +199,10 @@ class HDF5Writer(object):
         """
         self._sem = threading.Semaphore()
         self._initialized = False
+        self.filename = self.dirname = self.extension = self.subdir = self.hpath = self.lima_grp =None
+        self.dataset_name = self.compression = self.min_size = self.detector_name = self.metadata_grp = None
         for kw, defval in self.CONFIG_ITEMS.items():
-            self.__setattr__(kw, defval)
+            self.__setattr__(kw, config.get(kw, defval))
         self.hdf5 = None
         self.group = None
         self.dataset = None
@@ -200,6 +220,7 @@ class HDF5Writer(object):
         
         @param lima_cfg: dictionnary with parameters coming from Lima at the "prepareAcq" 
         """
+        logger.debug("HDF5 writer init with %s" % lima_cfg)
         with self._sem:
             if h5py:
                 try:
@@ -212,22 +233,37 @@ class HDF5Writer(object):
                 err = "No h5py library, no chance"
                 logger.error(err)
                 raise RuntimeError(err)
+            prefix = lima_cfg.get("prefix") or self.CONFIG_ITEMS["hpath"]
+            if not prefix.endswith("_"):
+                prefix+="_"
+            entries = len([i.startswith(prefix) for i in self.hdf5])
+            self.hpath = posixpath.join("%s%04d"%(prefix,entries),self.lima_grp)
             self.group = self.hdf5.require_group(self.hpath)
-            self.group.attrs["NX_class"] = "NXentry"
-            cfg_grp = self.hdf5.require_group(posixpath.join(self.hpath, "detector_config"))
-            cfg_grp["detector_name"] = self.detector_name
-            for k, v in lima_cfg.items:
-                cfg_grp[k] = v
-            #TODO: calculate chunks, size and datatype ...
-            self.dataset = self.group.require_dataset(self.dataset_name, self.shape, dtype=numpy.float32, chunks=chunk,
-                                                      maxshape=(None,) + chunk[1:])
+            self.group.parent.attrs["NX_class"] = "NXentry"
+            self.group.attrs["NX_class"] = "NXdata"
+            cfg_grp = self.hdf5.require_group(posixpath.join(self.hpath, self.metadata_grp))
+            cfg_grp["detector_name"] = numpy.string_(self.detector_name)
+            for k, v in lima_cfg.items():
+                if type(v) in types.StringTypes:
+                    cfg_grp[k] = numpy.string_(v)
+                else:
+                    cfg_grp[k] = v
+            number_of_frames = (max(1, lima_cfg["number_of_frames"]) + self.min_size - 1) // self.min_size * self.min_size
+            self.min_size = max(1, self.min_size)
+            self.shape = (number_of_frames , lima_cfg.get("dimY", 1), lima_cfg.get("dimX", 1))
+            self.chunk = (self.min_size, lima_cfg.get("dimY", 1), lima_cfg.get("dimX", 1))
+            if "dtype" in lima_cfg:
+                self.dtype = numpy.dtype(lima_cfg["dtype"])
+            else:
+                self.dtype = numpy.int32
+            self.dataset = self.group.require_dataset(self.dataset_name, self.shape, dtype=self.dtype, chunks=self.chunk,
+                                                      maxshape=(None,) + self.chunk[1:])
             self.dataset.attrs["interpretation"] = "image"
+            self.dataset.attrs["metadata"] = self.metadata_grp
             self.dataset.attrs["signal"] = "1"
-            self.chunk = chunk
-            self.shape = chunk
-            self.group["title"] = "Raw frames"
-            self.group["program"] = "LImA"
-            self.group["start_time"] = getIsoTime()
+            self.group.parent["title"] = numpy.string_("Raw frames")
+            self.group.parent["program"] = numpy.string_("LImA HDF5 plugin")
+            self.group.parent["start_time"] = numpy.string_(getIsoTime())
 
 
 
@@ -238,18 +274,22 @@ class HDF5Writer(object):
         @param radial: position in radial direction
         @param  azimuthal: position in azimuthal direction
         """
+        logger.debug("HDF5 writer flush")
         with self._sem:
             if not self.hdf5:
                 err = 'No opened file'
                 logger.error(err)
                 raise RuntimeError(err)
-            self.group["stop_time"] = getIsoTime()
+            if "stop_time" in self.group.parent:
+                del  self.group.parent["stop_time"]
+            self.group.parent["stop_time"] = numpy.string_(getIsoTime())
             self.hdf5.flush()
 
     def close(self):
+        logger.debug("HDF5 writer close")
+        self.flush()
         with self._sem:
             if self.hdf5:
-                self.flush()
                 self.hdf5.close()
                 self.hdf5 = None
                 self.group = None
@@ -261,9 +301,11 @@ class HDF5Writer(object):
         """
         Minimalistic method to limit the overhead.
         """
+        logger.debug("Write called on frame %s" % index)
         with self._sem:
             if self.dataset is None:
                 logger.warning("Writer not initialized !")
+                logger.info(self)
                 return
             if index >= self.dataset.shape[0]:
                 self.dataset.resize(index + 1, axis=0)
@@ -275,7 +317,7 @@ class HDF5Writer(object):
         
         @param config_dict: dict or JSON-serialized dict or file containing this dict.
         """
-
+        logger.debug("HDF5 writer config with %s" % config_dict)
         if type(config_dict) in types.StringTypes:
             if os.path.isfile(config_dict):
                 config = json.load(open(config_dict, "r"))
@@ -286,3 +328,62 @@ class HDF5Writer(object):
         for k, v in  config.items():
             if k in self.CONFIG_ITEMS:
                 self.__setattr__(k, v)
+
+def test_basler():
+    """
+    """
+    import argparse
+    from Lima import Basler
+    parser = argparse.ArgumentParser(description="Demo for HDF5 writer plugin",
+                                     epilog="Author: Jérôme KIEFFER")
+    parser.add_argument("-v", "--verbose",
+                      action="store_true", dest="verbose", default=False,
+                      help="switch to verbose/debug mode")
+    parser.add_argument("-j", "--json",
+                      dest="json", default=None,
+                      help="json file containing the setup")
+    parser.add_argument("-f", "--fps", type=float,
+                      dest="fps", default="30",
+                      help="Number of frames per seconds")
+    parser.add_argument("-i", "--ip",
+                      dest="ip", default="192.168.5.19",
+                      help="IP address of the Basler camera")
+    parser.add_argument("-n", "--nbframes", type=int,
+                      dest="n", default=128,
+                      help="number of frames to record")
+    parser.add_argument('fname', nargs='*',
+                   help='HDF5 filename ', default=["/tmp/lima_test.h5"])
+#    parser.add_option("-l", "--lima",
+#                      dest="lima", default=None,
+#                      help="Base installation of LImA")
+    options = parser.parse_args()
+    if options.verbose:
+        logger.setLevel(logging.DEBUG)
+        logger.debug("Entering debug mode")
+    cam = Basler.Camera(options.ip)
+    iface = Basler.Interface(cam)
+    ctrl = Core.CtControl(iface)
+    extMgr = ctrl.externalOperation()
+    myOp = extMgr.addOp(Core.USER_SINK_TASK, "HDF5writer", 10)
+    writer = HDF5Writer(filename=options.fname[0])
+    myTask = HDF5Sink(writer)
+    myOp.setSinkTask(myTask)
+    callback = StartAcqCallback(ctrl, myTask)
+    myOp.registerCallback(callback)
+    acq = ctrl.acquisition()
+    acq.setAcqNbFrames(options.n)
+    acq.setAcqExpoTime(1. / options.fps)
+    ctrl.prepareAcq()
+    ctrl.startAcq()
+    while ctrl.getStatus().ImageCounters.LastImageReady < 1:
+        time.sleep(0.5)
+    logger.info("First frame arrived")
+    time.sleep(1.0 * options.n / options.fps)
+    logger.info("Waiting for last frame")
+    while ctrl.getStatus().ImageCounters.LastImageReady < options.n - 1:
+        time.sleep(0.5)
+    logger.info("Closing HDF5 file")
+    writer.close()
+
+if __name__ == "__main__":
+    test_basler()
