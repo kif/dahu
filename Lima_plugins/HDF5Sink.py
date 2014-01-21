@@ -121,6 +121,9 @@ class StartAcqCallback(Core.SoftCallback):
         lima_cfg["number_of_frames"] = acq.getAcqNbFrames() #to check.
         lima_cfg["exposure_time"] = acq.getAcqExpoTime()
         #ROI see: https://github.com/esrf-bliss/Lima/blob/master/control/include/CtAcquisition.h
+        #https://github.com/esrf-bliss/Lima-tango/blob/master/LimaCCDs.py line 400
+        #controle include ctsavings #154 ->
+        #other metadata ctsaving
         if self._task._writer:
 #            print(lima_cfg)
             self._task._writer.init(lima_cfg=lima_cfg)
