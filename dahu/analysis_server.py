@@ -1,0 +1,307 @@
+#!/usr/bin/env python
+# coding: utf8
+from __future__ import with_statement, print_function
+"""
+
+Data analysis Tango device server ... for UPBL09a
+
+"""
+__author__ = "Jérôme Kieffer"
+__contact__ = "Jerome.Kieffer@ESRF.eu"
+__license__ = "GPLv3+"
+__copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
+__date__ = "07/02/2014"
+__status__ = "beta"
+__docformat__ = 'restructuredtext'
+
+import os, json, threading, logging, posixpath, time, types
+logger = logging.getLogger("dahu")
+# set loglevel at least at INFO
+if logger.getEffectiveLevel() > logging.INFO:
+    logger.setLevel(logging.INFO)
+import numpy
+from pyFAI.io import getIsoTime
+try:
+    from argparse import ArgumentParser 
+except:
+    from pyFAI.argparse import ArgumentParser
+import h5py
+import PyTango
+
+class DahuDS(PyTango.Device_4Impl):
+    """
+    Tango device server launcher for Dahu server.
+    """
+    def __init__(self, cl, name):
+        PyTango.Device_4Impl.__init__(self, cl, name)
+        self.init_device()
+        if isinstance(iNbCpu, int):
+            logger.info("Initializing tangoDS with max %i jobs in parallel." % iNbCpu)
+            self.__semaphoreNbThreads = threading.Semaphore(iNbCpu)
+        else:
+            self.__semaphoreNbThreads = threading.Semaphore(EDUtilsParallel.detectNumberOfCPUs())
+        self.jobQueue = Queue()
+        self.processingSem = threading.Semaphore()
+        self.statLock = threading.Lock()
+        self.lastStatistics = "No statistics collected yet, please use the 'collectStatistics' method first"
+        self.lastFailure = "No job Failed (yet)"
+        self.lastSuccess = "No job succeeded (yet)"
+    def get_name(self):
+        return self.__class__.__name__
+
+    def delete_device(self):
+        logger.debug("[Device delete_device method] for device %s" % self.get_name())
+
+    def init_device(self):
+        logger.debug("In %s.init_device()" % self.get_name())
+
+        self.set_state(PyTango.DevState.ON)
+        self.get_device_properties(self.get_device_class())
+        self.set_change_event("jobSuccess", True, False)
+        self.set_change_event("jobFailure", True, False)
+        self.set_change_event("statisticsCollected", True, False)
+
+    def always_executed_hook(self):
+        pass
+
+    def read_attr_hardware(self, data):
+        logger.debug("In %s.read_attr_hardware()" % self.get_name())
+
+    def read_jobSuccess(self, attr):
+        attr.set_value(self.lastSuccess)
+
+    def read_jobFailure(self, attr):
+        attr.set_value(self.lastFailure)
+
+    def read_statisticsCollected(self, attr):
+        attr.set_value(self.lastStatistics)
+
+    def getJobState(self, jobId):
+        return EDJob.getStatusFromID(jobId)
+
+    def cleanJob(self, jobId):
+        return EDJob.cleanJobFromID(jobId)
+
+    def initPlugin(self, strPluginName):
+        plugin = EDFactoryPluginStatic.loadPlugin(strPluginName)
+        if plugin is None:
+            return "Plugin not found: %s" % strPluginName
+        else:
+            return "Plugin loaded: %s" % strPluginName
+
+    def abort(self, jobId):
+        pass
+
+    def quitDahu(self):
+        logger.debug("In %s.quitDahu()" % self.get_name())
+        logger.info("Quitting DahuDS")
+        sys.exit()
+
+    def startJob(self, argin):
+        """
+        @param argin: 2-list [ "EDPluginName", "<xml/><XSDataInputPluginName>...."]
+        @return: jobID which is a sting: Plugin-000001
+        """
+        logger.debug("In %s.startJob()" % self.get_name())
+        name, xsd = argin[:2]
+        if xsd.strip() == "":
+            return
+        edJob = EDJob(name)
+        if edJob is None:
+            return "Error in load Plugin"
+        jobId = edJob.getJobId()
+        edJob.setDataInput(xsd)
+        self.jobQueue.put(edJob)
+        if self.processingSem._Semaphore__value > 0 :
+            t = threading.Thread(target=self.startProcessing)
+            t.start()
+        return jobId
+
+    def startProcessing(self):
+        """
+        Process all jobs in the queue.
+        """
+        with self.processingSem:
+            while not self.jobQueue.empty():
+                self.__semaphoreNbThreads.acquire()
+                edJob = self.jobQueue.get()
+                edJob.connectSUCCESS(self.successJobExecution)
+                edJob.connectFAILURE(self.failureJobExecution)
+                edJob.execute()
+
+    def successJobExecution(self, jobId):
+        logger.debug("In %s.successJobExecution(%s)" % (self.get_name(), jobId))
+        with self.locked():
+            self.__semaphoreNbThreads.release()
+            EDJob.cleanJobfromID(jobId, False)
+            self.lastSuccess = jobId
+            self.push_change_event("jobSuccess", jobId)
+            gc.collect()
+
+    def failureJobExecution(self, jobId):
+        logger.debug("In %s.failureJobExecution(%s)" % (self.get_name(), jobId))
+        with self.locked():
+            self.__semaphoreNbThreads.release()
+            EDJob.cleanJobfromID(jobId, False)
+            self.lastFailure = jobId
+            self.push_change_event("jobFailure", jobId)
+            sys.stdout.flush()
+            sys.stderr.flush()
+            gc.collect()
+
+    def getRunning(self):
+        """
+        retrieve the list of plugins currently under execution (with their plugin-Id)
+        """
+        return EDStatus.getRunning()
+
+    def getSuccess(self):
+        """
+        retrieve the list of plugins finished with success (with their plugin-Id)
+        """
+        return EDStatus.getSuccess()
+
+    def getFailure(self):
+        """
+        retrieve the list of plugins finished with failure (with their plugin-Id)
+        """
+        return EDStatus.getFailure()
+
+    def collectStatistics(self):
+        """
+        Retrieve some statistics on all Dahu-Jobs
+        @return: a page of information about Dahu-jobs
+        """
+        t = threading.Thread(target=self.statistics)
+        t.start()
+
+
+    def statistics(self):
+        """
+        retrieve some statistics about past jobs.
+        """
+        with self.statLock:
+            fStartStat = time.time()
+            self.lastStatistics = EDJob.stats()
+            self.lastStatistics += os.linesep + "Statistics collected on %s, the collect took: %.3fs" % (time.asctime(), time.time() - fStartStat)
+            self.push_change_event("statisticsCollected", self.lastStatistics)
+
+
+    def getStatistics(self):
+        """
+        just return statistics previously calculated
+        """
+        return self.lastStatistics
+
+    def getJobOutput(self, jobId):
+        """
+        Retrieve XML output form a job
+        @param jobId: name of the job
+        @return: output from a job
+        """
+        return EDJob.getDataOutputFromId(jobId)
+
+    def getJobInput(self, jobId):
+        """
+        Retrieve XML input from a job
+        @param jobId: name of the job
+        @return: xml input from a job
+        """
+        return EDJob.getDataInputFromId(jobId)
+
+class DahuDSClass(PyTango.DeviceClass):
+    #    Class Properties
+    class_property_list = {
+        }
+
+    #    Device Properties
+    device_property_list = {
+        'plugins_directory':
+            [PyTango.DevString,
+            "Dahu plugins directory",
+            [] ],
+        }
+
+
+    #    Command definitions
+    cmd_list = {
+        'startJob': [[PyTango.DevVarStringArray, "[<Dahu plugin to execute>,<XML input>]"], [PyTango.DevString, "job id"]],
+        'abort': [[PyTango.DevString, "job id"], [PyTango.DevBoolean, ""]],
+        'getJobState': [[PyTango.DevString, "job id"], [PyTango.DevString, "job state"]],
+        "initPlugin": [[PyTango.DevString, "plugin name"], [PyTango.DevString, "Message"]],
+        "cleanJob":[[PyTango.DevString, "job id"], [PyTango.DevString, "Message"]],
+        "collectStatistics":[[PyTango.DevVoid, "nothing needed"], [PyTango.DevVoid, "Collect some statistics about jobs within Dahu"]],
+        "getStatistics":[[PyTango.DevVoid, "nothing needed"], [PyTango.DevString, "Retrieve statistics about Dahu-jobs"]],
+        'getJobOutput': [[PyTango.DevString, "job id"], [PyTango.DevString, "job output XML"]],
+        'getJobInput': [[PyTango.DevString, "job id"], [PyTango.DevString, "job input XML"]],
+        }
+
+
+    #    Attribute definitions
+    attr_list = {
+        'jobSuccess':
+            [[PyTango.DevString,
+            PyTango.SCALAR,
+            PyTango.READ]],
+        'jobFailure':
+            [[PyTango.DevString,
+            PyTango.SCALAR,
+            PyTango.READ]],
+        "statisticsCollected":
+            [[PyTango.DevString,
+            PyTango.SCALAR,
+            PyTango.READ]],
+    }
+
+    def __init__(self, name):
+        PyTango.DeviceClass.__init__(self, name)
+        self.set_type(name);
+        logger.debug("In DahuDSClass  constructor")
+
+
+if __name__ == '__main__':
+    logger.info("Starting Dahu Tango Device Server")
+    
+    description = """Data Analysis Tango device server 
+"""
+    epilog = """ Provided by the Data analysis unit - ESRF 
+        """
+    usage = "analysis_server [-d] --ncpu5  tango-options"
+    parser = ArgumentParser(description=description, epilog=epilog, add_help=True)
+    parser.add_argument("-V", "--version", action='version', version='%(prog)s 0.0')
+    parser.add_argument("-d", "--debug", dest="debug", default=False,
+                        action="store_true", help="Switch to debug mode ",)
+    parser.add_argument("-v", "--verbose", dest="tango_verbose", default=None,
+                        help="tango trace level")
+    parser.add_argument("-f", "--file", dest="tango_file", default=None,
+                        help="tango log filename")
+    parser.add_argument("-n", "--nbcpu", dest="nbcpu", type=int,
+                  help="Maximum bumber of processing threads to be started", default=None)
+    parser.add_argument(dest="tango", nargs="*", help="Tango device server options")
+    options = parser.parse_args()
+
+    tangoParam = ["DahuDS"] + options.tango
+    if options.tango_verbose:
+        tangoParam += ["-v%s" % options.tango_verbose]
+    if options.tango_file:
+        tangoParam += ["-file=%s" % options.tango_file]
+
+    # Analyse aruments and options
+    if options.debug:
+        logger.setLevel(logging.DEBUG)
+        logger.debug("Switch logger to debug level")
+
+
+    try:
+        print(tangoParam)
+        py = PyTango.Util(tangoParam)
+        py.add_TgClass(DahuDSClass, DahuDS, 'DahuDS')
+        U = py.instance() #PyTango.Util.instance()
+        U.server_init()
+        U.server_run()
+    except PyTango.DevFailed as e:
+        logger.error('PyTango --> Received a DevFailed exception: %s' % e)
+        sys.exit(-1)
+    except Exception as e:
+        logger.error('PyTango --> An unforeseen exception occurred....%s' % e)
+        sys.exit(-1)
