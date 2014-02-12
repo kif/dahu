@@ -388,7 +388,7 @@ class Job(object):
         output.sort()
         iNbJob = max(1, len(keys))
         lstStrOut.append("_" * 110)
-        lstStrOut.append("%s\t|\t%s\t\t\t\t|\t%s\t|\t%s\t\t|\t%s" % ("nr", "EDPluginName-Id", "status", "runtime", "memory"))
+        lstStrOut.append("%s\t|\t%s\t\t\t\t|\t%s\t|\t%s\t\t|\t%s" % ("id", "PluginName", "status", "runtime", "memory"))
         lstStrOut.append("_" * 110)
         fWall = 0.0
         fSumProd = 0.0
@@ -411,6 +411,6 @@ class Job(object):
             fOrd = fWall
         lstStrOut.append("Regression of execution time: ExecTime = %.3f + %f * NbJob" % (fOrd, fSlope))
         strOutput = os.linesep.join(lstStrOut)
-        EDVerbose.screen(strOutput)
+        print(strOutput)
         return strOutput
 
