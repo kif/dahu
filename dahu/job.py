@@ -13,7 +13,7 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "20140207"
 __status__ = "development"
 
-import threading 
+from threading import Thread, Semaphore 
 import time
 import os
 import sys
@@ -25,7 +25,7 @@ import tempfile
 import logging
 logger = logging.getLogger("job")
 
-class Job(object):
+class Job(Thread):
     """
     Class Job
     
@@ -51,6 +51,13 @@ class Job(object):
     
     == static methods ==
     getJob(JobId)
+    
+    
+    RESERVED keywords from Thread:
+    start, run, join, name, ident, is_alive, daemon
+    
+    start is overridden with a call to the factory to instanciate the plugin
+    
     """
     STATE_UNITIALIZED = "uninitialized"
     STATE_RUNNING = "running"
@@ -58,8 +65,8 @@ class Job(object):
     STATE_FAILURE = "failure"
 
     _dictJobs = {}
-    _semaphore = threading.Semaphore()
-    _fStartTime = time.time()
+    _semaphore = Semaphore()
+    _global_start_time = time.time()
     _id_class = 0
     _storage_dir = tempfile.tempdir()
 
@@ -69,6 +76,7 @@ class Job(object):
         
         @param input_data: Should be a dictionary or a JSON string representing that dictionary
         """
+        Thread.__init__(self)
         if type(input_data) in types.StringTypes:
             if os.path.isfile(input_data):
                 self._input_data = json.load(open(input_data))
@@ -84,10 +92,13 @@ class Job(object):
         self._input_data["id"] = self._jobId
         self.data_on_disk = False
         self._output_data = None
-        self._sem = threading.Semaphore()
-        self._process = None
+        self._sem = Semaphore()
+        self._plugin = None
         self._runtime = None
         self._start = time.time()
+        self._runtime = None
+        self._name = self._input_data.get("name", "Plugin")
+        self._callbacks = [] # list of methods to be called at the end of the processing
 
     @property
     def input_data(self):
@@ -115,118 +126,172 @@ class Job(object):
             logger.warning("Getting output_data for job id %d in state %s." % (self._jobId, self._status))
             return self._output_data
 
-
-    def execute(self):
+    def start(self):
         """
-        Launch the processing
+        We need to create the plugin before starting the new tread... 
         """
-        if not self.__bXmlInputSet:
-            logger.warning("Not executing job %s as input is empty" % self._jobId)
+        try:
+            self._plugin = plugin_factory(self._name)
+        except Exception as error:
+            self._log_error("plugin %s failed to be instanciated."%self._name)
+            self._run_callbacks()
+        else:
+            #finally launch the new thread.
+            Thread.start(self)
 
-        if (self.__edPlugin is not None):
+        
+    def run(self):
+        """
+        Defines the sequence of execution of the plugin
+        1) the the state to "running"
+        2) sets the input data to the plugin
+        3) run the set-up
+        4) run the process
+        4) run the tear-down
+        5) run the call-backs
+        """
+        self._status = self.STATE_RUNNING
+        self._run_setup()
+        if self._status == self.STATE_FAILURE:
+            self._run_callbacks()
+            return
+        self._run_process()
+        if self._status == self.STATE_FAILURE:
+            self._run_callbacks()
+            return
+        self._run_teardown()
+        if self._status == self.STATE_FAILURE:
+            self._run_callbacks()
+            return
+        self._run_callbacks()
+        if self._status == self.STATE_RUNNING:
+            self._status = self.STATE_SUCCESS
+
+    def _run_setup(self):
+        "TODO"
+        setup_name = self._plugin.DEFAULT_SET_UP
+
+        for cb in self._callbacks:
+            if "__call__" in dir(cb):
+                try:
+                    cb(self)
+                except Exception as error:
+                    self._log_error("Error while calling %s" % cb)
+    def _run_process(self):
+        "TODO"
+        process_name = self._plugin.DEFAULT_TEAR_DOWN
+
+        for cb in self._callbacks:
+            if "__call__" in dir(cb):
+                try:
+                    cb(self)
+                except Exception as error:
+                    self._log_error("Error while calling %s" % cb)
+    def _run_teardown(self):
+        "TODO"
+        teardown_name = self._plugin.DEFAULT_TEAR_DOWN
+
+        for cb in self._callbacks:
+            if "__call__" in dir(cb):
+                try:
+                    cb(self)
+                except Exception as error:
+                    self._log_error("Error while calling %s" % cb)
+    def _run_callbacks(self):
+        for cb in self._callbacks:
+            if "__call__" in dir(cb):
+                try:
+                    cb(self)
+                except Exception as error:
+                    self._log_error("Error while calling %s"%cb)
+        self._status = self.STATE_SUCCESS
+                    
+    def _log_error(self, msg):
+        """
+        log an error message in the output 
+        """
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        err_msg = [msg, "%s: %s" % (exc_type, exc_value)]
+        for line in traceback.extract_tb(exc_traceback):
+            err_msg.append("  File \"%s\", line %d, in %s" % (line[0], line[1], line[2]))
+            err_msg.append("\t\t%s" % line[3])
+        with self._sem:
+            self._status = self.STATE_FAILURE
+            if self._output_data is None:
+                self._output_data = {}
+            if "error" not in self._output_data:
+                self._output_data["error"] = err_msg
+            else:
+                self._output_data["error"] += ["*"*50] + err_msg
+
+#
+#    def execute(self):
+#        """
+#        Launch the processing
+#        """
+#        if not self.__bXmlInputSet:
+#            logger.warning("Not executing job %s as input is empty" % self._jobId)
+#
+#        if (self.__edPlugin is not None):
+#            with self._sem:
+#                self.__edPlugin.connectSUCCESS(self.successPluginExecution)
+#                self.__edPlugin.connectFAILURE(self.failurePluginExecution)
+#                self._status = Job.PLUGIN_STATE_RUNNING
+#                self.__edPlugin.execute()
+#                return self._jobId
+#        else:
+#            logger.warning("Trying to run a plugin that does not exist: %s " % self.__strPluginName)
+
+
+#    def synchronize(self, timeout=None):
+#        """
+#        Synchronize the execution of the job with the calling thread.
+#        """
+#        with self._sem:
+#            strStatus = self._status
+#        if strStatus == Job.PLUGIN_STATE_RUNNING:
+#            self.__edPlugin.synchronize()
+#        elif strStatus == Job.PLUGIN_STATE_UNITIALIZED:
+#            logger.warning("Unable to synchronize %s jobs" % strStatus)
+#        else:
+#            self.DEBUG("Unable to synchronize %s jobs" % strStatus)
+
+
+
+    def connect_callback(self, method=None):
+        """
+        @param method: function or method to be called - back
+        """
+        if method:
             with self._sem:
-                self.__edPlugin.connectSUCCESS(self.successPluginExecution)
-                self.__edPlugin.connectFAILURE(self.failurePluginExecution)
-                self._status = Job.PLUGIN_STATE_RUNNING
-                self.__edPlugin.execute()
-                return self._jobId
-        else:
-            logger.warning("Trying to run a plugin that does not exist: %s " % self.__strPluginName)
+                if "__call__" in dir(method):
+                    self._callbacks.append(method)
+                else:
+                    logger.error("Non callable callback method: %s" % method)
 
 
-    def synchronize(self):
+    def cleanJob(self, force=True):
         """
-        Synchronize the execution of the job with the calling thread.
+        Frees the memory associated with the plugin
+        
+        @param force: Force garbage collection after clean-up
+        TODO
         """
+        self.synchronize()
         with self._sem:
-            strStatus = self._status
-        if strStatus == Job.PLUGIN_STATE_RUNNING:
-            self.__edPlugin.synchronize()
-        elif strStatus == Job.PLUGIN_STATE_UNITIALIZED:
-            logger.warning("Unable to synchronize %s jobs" % strStatus)
-        else:
-            self.DEBUG("Unable to synchronize %s jobs" % strStatus)
+            if self._plugin is not None:
+                self.__pathXSDOutput = self.__edPlugin.strPathDataOutput
+                self.__pathXSDInput = self.__edPlugin.strPathDataInput
+                self.__runtime = self.__edPlugin.getRunTime()
+                self.__edPlugin = None
+        if force:
+            gc.collect()
 
 
-    @classmethod
-    def synchronizeAll(cls):
-        """
-        Wait for all jobs to finish.
-        """
-        logger.debug("Job.synchronizeAll class method ")
-        listJob = cls._dictJobs.keys()
-        for jobid in listJob:
-            job = cls._dictJobs[jobid]
-            job.synchronize()
-        if len(cls._dictJobs) != len(listJob):
-            logger.warning("Job.synchronizeAll: New jobs have been launched while synchronizing")
 
-
-    def successPluginExecution(self, _edObject=None):
-        """
-        Method called when the execution of the plugin succeeds 
-        """
-        with self._sem:
-            self._status = Job.PLUGIN_STATE_SUCCESS
-            logger.info("Plugin %s: success after %.3fs" % (self._jobId, _edObject.getRunTime()))
-        try:
-            self.__edSlotSUCCESS.call(self._jobId)
-        except Exception:
-            logger.error("Error in execution of Success call-back for %s" % self._jobId)
-            self.writeErrorTrace()
-        try:
-            self.__edSlotCallBack.call(self._jobId)
-        except Exception:
-            logger.error("Error in execution of Common call-back (after success) for %s" % self._jobId)
-            self.writeErrorTrace()
-
-
-    def failurePluginExecution(self, _edObject=None):
-        """
-        Method called when the execution of the plugin failed 
-        """
-        with self._sem:
-            self._status = Job.PLUGIN_STATE_FAILURE
-            logger.info("Plugin %s: failure after %.3fs" % (self._jobId, _edObject.getRunTime()))
-        try:
-            self.__edSlotFAILURE.call(self._jobId)
-        except Exception:
-            logger.error("Error in execution of Failure call-back for %s" % self._jobId)
-            self.writeErrorTrace()
-        try:
-            self.__edSlotCallBack.call(self._jobId)
-        except Exception:
-            logger.error("Error in execution of Common call-back (after failure) for %s" % self._jobId)
-            self.writeErrorTrace()
-
-
-    def connectSUCCESS(self, _oMethod):
-        """
-        @param _oMethod: function or method to be called - back
-        """
-
-        with self._sem:
-            if (_oMethod != None):
-                self.__edSlotSUCCESS.connect(_oMethod)
-
-
-    def connectFAILURE(self, _oMethod):
-        """
-        @param _oMethod: function or method to be called - back
-        """
-        with self._sem:
-            if (_oMethod != None):
-                self.__edSlotFAILURE.connect(_oMethod)
-
-
-    def connectCallBack(self, _oMethod):
-        """
-        @param _oMethod: function or method to be called - back
-        """
-        with self._sem:
-            if (_oMethod != None):
-                self.__edSlotCallBack.connect(_oMethod)
-
+################################################################################
+# Properties
+################################################################################
     @property
     def jobId(self):
         """
@@ -236,12 +301,12 @@ class Job(object):
         return self._jobId
 
     @property
-    def process(self):
+    def plugin(self):
         """
         @return: the processing instance
         @rtype: python object
         """
-        return self._process
+        return self._plugin
 
     @property
     def status(self):
@@ -252,16 +317,30 @@ class Job(object):
         return self._status
 
     def getName(self):
-        return self.__name
-    def setName(self, _strName):
-        if self.__name is None:
-            self.__name = _strName
+        return self._name
+    def setName(self, name):
+        if self._name is None:
+            self._name = name
         else:
-            logger.warning("Job.setName: One cannot rename a Job !!!")
+            logger.error("Job.setName: One cannot rename a Job !!!")
     name = property(getName, setName, "Job.name: nickname of the job")
 
 
-
+################################################################################
+# Class methods
+################################################################################
+    @classmethod
+    def synchronize_all(cls):
+        """
+        Wait for all jobs to finish.
+        """
+        logger.debug("Job.synchronize_all class method ")
+        listJob = cls._dictJobs.keys()
+        for jobid in listJob:
+            job = cls._dictJobs[jobid]
+            job.synchronize()
+        if len(cls._dictJobs) != len(listJob):
+            logger.warning("Job.synchronize_all: New jobs have been launched while synchronizing")
 
     @classmethod
     def getStatusFromID(cls, jobId):
@@ -297,22 +376,6 @@ class Job(object):
             logger.warning("Unable to retrieve such Job: %s" % jobId)
     getJobFromId = getJobFromID
 
-
-    def cleanJob(self, forceGC=True):
-        """
-        Frees the memory associated with the top level plugin
-        @param forceGC: Force garbage collection after clean-up
-        @type forceGC: boolean
-        """
-        self.synchronize()
-        with self._sem:
-            if self._process is not None:
-                self.__pathXSDOutput = self.__edPlugin.strPathDataOutput
-                self.__pathXSDInput = self.__edPlugin.strPathDataInput
-                self.__runtime = self.__edPlugin.getRunTime()
-                self.__edPlugin = None
-        if forceGC:
-            gc.collect()
 
 
     @classmethod
@@ -373,44 +436,39 @@ class Job(object):
         """
         Retrieve some statistics and print them
         """
-        lstStrOut = []
+        lstStrOut = [""]
         output = []
-        fExecTime = time.time() - cls._fStartTime
+        run_time = time.time() - cls._global_start_time
         keys = cls._dictJobs.keys()
         keys.sort()
-        for num, key in enumerate(keys) :
-            job = cls._dictJobs[key]
-            if job.getPlugin() is None:
-                runtime = job.__runtime
-            else:
-                runtime = job.getPlugin().getRunTime()
-            output.append([num, key, job.getStatus(), runtime, job.getMemSize()])
-        output.sort()
-        iNbJob = max(1, len(keys))
+
+        output = [ (i, cls._dictJobs[i]._name, cls._dictJobs[i]._status, cls._dictJobs[i]._runtime)
+                  for i, k in enumerate(keys)]
+        total_jobs = max(1, len(keys))
         lstStrOut.append("_" * 110)
-        lstStrOut.append("%s\t|\t%s\t\t\t\t|\t%s\t|\t%s\t\t|\t%s" % ("id", "PluginName", "status", "runtime", "memory"))
+        lstStrOut.append("%s\t|\t%s\t\t\t\t|\t%s\t|\t%s" % ("id", "Name", "Status", "run time"))
         lstStrOut.append("_" * 110)
-        fWall = 0.0
+        wall_time = 0.0
         fSumProd = 0.0
         fSumX = 0.0
         fSumX2 = 0.0
         for oneJob in output:
-            fWall += oneJob[3]
+            wall_time += oneJob[3]
             fSumX += oneJob[0]
             fSumX2 += oneJob[0] * oneJob[0]
             fSumProd += oneJob[0] * oneJob[3]
             lstStrOut.append("%s\t|\t%s\t|\t%s\t|\t%9.3f\t|\t%s" % tuple(oneJob))
         lstStrOut.append("_" * 110)
-        lstStrOut.append("Total execution time (Wall): %.3fs, Execution time: %.3fs. SpeedUp: %.3f" % (fWall, fExecTime, fWall / fExecTime))
-        lstStrOut.append("Average execution time (Wall/N): %.3fs, Average throughput: %.3fs" % (fWall / iNbJob, fExecTime / iNbJob))
+        lstStrOut.append("Total execution time (Wall): %.3fs, Execution time: %.3fs. SpeedUp: %.3f" % (wall_time, run_time, wall_time / run_time))
+        lstStrOut.append("Average execution time (Wall/N): %.3fs, Average throughput: %.3fs" % (wall_time / total_jobs, run_time / total_jobs))
         if len(keys) > 1:
-            fSlope = (iNbJob * fSumProd - fSumX * fWall) / (iNbJob * fSumX2 - fSumX * fSumX)
-            fOrd = (fWall - fSlope * fSumX) / iNbJob
+            fSlope = (total_jobs * fSumProd - fSumX * wall_time) / (iNbJob * fSumX2 - fSumX * fSumX)
+            fOrd = (wall_time - fSlope * fSumX) / iNbJob
         else:
             fSlope = 0.0
-            fOrd = fWall
+            fOrd = wall_time
         lstStrOut.append("Regression of execution time: ExecTime = %.3f + %f * NbJob" % (fOrd, fSlope))
         strOutput = os.linesep.join(lstStrOut)
-        print(strOutput)
+        logger.info(strOutput)
         return strOutput
 
