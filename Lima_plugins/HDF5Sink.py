@@ -22,8 +22,23 @@ if logger.getEffectiveLevel() > logging.INFO:
     logger.setLevel(logging.INFO)
 import numpy
 from Lima import Core
-from pyFAI.io import getIsoTime
+#from pyFAI.io import getIsoTime
 import h5py
+
+def getIsoTime(forceTime=None):
+    """
+    @param forceTime: enforce a given time (current by default)
+    @type forceTime: float
+    @return: the current time as an ISO8601 string
+    @rtype: string  
+    """
+    if forceTime is None:
+        forceTime = time.time()
+    localtime = time.localtime(forceTime)
+    gmtime = time.gmtime(forceTime)
+    tz_h = localtime.tm_hour - gmtime.tm_hour
+    tz_m = localtime.tm_min - gmtime.tm_min
+    return "%s%+03i:%02i" % (time.strftime("%Y-%m-%dT%H:%M:%S", localtime), tz_h, tz_m)
 
 class StartAcqCallback(Core.SoftCallback):
     """
