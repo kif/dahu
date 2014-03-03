@@ -24,6 +24,7 @@ import numpy
 import tempfile
 import logging
 logger = logging.getLogger("job")
+from . import utils
 
 class Job(Thread):
     """
@@ -95,7 +96,7 @@ class Job(Thread):
             self.__class__._dictJobs[self.__class__._id_class] = self
         self._input_data["id"] = self._jobId
         self.data_on_disk = False
-        self._output_data = None
+        self._output_data = {}
         self._sem = Semaphore()
         self._plugin = None
         self._runtime = None
@@ -152,6 +153,7 @@ class Job(Thread):
         """
         with self._sem:
             self._status = self.STATE_ABORTED
+            self._output_data[self._status] = utils.get_isotime()
             self._run_teardown()
             self._run_callbacks()
         
@@ -193,25 +195,32 @@ class Job(Thread):
                 except Exception as error:
                     self._log_error("Error while calling %s" % cb)
     def _run_process(self):
-        "TODO"
-        process_name = self._plugin.DEFAULT_TEAR_DOWN
-
-        for cb in self._callbacks:
-            if "__call__" in dir(cb):
+        process_name = self._plugin.DEFAULT_PROCESS
+        if process_name in self._plugin:
+            process_fn = self._plugin.__getattribute__(process_name)
+            if "__call__" in dir(process_fn):
                 try:
-                    cb(self)
+                    teardown_fn(self)
                 except Exception as error:
-                    self._log_error("Error while calling %s" % cb)
-    def _run_teardown(self):
-        "TODO"
-        teardown_name = self._plugin.DEFAULT_TEAR_DOWN
+                    self._log_error("Error %s while calling %s" % (error, teardown_fn))
 
-        for cb in self._callbacks:
-            if "__call__" in dir(cb):
+    def _run_(self,what):
+        """
+        run setup, process or teardown ...
+        
+        """
+        methods =   {"process":self._plugin.DEFAULT_PROCESS,
+                     "setup":    self._plugin.DEFAULT_SET_UP,
+                     "teardown": self._plugin.DEFAULT_TEAR_DOWN 
+        name = self._plugin.DEFAULT_TEAR_DOWN
+        if teardown_name in self._plugin:
+            teardown_fn = self._plugin.__getattribute__(teardown_name)
+            if "__call__" in dir(teardown_fn):
                 try:
-                    cb(self)
+                    teardown_fn(self)
                 except Exception as error:
-                    self._log_error("Error while calling %s" % cb)
+                    self._log_error("Error %s while calling %s" % (error, teardown_fn))
+
     def _run_callbacks(self):
         for cb in self._callbacks:
             if "__call__" in dir(cb):
@@ -232,8 +241,6 @@ class Job(Thread):
             err_msg.append("\t\t%s" % line[3])
         with self._sem:
             self._status = self.STATE_FAILURE
-            if self._output_data is None:
-                self._output_data = {}
             if "error" not in self._output_data:
                 self._output_data["error"] = err_msg
             else:
