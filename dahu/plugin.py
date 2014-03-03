@@ -1,6 +1,11 @@
 import os
 
 class Plugin(object):
+    """
+    A plugin is instanciated
+    
+    it get its input parameters as a dictionary from the setup method
+    """
     IS_DAHU_PLUGIN = True
     DEFAULT_SET_UP = "setup"      # name of the method used to set-up the plugin (close connection, files)
     DEFAULT_PROCESS = "process"   # specify how to run the default processing
@@ -11,9 +16,9 @@ class Plugin(object):
         """         
         
         """
-        self.init_param=None
-        self.output = None
-        self._logging = [] #
+        self.init_param = None
+        self.output = {}
+        self._logging = [] # stores the logging information to send back
 
     def setup(self, kargs=None):
         """
@@ -34,7 +39,7 @@ class Plugin(object):
         """
         method used to tear-down the plugin (close connection, files)
         """
-        pass
+        self.output["logging"] = self._logging
 
     def get_info(self):
         """
