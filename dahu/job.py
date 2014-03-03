@@ -8,7 +8,7 @@ __doc__ = """Contains the Job class which handles jobs.
             """
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
-__license__ = "GPLv3+"
+__license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "20140207"
 __status__ = "development"
@@ -36,6 +36,8 @@ class Job(Thread):
     * Each instance will have a "execute" method  and  returning a JobId 
     * Each instance will have a "setCallBack" method  that stores the name of the external callback 
     * provide status of a job
+    * Each instance has an abort method which can be used to stop processing (or a server)
+    
     
     Static part:
     * keeps track of all jobs status
@@ -63,6 +65,8 @@ class Job(Thread):
     STATE_RUNNING = "running"
     STATE_SUCCESS = "success"
     STATE_FAILURE = "failure"
+    STATE_ABORTED = "aborted"
+    STATE = [STATE_UNITIALIZED, STATE_RUNNING, STATE_SUCCESS, STATE_FAILURE, STATE_ABORTED]
 
     _dictJobs = {}
     _semaphore = Semaphore()
@@ -98,7 +102,9 @@ class Job(Thread):
         self._start = time.time()
         self._runtime = None
         self._name = self._input_data.get("name", "Plugin")
-        self._callbacks = [] # list of methods to be called at the end of the processing
+        # list of methods to be called at the end of the processing
+        self._callbacks = []
+
 
     @property
     def input_data(self):
@@ -139,6 +145,15 @@ class Job(Thread):
             #finally launch the new thread.
             Thread.start(self)
 
+    def abort(self):
+        """
+        Tell the job to stop !
+        To be implemented
+        """
+        with self._sem:
+            self._status = self.STATE_ABORTED
+            self._run_teardown()
+            self._run_callbacks()
         
     def run(self):
         """
