@@ -13,7 +13,7 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "20140207"
 __status__ = "development"
 
-from threading import Thread, Semaphore 
+from threading import Thread, Semaphore
 import time
 import os
 import sys
@@ -100,8 +100,7 @@ class Job(Thread):
         self._sem = Semaphore()
         self._plugin = None
         self._runtime = None
-        self._start = time.time()
-        self._runtime = None
+        self._start_time = time.time()
         self._name = self._input_data.get("name", "Plugin")
         # list of methods to be called at the end of the processing
         self._callbacks = []
@@ -140,7 +139,7 @@ class Job(Thread):
         try:
             self._plugin = plugin_factory(self._name)
         except Exception as error:
-            self._log_error("plugin %s failed to be instanciated."%self._name)
+            self._log_error("plugin %s failed to be instanciated." % self._name)
             self._run_callbacks()
         else:
             #finally launch the new thread.
@@ -149,14 +148,15 @@ class Job(Thread):
     def abort(self):
         """
         Tell the job to stop !
-        To be implemented
-        """
-        with self._sem:
-            self._status = self.STATE_ABORTED
-            self._output_data[self._status] = utils.get_isotime()
-            self._run_teardown()
-            self._run_callbacks()
         
+        Needs to be imlemented into the plugin !
+        """
+        if self._status == self.STATE_RUNNING:
+            with self._sem:
+                self._status = self.STATE_ABORTED
+                self._output_data[self._status] = utils.get_isotime()
+                self._run_("abort")
+
     def run(self):
         """
         Defines the sequence of execution of the plugin
@@ -168,68 +168,63 @@ class Job(Thread):
         5) run the call-backs
         """
         self._status = self.STATE_RUNNING
-        self._run_setup()
+        self._run_("setup", kwargs=self._input_data)
         if self._status == self.STATE_FAILURE:
             self._run_callbacks()
             return
-        self._run_process()
+        self._run_("process")
         if self._status == self.STATE_FAILURE:
             self._run_callbacks()
             return
-        self._run_teardown()
+        self._run_("teardown")
         if self._status == self.STATE_FAILURE:
             self._run_callbacks()
             return
+        self._output_data.update(self._plugin.output)
         self._run_callbacks()
         if self._status == self.STATE_RUNNING:
             self._status = self.STATE_SUCCESS
 
-    def _run_setup(self):
-        "TODO"
-        setup_name = self._plugin.DEFAULT_SET_UP
 
+    def _run_(self, what, args=None, kwargs=None):
+        """
+        run setup, process, teardown or abort ...
+        
+        @param what: setup, process or teardown
+        @parma args: argument list to be passed to the method
+        
+        """
+        methods = {"process":  self._plugin.DEFAULT_PROCESS,
+                   "setup":    self._plugin.DEFAULT_SET_UP,
+                   "teardown": self._plugin.DEFAULT_TEAR_DOWN,
+                   "abort":    self._plugin.DEFAULT_ABORT    }
+        assert what in methods
+        name = methods.get(what)
+        if name in self._plugin:
+            method = self._plugin.__getattribute__(name)
+            if "__call__" in dir(method):
+                if args is None:
+                    args = []
+                if kwargs is None:
+                    kwargs = {}
+                try:
+                    method(*args, **kwargs)
+                except Exception as error:
+                    self._log_error("Error %s while calling %s.%s" %
+                                    (error, self._plugin.__class__.__name__, what))
+        else:
+            logger.error("No such method %s in class %s" % (what, self._plugin.__class__.__name__))
+
+    def _run_callbacks(self):
+        self._update_runtime()
         for cb in self._callbacks:
             if "__call__" in dir(cb):
                 try:
                     cb(self)
                 except Exception as error:
                     self._log_error("Error while calling %s" % cb)
-    def _run_process(self):
-        process_name = self._plugin.DEFAULT_PROCESS
-        if process_name in self._plugin:
-            process_fn = self._plugin.__getattribute__(process_name)
-            if "__call__" in dir(process_fn):
-                try:
-                    teardown_fn(self)
-                except Exception as error:
-                    self._log_error("Error %s while calling %s" % (error, teardown_fn))
-
-    def _run_(self,what):
-        """
-        run setup, process or teardown ...
-        
-        """
-        methods =   {"process":self._plugin.DEFAULT_PROCESS,
-                     "setup":    self._plugin.DEFAULT_SET_UP,
-                     "teardown": self._plugin.DEFAULT_TEAR_DOWN 
-        name = self._plugin.DEFAULT_TEAR_DOWN
-        if teardown_name in self._plugin:
-            teardown_fn = self._plugin.__getattribute__(teardown_name)
-            if "__call__" in dir(teardown_fn):
-                try:
-                    teardown_fn(self)
-                except Exception as error:
-                    self._log_error("Error %s while calling %s" % (error, teardown_fn))
-
-    def _run_callbacks(self):
-        for cb in self._callbacks:
-            if "__call__" in dir(cb):
-                try:
-                    cb(self)
-                except Exception as error:
-                    self._log_error("Error while calling %s"%cb)
         self._status = self.STATE_SUCCESS
-                    
+
     def _log_error(self, msg):
         """
         log an error message in the output 
@@ -246,39 +241,9 @@ class Job(Thread):
             else:
                 self._output_data["error"] += ["*"*50] + err_msg
 
-#
-#    def execute(self):
-#        """
-#        Launch the processing
-#        """
-#        if not self.__bXmlInputSet:
-#            logger.warning("Not executing job %s as input is empty" % self._jobId)
-#
-#        if (self.__edPlugin is not None):
-#            with self._sem:
-#                self.__edPlugin.connectSUCCESS(self.successPluginExecution)
-#                self.__edPlugin.connectFAILURE(self.failurePluginExecution)
-#                self._status = Job.PLUGIN_STATE_RUNNING
-#                self.__edPlugin.execute()
-#                return self._jobId
-#        else:
-#            logger.warning("Trying to run a plugin that does not exist: %s " % self.__strPluginName)
-
-
-#    def synchronize(self, timeout=None):
-#        """
-#        Synchronize the execution of the job with the calling thread.
-#        """
-#        with self._sem:
-#            strStatus = self._status
-#        if strStatus == Job.PLUGIN_STATE_RUNNING:
-#            self.__edPlugin.synchronize()
-#        elif strStatus == Job.PLUGIN_STATE_UNITIALIZED:
-#            logger.warning("Unable to synchronize %s jobs" % strStatus)
-#        else:
-#            self.DEBUG("Unable to synchronize %s jobs" % strStatus)
-
-
+    def _update_runtime(self):
+        with self._sem:
+            self._runtime = time.time() - self._start_time
 
     def connect_callback(self, method=None):
         """
@@ -291,8 +256,7 @@ class Job(Thread):
                 else:
                     logger.error("Non callable callback method: %s" % method)
 
-
-    def cleanJob(self, force=True):
+    def clean(self, force=True):
         """
         Frees the memory associated with the plugin
         
@@ -302,10 +266,11 @@ class Job(Thread):
         self.synchronize()
         with self._sem:
             if self._plugin is not None:
-                self.__pathXSDOutput = self.__edPlugin.strPathDataOutput
-                self.__pathXSDInput = self.__edPlugin.strPathDataInput
-                self.__runtime = self.__edPlugin.getRunTime()
-                self.__edPlugin = None
+                self.__pathXSDOutput = self._plugin.strPathDataOutput
+                self.__pathXSDInput = self._plugin.strPathDataInput
+                self.__runtime = self._plugin.getRunTime()
+                self._plugin = None
+                self.data_on_disk = True
         if force:
             gc.collect()
 
