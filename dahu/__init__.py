@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 # -*- coding: utf8 -*-
-#
-from __future__ import with_statement, print_function
 
-__doc__ = """Data Analysis Highly tailored fror Upbl09a 
-            """
+"""
+Data Analysis Highly tailored fror Upbl09a 
+"""
+
+from __future__ import with_statement, print_function
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
