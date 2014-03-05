@@ -40,6 +40,9 @@ class Plugin(object):
         self._logging = [] # stores the logging information to send back
         self.is_aborted = False
 
+    def get_name(self):
+        return self.__class__.__name__
+
     def setup(self, kwargs=None):
         """
         This is the second constructor to setup 
@@ -82,13 +85,16 @@ class PluginFunction(Plugin):
         Plugin.__init__(self)
         self.function = func
 
+    def get_name(self):
+        return "Plugin_from_%s" % self.function.__name__
+
     def __call__(self, **kwargs):
         """
         Behaves like a normal function: for debugging 
         """
         self.setup(kwargs)
         self.process()
-        self.teardown()
+#        self.teardown()
         return self.output
 
     def process(self):
