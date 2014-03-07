@@ -18,29 +18,29 @@ import os
 import numpy
 from ..plugin import Plugin
 from threading import Semaphore
+import logging
+logger = logging.getLogger("plugin.pyFAI")
 
 try:
     import pyFAI
 except ImportError:
-    EDVerbose.ERROR("Failed to import PyFAI: download and install it from \
+    logger.error("Failed to import PyFAI: download and install it from \
         https://forge.epn-campus.eu/projects/azimuthal/files")
 try:
     import fabio
 except ImportError:
-    EDVerbose.ERROR("Failed to import Fabio: download and install it from sourceforge")
+    logger.error("Failed to import Fabio: download and install it from sourceforge")
 
 class PluginPyFAI(Plugin):
     """
     This is the basic plugin of PyFAI for azimuthal integration
     """
-
     _dictGeo = {} #key:tuple(ai.param), value= ai
     _sem = Semaphore()
     def __init__(self):
         """
         """
         Plugin.__init__(self)
-        self.setXSDataInputClass(XSDataInputPyFAI)
         self.shared = None
         self.strOutputFile = None
         self.ai = None #this is the azimuthal integrator to use
@@ -51,27 +51,9 @@ class PluginPyFAI(Plugin):
         self.delta_dummy = None
         self.npaOut = None
 
-
-    @staticmethod
-    def getDetector(xsDetector):
-        detector = None
-        if xsDetector.name and (xsDetector.name.value in dir(pyFAI.detectors)):
-            detector = getattr(pyFAI.detectors, xsDetector.name.value)()
-        else:
-            pixel2 = EDUtilsUnit.getSIValue(xsDetector.pixelSizeX)
-            pixel1 = EDUtilsUnit.getSIValue(xsDetector.pixelSizeY)
-            if xsDetector.splineFile and os.path.isFile(xsDetector.splineFile.path.value):
-                dictGeo = {"pixel1":pixel1, "pixel2":pixel2, "splineFile":xsDetector.splineFile.path.value}
-            else:
-                dictGeo = {"pixel1":pixel1, "pixel2":pixel2, "splineFile":None}
-            detector = pyFAI.detectors.Detector()
-            detector.setPyFAI(**dictGeo)
-        return detector
-
-    def preProcess(self, _edObject=None):
-        Plugin.preProcess(self)
-        self.DEBUG("PluginPyFAIv1_0.preProcess")
-        sdi = self.dataInput
+    def setup(self, kwargs):
+        Plugin.setup(self, kwargs)
+        logger.debug("PluginPyFAIv1_0.setup")
         ai = pyFAI.AzimuthalIntegrator()
         if sdi.geometryFit2D is not None:
             xsGeometry = sdi.geometryFit2D
@@ -128,9 +110,9 @@ class PluginPyFAI(Plugin):
         if sdi.nbPt:
             self.nbPt = sdi.nbPt.value
 
-    def process(self, _edObject=None):
+    def process(self):
         Plugin.process(self)
-        self.DEBUG("PluginPyFAIv1_0.process")
+        logger.debug("PluginPyFAIv1_0.process")
         data = EDUtilsArray.getArray(self.dataInput.input)
         if self.dataInput.saxsWaxs and self.dataInput.saxsWaxs.value.lower().startswith("s"):
             out = self.ai.saxs(self.data,
@@ -149,18 +131,9 @@ class PluginPyFAI(Plugin):
         self.npaOut = np.hstack((i.reshape(-1, 1) for i in out if i is not None))
 
 
-    def postProcess(self, _edObject=None):
+    def postProcess(self):
         Plugin.postProcess(self)
-        self.DEBUG("PluginPyFAIv1_0.postProcess")
+        logger.debug("PluginPyFAIv1_0.postProcess")
         # Create some output data
-        if self.strOutputFile:
-            output = XSDataImageExt(path=XSDataString(self.strOutputFile))
-        elif self.shared:
-            output = XSDataImageExt(shared=XSDataString(self.shared))
-        else:
-            output = XSDataImageExt(array=EDUtilsArray.arrayToXSData(self.npaOut))
-        xsDataResult = XSDataResultPyFAI(output=output)
-
-        self.setDataOutput(xsDataResult)
 
 
