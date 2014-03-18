@@ -5,6 +5,7 @@
 """
 Data Analysis Highly tailored for Upbl09a 
 """
+from __future__ import with_statement, print_function
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
@@ -12,27 +13,15 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "20140304"
 __status__ = "development"
 version = "0.1"
-from __future__ import with_statement, print_function
 import os, sys, imp
 import logging
 logger = logging.getLogger("dahu.factory")
 from threading import Semaphore
-from .utils import get_workdir
+from utils import get_workdir, fully_qualified_name
 dahu_root = os.path.dirname(os.path.abspath(__file__))
 
 
-def fully_qualified_name(obj):
-    """
-    Return the fully qualified name of an object
-    
-    @param obj: any python object
-    @return: the full name as a string
-    """
-    if "__module__" not in dir(obj) or "__name__" not in dir(obj):
-        obj = obj.__class__
-    module = obj.__module__
-    name = obj.__name__
-    return module + "." + name
+
 
 class Factory(object):
     """
@@ -117,6 +106,7 @@ class Factory(object):
             with self.reg_sem:
                 self.registry[name] = klass
         return self.registry[name]()
+
 
     @classmethod
     def register(cls, klass):

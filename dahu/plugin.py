@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf8 -*-
 #
+from __future__ import with_statement, print_function
 
-"""
+__doc__ = """
 Data Analysis Highly tailored fror Upbl09a 
 """
 __authors__ = ["Jérôme Kieffer"]
@@ -12,7 +13,8 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "20140318"
 __status__ = "development"
 version = "0.1"
-from __future__ import with_statement, print_function
+from factory import register, plugin_factory
+from utils import fully_qualified_name
 import os
 
 class Plugin(object):
@@ -26,10 +28,10 @@ class Plugin(object):
     
     """
     IS_DAHU_PLUGIN = True
-    DEFAULT_SET_UP = "setup"      # name of the method used to set-up the plugin (close connection, files)
-    DEFAULT_PROCESS = "process"   # specify how to run the default processing
-    DEFAULT_TEAR_DOWN = "teardown"# name of the method used to tear-down the plugin (close connection, files)
-    DEFAULT_ABORT = "abort"       # name of the method used to abort the plugin (if any. Tear_Down will be called)
+    DEFAULT_SET_UP = "setup"  # name of the method used to set-up the plugin (close connection, files)
+    DEFAULT_PROCESS = "process"  # specify how to run the default processing
+    DEFAULT_TEAR_DOWN = "teardown"  # name of the method used to tear-down the plugin (close connection, files)
+    DEFAULT_ABORT = "abort"  # name of the method used to abort the plugin (if any. Tear_Down will be called)
 
     def __init__(self):
         """         
@@ -37,7 +39,7 @@ class Plugin(object):
         """
         self.input = None
         self.output = {}
-        self._logging = [] # stores the logging information to send back
+        self._logging = []  # stores the logging information to send back
         self.is_aborted = False
 
     def get_name(self):
@@ -66,7 +68,7 @@ class Plugin(object):
     def get_info(self):
         """
         """
-        return os.path.linesep.join(self._logging)
+        return os.linesep.join(self._logging)
 
     def abort(self):
         """
@@ -75,20 +77,23 @@ class Plugin(object):
         self.is_aborted = True
 
 
+
+# FooBar = type('FooBar', (Foo), {})
+
 #TODO: should be a metaclass to mangle the name of the class !!!
 class PluginFunction(Plugin):
     """
     Template class to build  a plugin from a function
     """
-    def __init__(self, func):
+    def __init__(self):
         """
         @param funct: function to be wrapped  
         """
         Plugin.__init__(self)
-        self.function = func
+        self.function = None
 
     def get_name(self):
-        return "Plugin_from_%s" % self.function.__name__
+        return "PluginFrom%s" % self.function.__name__.capitalize()
 
     def __call__(self, **kwargs):
         """
@@ -104,14 +109,16 @@ class PluginFunction(Plugin):
 
 def plugin_from_function(function):
     """
-    Instanciate a plugin from a given function
+    create a plugin class from a given function
     """
-    klass = PluginFunct(function)
+    class_name = "PluginFrom" + function.__name__.capitalize()
+    klass = type(class_name)
+    register(klass)
     return klass
 
 
 if __name__ == "__main__":
-    #here I should explain how to run the plugin as stand alone:
+    # here I should explain how to run the plugin as stand alone:
     p = Plugin()
     p.setup()
     p.process()

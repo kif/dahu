@@ -51,3 +51,16 @@ def get_workdir(basedir=""):
         os.makedirs(workdir)
         globals()["workdir"] = workdir
     return workdir
+
+def fully_qualified_name(obj):
+    """
+    Return the fully qualified name of an object
+    
+    @param obj: any python object
+    @return: the full name as a string
+    """
+    if "__module__" not in dir(obj) or "__name__" not in dir(obj):
+        obj = obj.__class__
+    module = obj.__module__
+    name = obj.__name__
+    return module + "." + name

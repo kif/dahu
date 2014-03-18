@@ -2,7 +2,7 @@
 # -*- coding: utf8 -*-
 
 """
-Data Analysis Highly tailored fror Upbl09a 
+Data Analysis Highly tailored for Upbl09a 
 """
 
 from __future__ import with_statement, print_function
