@@ -13,7 +13,7 @@ __date__ = "20140304"
 __status__ = "development"
 version = "0.1"
 from __future__ import with_statement, print_function
-import os, sys
+import os, sys, imp
 import logging
 logger = logging.getLogger("dahu.factory")
 from threading import Semaphore
@@ -38,21 +38,22 @@ class Factory(object):
     """
     This is a factory, it instanciates a plugin from it name
     """
-    REGISTRY = {}
+    registry = {}
+    modules = {}
+    plugin_dirs = {} #key: directory name, value=list of modules
     reg_sem = Semaphore()
     def __init__(self, workdir=None, plugin_path=None):
         """
         @param workdir: place were we are allowed to write
-        @param plugin_path: places where plugins are ... in addition to the content of DAHU_PLUGINS"
+        @param plugin_path: places where plugins are ... in addition to the content of DAHU_PATH"
         """
         self._sem = Semaphore()
         self.workdir = workdir or "."
-        self.plugin_dirs = {} #key: directory name, value=list of modules
         self.add_directory(os.path.join(dahu_root, "plugins"))
         for directory in (plugin_path or []):
              self.add_directory(directory)
         if "DAHU_PLUGINS" in os.environ:
-            for directory in os.environ["DAHU_PLUGINS"].split(os.pathsep):
+            for directory in os.environ["DAHU_PATH"].split(os.pathsep):
                 self.add_directory(directory)
         
     def add_directory(self, dirname):
@@ -60,41 +61,40 @@ class Factory(object):
         if not os.path.isdir(dirname):
             logger.warning("No such directory: %s"%directory)
             return
-        python_files = [ i for i in os.listdir(abs_dir) if i.endswith(".py")]
+        python_files = [ i[:-3] for i in os.listdir(abs_dir)
+                        if os.path.isfile(i) and i.endswith(".py")]
         with self._sem:
             self.plugin_dirs[abs_dir] = python_files
             
-    def search_plugins(self, directory=None):
+    def search_plugin(self, plugin_name):
         """
-        Search for all plugins into this directory
+        Search for a given plugins ...
+        starting from the FQN package.class, 
         """
-        if not directory:
-            dahu_root = os.path.dirname(os.path.abspath(__file__))
-            directory = os.path.join(dahu_root, "plugins")
-        if directory not in sys.path:
-            sys.path.insert(0,directory)
-        if os.path.isdir(directory):
-            py_files = [os.path.join(directory,afile) 
-                        for afile in os.listdir(directory)
-                        if os.path.isfile(afile) and \
-                        afile.endswith(".py")]
-            for mod_file in py_files:
-                try:
-                    module = __import__(py_files)
-                except ImportError:
-                    pass
-                else:
-                    pass
-                    
-##TODO
+        if "." not in plugin_name:
+            logger.error("plugin name have to be fully qualified, here: %s"%plugin_name)
+            return
+        splitted = name.split(".")
+        module_name = ".".join(splitted[:-1])
+        class_name = splitted[-1]
+
+        for dirname, modules in self.plugin_dirs:
+            if  module_name in modules:
+                with self.reg_sem:
+                    mod = imp.load_source(module_name, os.path.join(dirname, module_name + ".py"))
+                    self.modules[module_name] = mod
+        if plugin_name not in self.registry:
+            logger.warning("Plugin directories have been searched but plugin"
+                           " %s was not found" % plugin_name)
 
     def __call__(self, name):
         """
         create a plugin instance from its name
         """
-        if name in self.REGISTRY:
-            return self.REGISTRY[name]()
+        if name in self.registry:
+            return self.registry[name]()
         with self._sem:
+            self.search_plugin(name)
             # TODO:
             if "." in name:
                 splitted = name.split(".")
@@ -115,8 +115,8 @@ class Factory(object):
             klass = module.__dict__[ class_name ]
             assert klass.IS_DAHU_PLUGIN
             with self.reg_sem:
-                self.REGISTRY[name] = klass
-        return self.REGISTRY[name]()
+                self.registry[name] = klass
+        return self.registry[name]()
 
     @classmethod
     def register(cls, klass):
@@ -132,8 +132,9 @@ class Factory(object):
         """
         fqn = fully_qualified_name(klass)
         with cls.reg_sem:
-            cls.REGISTRY[fqn] = klass
+            cls.registry[fqn] = klass
         return klass
     
         
 plugin_factory = Factory(get_workdir()) 
+register = plugin_factory.register

@@ -16,7 +16,8 @@ version = "0.1"
 
 import os
 import numpy
-from ..plugin import Plugin
+from dahu.plugin import Plugin
+from dahu.factory import register
 from threading import Semaphore
 import logging
 logger = logging.getLogger("plugin.pyFAI")
@@ -31,6 +32,7 @@ try:
 except ImportError:
     logger.error("Failed to import Fabio: download and install it from sourceforge")
 
+@register
 class PluginPyFAI(Plugin):
     """
     This is the basic plugin of PyFAI for azimuthal integration
