@@ -13,8 +13,8 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "20140318"
 __status__ = "development"
 version = "0.1"
-from factory import register, plugin_factory
-from utils import fully_qualified_name
+from .factory import register, plugin_factory
+from .utils import fully_qualified_name
 import os
 
 class Plugin(object):
@@ -77,11 +77,7 @@ class Plugin(object):
         self.is_aborted = True
 
 
-
-# FooBar = type('FooBar', (Foo), {})
-
-#TODO: should be a metaclass to mangle the name of the class !!!
-class PluginFunction(Plugin):
+class PluginFromFunction(Plugin):
     """
     Template class to build  a plugin from a function
     """
@@ -90,10 +86,6 @@ class PluginFunction(Plugin):
         @param funct: function to be wrapped  
         """
         Plugin.__init__(self)
-        self.function = None
-
-    def get_name(self):
-        return "PluginFrom%s" % self.function.__name__.capitalize()
 
     def __call__(self, **kwargs):
         """
@@ -107,14 +99,20 @@ class PluginFunction(Plugin):
     def process(self):
         self.output = self.function(**self.input)
 
+
 def plugin_from_function(function):
     """
-    create a plugin class from a given function
+    create a plugin class from a given function and registers it into the 
+    
+    @param function: any function that creates a 
+    @return: plugin name to be used by the plugin_factory to get an instance
     """
-    class_name = "PluginFrom" + function.__name__.capitalize()
-    klass = type(class_name)
-    register(klass)
-    return klass
+    class_name = "PluginFromFunction" + function.__name__.capitalize()
+    if class_name not in plugin_factory.registry:
+        klass = type(class_name, (PluginFromFunction,),
+                     {'function' : staticmethod(function)})
+        register(klass, class_name)
+    return class_name
 
 
 if __name__ == "__main__":
@@ -123,3 +121,16 @@ if __name__ == "__main__":
     p.setup()
     p.process()
     p.teardown()
+
+    # second example: create a plugin from a function:
+    def square(a):
+        return a * a
+    plugin_name = plugin_from_function(square)
+    print(plugin_name)
+
+    # here is how to get a plugin instance from the
+    plugin = plugin_factory(plugin_name)
+    #plugin from functions are callable:
+    print(plugin(a=5))
+
+

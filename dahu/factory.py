@@ -17,11 +17,9 @@ import os, sys, imp
 import logging
 logger = logging.getLogger("dahu.factory")
 from threading import Semaphore
-from utils import get_workdir, fully_qualified_name
+from .utils import get_workdir, fully_qualified_name
+
 dahu_root = os.path.dirname(os.path.abspath(__file__))
-
-
-
 
 class Factory(object):
     """
@@ -109,7 +107,7 @@ class Factory(object):
 
 
     @classmethod
-    def register(cls, klass):
+    def register(cls, klass, fqn=None):
         """
         Register a class as a plugin which can be instanciated.
         
@@ -117,10 +115,12 @@ class Factory(object):
         
         @plugin_factor.register 
         
-        @param klass
+        @param klass: class to be registered as a plugin
+        @param fqn: fully qualified name 
         @return klass
         """
-        fqn = fully_qualified_name(klass)
+        if fqn is None:
+            fqn = fully_qualified_name(klass)
         with cls.reg_sem:
             cls.registry[fqn] = klass
         return klass

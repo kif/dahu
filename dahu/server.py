@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf8
-"""
+from __future__ import with_statement, print_function
+
+__doc__ = """
 
 Data analysis Tango device server ... for UPBL09a
 
@@ -13,7 +15,6 @@ __date__ = "03/03/2014"
 __status__ = "beta"
 __docformat__ = 'restructuredtext'
 
-from __future__ import with_statement, print_function
 import os
 import json
 import threading
