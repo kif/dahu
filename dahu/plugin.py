@@ -9,7 +9,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20140304"
+__date__ = "20140318"
 __status__ = "development"
 version = "0.1"
 from __future__ import with_statement, print_function
@@ -74,6 +74,8 @@ class Plugin(object):
         """
         self.is_aborted = True
 
+
+#TODO: should be a metaclass to mangle the name of the class !!!
 class PluginFunction(Plugin):
     """
     Template class to build  a plugin from a function
@@ -104,8 +106,8 @@ def plugin_from_function(function):
     """
     Instanciate a plugin from a given function
     """
-    inst = PluginFunct(function)
-    return inst
+    klass = PluginFunct(function)
+    return klass
 
 
 if __name__ == "__main__":
