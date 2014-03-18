@@ -17,9 +17,9 @@ import os, sys, imp
 import logging
 logger = logging.getLogger("dahu.factory")
 from threading import Semaphore
-from .utils import get_workdir 
+from .utils import get_workdir
 dahu_root = os.path.dirname(os.path.abspath(__file__))
-            
+
 
 def fully_qualified_name(obj):
     """
@@ -29,10 +29,10 @@ def fully_qualified_name(obj):
     @return: the full name as a string
     """
     if "__module__" not in dir(obj) or "__name__" not in dir(obj):
-        obj = obj.__class__    
-    module =   obj.__module__
-    name =  obj.__name__
-    return module+"."+name
+        obj = obj.__class__
+    module = obj.__module__
+    name = obj.__name__
+    return module + "." + name
 
 class Factory(object):
     """
@@ -40,7 +40,7 @@ class Factory(object):
     """
     registry = {}
     modules = {}
-    plugin_dirs = {} #key: directory name, value=list of modules
+    plugin_dirs = {}  # key: directory name, value=list of modules
     reg_sem = Semaphore()
     def __init__(self, workdir=None, plugin_path=None):
         """
@@ -51,30 +51,30 @@ class Factory(object):
         self.workdir = workdir or "."
         self.add_directory(os.path.join(dahu_root, "plugins"))
         for directory in (plugin_path or []):
-             self.add_directory(directory)
+            self.add_directory(directory)
         if "DAHU_PLUGINS" in os.environ:
             for directory in os.environ["DAHU_PATH"].split(os.pathsep):
                 self.add_directory(directory)
-        
-    def add_directory(self, dirname):
+
+    def add_directory(self, directory):
         abs_dir = os.path.abspath(directory)
-        if not os.path.isdir(dirname):
-            logger.warning("No such directory: %s"%directory)
+        if not os.path.isdir(directory):
+            logger.warning("No such directory: %s" % directory)
             return
         python_files = [ i[:-3] for i in os.listdir(abs_dir)
                         if os.path.isfile(i) and i.endswith(".py")]
         with self._sem:
             self.plugin_dirs[abs_dir] = python_files
-            
+
     def search_plugin(self, plugin_name):
         """
         Search for a given plugins ...
         starting from the FQN package.class, 
         """
         if "." not in plugin_name:
-            logger.error("plugin name have to be fully qualified, here: %s"%plugin_name)
+            logger.error("plugin name have to be fully qualified, here: %s" % plugin_name)
             return
-        splitted = name.split(".")
+        splitted = plugin_name.split(".")
         module_name = ".".join(splitted[:-1])
         class_name = splitted[-1]
 
@@ -109,9 +109,9 @@ class Factory(object):
             else:
                 module = __import__(module_name)
             assert module_name.startswith(module.__name__)
-            remaining = module_name[len(module.__name__)+1:]
+            remaining = module_name[len(module.__name__) + 1:]
             if remaining:
-                module =  module.__getattribute__(remaining)
+                module = module.__getattribute__(remaining)
             klass = module.__dict__[ class_name ]
             assert klass.IS_DAHU_PLUGIN
             with self.reg_sem:
@@ -134,7 +134,7 @@ class Factory(object):
         with cls.reg_sem:
             cls.registry[fqn] = klass
         return klass
-    
-        
-plugin_factory = Factory(get_workdir()) 
+
+
+plugin_factory = Factory(get_workdir())
 register = plugin_factory.register
