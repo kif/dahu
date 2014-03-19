@@ -27,7 +27,6 @@ class Plugin(object):
     * The process can be an infinite loop or a server which can be aborted using the abort method 
     
     """
-    IS_DAHU_PLUGIN = True
     DEFAULT_SET_UP = "setup"  # name of the method used to set-up the plugin (close connection, files)
     DEFAULT_PROCESS = "process"  # specify how to run the default processing
     DEFAULT_TEAR_DOWN = "teardown"  # name of the method used to tear-down the plugin (close connection, files)
