@@ -102,16 +102,15 @@ class PluginFromFunction(Plugin):
 
 def plugin_from_function(function):
     """
-    create a plugin class from a given function and registers it into the 
+    Create a plugin class from a given function and registers it into the 
     
-    @param function: any function that creates a 
+    @param function: any function 
     @return: plugin name to be used by the plugin_factory to get an instance
     """
-    class_name = "PluginFromFunction" + function.__name__.capitalize()
-    if class_name not in plugin_factory.registry:
-        klass = type(class_name, (PluginFromFunction,),
-                     {'function' : staticmethod(function)})
-        register(klass, class_name)
+    class_name = function.__module__ + "." + function.__name__
+    klass = type(class_name, (PluginFromFunction,),
+                 {'function' : staticmethod(function)})
+    register(klass, class_name)
     return class_name
 
 

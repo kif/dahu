@@ -14,6 +14,7 @@ __date__ = "20140304"
 __status__ = "development"
 version = "0.1"
 import os, sys, imp
+import os.path as op
 import logging
 logger = logging.getLogger("dahu.factory")
 from threading import Semaphore
@@ -49,7 +50,7 @@ class Factory(object):
             logger.warning("No such directory: %s" % directory)
             return
         python_files = [ i[:-3] for i in os.listdir(abs_dir)
-                        if os.path.isfile(i) and i.endswith(".py")]
+                       if op.isfile(op.join(abs_dir, i)) and i.endswith(".py")]
         with self._sem:
             self.plugin_dirs[abs_dir] = python_files
 
@@ -65,7 +66,7 @@ class Factory(object):
         module_name = ".".join(splitted[:-1])
         class_name = splitted[-1]
 
-        for dirname, modules in self.plugin_dirs:
+        for dirname, modules in self.plugin_dirs.iteritems():
             if  module_name in modules:
                 with self.reg_sem:
                     mod = imp.load_source(module_name, os.path.join(dirname, module_name + ".py"))

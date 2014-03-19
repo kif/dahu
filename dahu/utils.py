@@ -45,10 +45,11 @@ def get_workdir(basedir=""):
     workdir = globals()["workdir"]
     if not(workdir) or not (workdir.startswith(basedir)):
         if not basedir:
-            basedir = tempfile.gettempdir()
+            basedir = tempfile.tempdir
         subdir = "dahu_%s" % get_isotime(for_path=True)
         workdir = os.path.join(basedir, subdir)
-        os.makedirs(workdir)
+        if not os.path.isdir(workdir):
+            os.makedirs(workdir)
         globals()["workdir"] = workdir
     return workdir
 

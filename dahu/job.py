@@ -73,7 +73,10 @@ class Job(Thread):
     _semaphore = Semaphore()
     _global_start_time = time.time()
     _id_class = 0
-    _storage_dir = tempfile.tempdir()
+    _storage_dir = utils.get_workdir()
+    if not os.path.isdir(_storage_dir):
+        os.makedirs(_storage_dir)
+
 
     def __init__(self, input_data):
         """
