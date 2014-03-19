@@ -67,13 +67,11 @@ class Factory(object):
         class_name = splitted[-1]
 
         for dirname, modules in self.plugin_dirs.iteritems():
-            if  module_name in modules:
+            if  module_name in modules and module_name not in self.modules:
+                print("load %s %s" % (module_name, os.path.join(dirname, module_name + ".py")))
+                mod = imp.load_source(module_name, os.path.join(dirname, module_name + ".py"))
                 with self.reg_sem:
-                    mod = imp.load_source(module_name, os.path.join(dirname, module_name + ".py"))
                     self.modules[module_name] = mod
-        if plugin_name not in self.registry:
-            logger.warning("Plugin directories have been searched but plugin"
-                           " %s was not found" % plugin_name)
 
     def __call__(self, name):
         """
@@ -83,28 +81,11 @@ class Factory(object):
             return self.registry[name]()
         with self._sem:
             self.search_plugin(name)
-            # TODO:
-            if "." in name:
-                splitted = name.split(".")
-                module_name = ".".join(splitted[:-1])
-                class_name = splitted[-1]
-            else:
-                logger.error("plugin name have to be fully qualified")
-                module_name = "dahu.plugins"
-                class_name = name
-            if module_name in sys.modules:
-                module = sys.modules[module_name]
-            else:
-                module = __import__(module_name)
-            assert module_name.startswith(module.__name__)
-            remaining = module_name[len(module.__name__) + 1:]
-            if remaining:
-                module = module.__getattribute__(remaining)
-            klass = module.__dict__[ class_name ]
-            assert klass.IS_DAHU_PLUGIN
-            with self.reg_sem:
-                self.registry[name] = klass
-        return self.registry[name]()
+        if plugin_name not in self.registry:
+            logger.error("Plugin directories have been searched but plugin"
+                           " %s was not found" % plugin_name)
+        else:
+            return self.registry[name]()
 
 
     @classmethod

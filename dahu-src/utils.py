@@ -33,19 +33,23 @@ def get_isotime(forceTime=None, for_path=False):
     tz_m = localtime.tm_min - gmtime.tm_min
     if for_path:
         sloctime = time.strftime("%Y-%m-%dT%Hh%Mm%S", localtime)
-        return "%s%+03i%02i" % (sloctime, tz_h, tz_m)
+        return sloctime
     else:
         sloctime = time.strftime("%Y-%m-%dT%H:%M:%S", localtime)
         return "%s%+03i:%02i" % (sloctime, tz_h, tz_m)
 
-def get_workdir(basedir=""):
+def get_workdir(basedir=None):
     """
     Creates a working directory
+    
+    @param basedir: temporary directory
+    @return: path of the working directory 
     """
     workdir = globals()["workdir"]
+    basedir = basedir or ''
     if not(workdir) or not (workdir.startswith(basedir)):
         if not basedir:
-            basedir = tempfile.tempdir
+            basedir = tempfile.gettempdir()
         subdir = "dahu_%s" % get_isotime(for_path=True)
         workdir = os.path.join(basedir, subdir)
         if not os.path.isdir(workdir):
