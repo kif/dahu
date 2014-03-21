@@ -15,52 +15,25 @@ __date__ = "12/12/2013"
 __status__ = "beta"
 __docformat__ = 'restructuredtext'
 
-import os, json, threading, logging, posixpath, time, types
-logger = logging.getLogger("lima.hdf5")
-# set loglevel at least at INFO
-if logger.getEffectiveLevel() > logging.INFO:
-    logger.setLevel(logging.INFO)
+import os, threading, logging, posixpath, time, types
+
 import numpy
 from Lima import Core
-#from pyFAI.io import getIsoTime
 import h5py
 
-def getIsoTime(forceTime=None):
-    """
-    @param forceTime: enforce a given time (current by default)
-    @type forceTime: float
-    @return: the current time as an ISO8601 string
-    @rtype: string  
-    """
-    if forceTime is None:
-        forceTime = time.time()
-    localtime = time.localtime(forceTime)
-    gmtime = time.gmtime(forceTime)
-    tz_h = localtime.tm_hour - gmtime.tm_hour
-    tz_m = localtime.tm_min - gmtime.tm_min
-    return "%s%+03i:%02i" % (time.strftime("%Y-%m-%dT%H:%M:%S", localtime), tz_h, tz_m)
 
-class StartAcqCallback(Core.SoftCallback):
+import PyTango
+import numpy
+from Utils import BasePostProcess
+
+
+class PrepareAcqCallback(Core.SoftCallback):
     """
     Class managing the connection from a 
     Lima.Core.CtControl.prepareAcq() to the configuration of the various tasks
     
-    Example of usage:
-    cam = Basler.Camera(ip)
-    iface = Basler.Interface(cam)
-    ctrl = Core.CtControl(iface)
-    processLink = LinkPyFAI(worker, writer)
-    extMgr = ctrl.externalOperation()
-    myOp = self.extMgr.addOp(Core.USER_LINK_TASK, "pyFAILink", 0)
-    myOp.setLinkTask(processLink)
-    callback = StartAcqCallback(ctrl, processLink)
-    myOp.registerCallback(callback)
-    acq.setAcqNbFrames(0)
-    acq.setAcqExpoTime(1.0)
-    ctrl.prepareAcq() #Configuration called here !!!!
-    ctrl.startAcq()
-
     """
+
     CONFIG_ITEMS = {"dimX": None,
                     "dimY":None,
                     "binX": None,
@@ -90,8 +63,7 @@ class StartAcqCallback(Core.SoftCallback):
                      Core.Rotation_180: "rot_180",
                      }
     def __init__(self, control, task=None):
-        """
-        
+        """       
         @param control: Lima.Core.CtControl instance
         @param task: The task one wants to parametrize at startup. Can be a  Core.Processlib.LinkTask or a Core.Processlib.SinkTask
         """
@@ -133,14 +105,10 @@ class StartAcqCallback(Core.SoftCallback):
         lima_cfg["indexFormat"] = sav_parms.indexFormat
         # number of images ...
         acq = self._control.acquisition()
-        lima_cfg["number_of_frames"] = acq.getAcqNbFrames() #to check.
+        lima_cfg["number_of_frames"] = acq.getAcqNbFrames()
         lima_cfg["exposure_time"] = acq.getAcqExpoTime()
-        #ROI see: https://github.com/esrf-bliss/Lima/blob/master/control/include/CtAcquisition.h
-        #https://github.com/esrf-bliss/Lima-tango/blob/master/LimaCCDs.py line 400
-        #controle include ctsavings #154 ->
-        #other metadata ctsaving
+
         if self._task._writer:
-#            print(lima_cfg)
             self._task._writer.init(lima_cfg=lima_cfg)
             self._task._writer.flush()
 
@@ -152,14 +120,9 @@ class HDF5Sink(Core.Processlib.SinkTaskBase):
     
     """
 
-    def __init__(self, writer=None):
+    def __init__(self, writer):
         Core.Processlib.SinkTaskBase.__init__(self)
-#        self._config = {}
-        if writer is None:
-            logger.error("Without a writer, SinkPyFAI will just dump all data to /tmp")
-            self._writer = HDF5Writer(filename="/tmp/LImA_default.h5")
-        else:
-            self._writer = writer
+        self._writer = writer
 
     def __repr__(self):
         """
@@ -171,24 +134,15 @@ class HDF5Sink(Core.Processlib.SinkTaskBase):
 
     def process(self, data) :
         """
-        Callback function
-        
+        Callback function       
         Called for every frame in a different C++ thread.
         """
-        logger.debug("in Sink.process")
-        if self._writer: #optional HDF5 writer
-            self._writer.write(data.buffer, data.frameNumber)
-        else:
-            logger.warning("No writer defined !!!")
+        self._writer.write(data.buffer, data.frameNumber)
+        # horrible, only way to close the h5 file, but no garanty that all the thread
+        # did finish to save !!
+        if self._writer.isLastFrame(data.frameNumber):
+            self._writer.close()
 
-
-    def setConfig(self, config_dict=None):
-        """
-        Set the "static" configuration like filename and so on.
-        
-        @param config_dict: dict or json-serialized dict or file containing this dict.
-        """
-        self._writer.setConfig(jsonconfig)
 
 class HDF5Writer(object):
     """
@@ -207,7 +161,7 @@ class HDF5Writer(object):
                     "metadata_grp": "detector_config"
                      }
 
-    def __init__(self, **config):
+    def __init__(self):
         """
         Constructor of an HDF5 writer:
         
@@ -220,7 +174,8 @@ class HDF5Writer(object):
         self.filename = self.dirname = self.extension = self.subdir = self.hpath = self.lima_grp =None
         self.dataset_name = self.compression = self.min_size = self.detector_name = self.metadata_grp = None
         for kw, defval in self.CONFIG_ITEMS.items():
-            self.__setattr__(kw, config.get(kw, defval))
+            self.__setattr__(kw, defval)
+
         self.hdf5 = None
         self.group = None
         self.dataset = None
@@ -232,25 +187,33 @@ class HDF5Writer(object):
         ["%s: %s" % (k, self.__getattribute__(k)) for k in self.CONFIG_ITEMS]
         return os.linesep.join(out)
 
-    def init(self, lima_cfg=None):
+    def init(self, lima_cfg):
         """
         Initializes the HDF5 file for writing. Part of prepareAcq.
         
         @param lima_cfg: dictionnary with parameters coming from Lima at the "prepareAcq" 
         """
-        logger.debug("HDF5 writer init with %s" % lima_cfg)
         with self._sem:
-            if h5py:
-                try:
-                    self.hdf5 = h5py.File(self.filename)
-                except IOError:
-                    logger.error("typically a corrupted HDF5 file ! : %s" % self.filename)
-                    os.unlink(self.filename)
-                    self.hdf5 = h5py.File(self.filename)
-            else:
-                err = "No h5py library, no chance"
-                logger.error(err)
-                raise RuntimeError(err)
+
+            self.filename = lima_cfg.get("directory")
+            if not self.filename.endswith('/'): self.filename +=  '/'
+            self.filename += lima_cfg.get("prefix")+'.h5'
+
+            # silence non serious error messages, which are printed
+            # because we use h5py in a new thread (not in the main one)
+            # this is a bug seems to be fixed on newer version !!
+            # see this h5py issue 206: https://code.google.com/p/h5py/issues/detail?id=206
+            h5py._errors.silence_errors()
+
+            try:
+                self.hdf5 = h5py.File(self.filename, 'a')
+
+            except IOError:
+                os.unlink(self.filename)
+                print ("here e e ")
+                self.hdf5 = h5py.File(self.filename)
+
+
             prefix = lima_cfg.get("prefix") or self.CONFIG_ITEMS["hpath"]
             if not prefix.endswith("_"):
                 prefix+="_"
@@ -266,9 +229,9 @@ class HDF5Writer(object):
                     cfg_grp[k] = numpy.string_(v)
                 else:
                     cfg_grp[k] = v
-            number_of_frames = (max(1, lima_cfg["number_of_frames"]) + self.min_size - 1) // self.min_size * self.min_size
+            self.number_of_frames = (max(1, lima_cfg["number_of_frames"]) + self.min_size - 1) // self.min_size * self.min_size
             self.min_size = max(1, self.min_size)
-            self.shape = (number_of_frames , lima_cfg.get("dimY", 1), lima_cfg.get("dimX", 1))
+            self.shape = (self.number_of_frames , lima_cfg.get("dimY", 1), lima_cfg.get("dimX", 1))
             self.chunk = (self.min_size, lima_cfg.get("dimY", 1), lima_cfg.get("dimX", 1))
             if "dtype" in lima_cfg:
                 self.dtype = numpy.dtype(lima_cfg["dtype"])
@@ -281,30 +244,39 @@ class HDF5Writer(object):
             self.dataset.attrs["signal"] = "1"
             self.group.parent["title"] = numpy.string_("Raw frames")
             self.group.parent["program"] = numpy.string_("LImA HDF5 plugin")
-            self.group.parent["start_time"] = numpy.string_(getIsoTime())
+            self.group.parent["start_time"] = numpy.string_(self.getIsoTime())
 
-
+    def getIsoTime(self, forceTime=None):
+        """
+        @param forceTime: enforce a given time (current by default)
+        @type forceTime: float
+        @return: the current time as an ISO8601 string
+        @rtype: string
+        """
+        if forceTime is None:
+            forceTime = time.time()
+        localtime = time.localtime(forceTime)
+        gmtime = time.gmtime(forceTime)
+        tz_h = localtime.tm_hour - gmtime.tm_hour
+        tz_m = localtime.tm_min - gmtime.tm_min
+        return "%s%+03i:%02i" % (time.strftime("%Y-%m-%dT%H:%M:%S", localtime), tz_h, tz_m)
+    
+    
 
     def flush(self):
         """
-        Update some data like axis units and so on.
-        
-        @param radial: position in radial direction
-        @param  azimuthal: position in azimuthal direction
+        Update some data like axis units and so on.        
         """
-        logger.debug("HDF5 writer flush")
         with self._sem:
             if not self.hdf5:
                 err = 'No opened file'
-                logger.error(err)
                 raise RuntimeError(err)
             if "stop_time" in self.group.parent:
                 del  self.group.parent["stop_time"]
-            self.group.parent["stop_time"] = numpy.string_(getIsoTime())
+            self.group.parent["stop_time"] = numpy.string_(self.getIsoTime())
             self.hdf5.flush()
 
     def close(self):
-        logger.debug("HDF5 writer close")
         self.flush()
         with self._sem:
             if self.hdf5:
@@ -319,89 +291,119 @@ class HDF5Writer(object):
         """
         Minimalistic method to limit the overhead.
         """
-        logger.debug("Write called on frame %s" % index)
         with self._sem:
-            if self.dataset is None:
-                logger.warning("Writer not initialized !")
-                logger.info(self)
-                return
             if index >= self.dataset.shape[0]:
                 self.dataset.resize(index + 1, axis=0)
             self.dataset[index] = data
 
-    def setConfig(self, config_dict=None):
+    def isLastFrame(self, index=0):
+        return index == self.number_of_frames-1
+
+
+class HDF5SavingDeviceServer(BasePostProcess) :
+    HDF5_TASK_NAME = 'HDF5SavingTask'
+    Core.DEB_CLASS(Core.DebModApplication, 'HDF5Saving')
+    def __init__(self, cl, name):
+        self.__HDF5SavingTask = None
+        self.__HDF5Sink = None
+        self.__HDF5Writer = None
+        self.get_device_properties(self.get_device_class())
+        self.__extension = ""
+        self.__subdir = None
+        BasePostProcess.__init__(self, cl, name)
+        HDF5SavingDeviceServer.init_device(self)
+
+    def set_state(self, state) :
+        if(state == PyTango.DevState.OFF) :
+            if(self.__HDF5SavingTask) :
+                self.__HDF5Writer.close()
+                self.__callback = None
+                self.__HDF5Writer = None
+                self.__HDF5SavingTask = None
+                ctControl = _control_ref()
+                extOpt = ctControl.externalOperation()
+                extOpt.delOp(self.HDF5_TASK_NAME)
+        elif(state == PyTango.DevState.ON) :
+            if not self.__HDF5SavingTask:
+                try:
+                    ctControl = _control_ref()
+                    extOpt = ctControl.externalOperation()
+                    self.__HDF5SavingTask = extOpt.addOp(Core.USER_SINK_TASK,
+                                                         self.HDF5_TASK_NAME,
+                                                         self._runLevel)
+                    if not self.__HDF5Sink:
+                        self.__HDF5Writer = HDF5Writer()
+                        self.__HDF5Sink = HDF5Sink(self.__HDF5Writer)
+                    self.__HDF5SavingTask.setSinkTask(self.__HDF5Sink)
+                    self.__callback = PrepareAcqCallback(ctControl, self.__HDF5Sink)
+                    self.__HDF5SavingTask.registerCallback(self.__callback)
+
+                except:
+                    import traceback
+                    traceback.print_exc()
+                    return
+        PyTango.Device_4Impl.set_state(self, state)
+
+
+    def Reset(self) :
+        if(self.__HDF5Sink) :
+            self.__HDF5Sink.reset()
+
+    def read_Parameters(self, the_att):
         """
-        Set the "static" configuration like filename and so on.
-        
-        @param config_dict: dict or JSON-serialized dict or file containing this dict.
+        Called  when reading the "Parameters" attribute
         """
-        logger.debug("HDF5 writer config with %s" % config_dict)
-        if type(config_dict) in types.StringTypes:
-            if os.path.isfile(config_dict):
-                config = json.load(open(config_dict, "r"))
-            else:
-                 config = json.loads(config_dict)
+        if self.__HDF5Sink:
+            the_att.set_value(self.__HDF5Sink.__repr__())
         else:
-            config = dict(config_dict)
-        for k, v in  config.items():
-            if k in self.CONFIG_ITEMS:
-                self.__setattr__(k, v)
+            the_att.set_value("No HDF5 Sink processlib active for the moment")
 
-def test_basler():
-    """
-    """
-    import argparse
-    from Lima import Basler
-    parser = argparse.ArgumentParser(description="Demo for HDF5 writer plugin",
-                                     epilog="Author: Jérôme KIEFFER")
-    parser.add_argument("-v", "--verbose",
-                      action="store_true", dest="verbose", default=False,
-                      help="switch to verbose/debug mode")
-    parser.add_argument("-j", "--json",
-                      dest="json", default=None,
-                      help="json file containing the setup")
-    parser.add_argument("-f", "--fps", type=float,
-                      dest="fps", default="30",
-                      help="Number of frames per seconds")
-    parser.add_argument("-i", "--ip",
-                      dest="ip", default="192.168.5.19",
-                      help="IP address of the Basler camera")
-    parser.add_argument("-n", "--nbframes", type=int,
-                      dest="n", default=128,
-                      help="number of frames to record")
-    parser.add_argument('fname', nargs='*',
-                   help='HDF5 filename ', default=["/tmp/lima_test.h5"])
-#    parser.add_option("-l", "--lima",
-#                      dest="lima", default=None,
-#                      help="Base installation of LImA")
-    options = parser.parse_args()
-    if options.verbose:
-        logger.setLevel(logging.DEBUG)
-        logger.debug("Entering debug mode")
-    cam = Basler.Camera(options.ip)
-    iface = Basler.Interface(cam)
-    ctrl = Core.CtControl(iface)
-    extMgr = ctrl.externalOperation()
-    myOp = extMgr.addOp(Core.USER_SINK_TASK, "HDF5writer", 10)
-    writer = HDF5Writer(filename=options.fname[0])
-    myTask = HDF5Sink(writer)
-    myOp.setSinkTask(myTask)
-    callback = StartAcqCallback(ctrl, myTask)
-    myOp.registerCallback(callback)
-    acq = ctrl.acquisition()
-    acq.setAcqNbFrames(options.n)
-    acq.setAcqExpoTime(1. / options.fps)
-    ctrl.prepareAcq()
-    ctrl.startAcq()
-    while ctrl.getStatus().ImageCounters.LastImageReady < 1:
-        time.sleep(0.5)
-    logger.info("First frame arrived")
-    time.sleep(1.0 * options.n / options.fps)
-    logger.info("Waiting for last frame")
-    while ctrl.getStatus().ImageCounters.LastImageReady < options.n - 1:
-        time.sleep(0.5)
-    logger.info("Closing HDF5 file")
-    writer.close()
 
-if __name__ == "__main__":
-    test_basler()
+class HDF5SavingDeviceServerClass(PyTango.DeviceClass) :
+        #        Class Properties
+    class_property_list = {
+        }
+
+
+    #    Device Properties
+    device_property_list = {
+        }
+
+
+    #    Command definitions
+    cmd_list = {
+        'Start':
+        [[PyTango.DevVoid, ""],
+         [PyTango.DevVoid, ""]],
+        'Stop':
+        [[PyTango.DevVoid, ""],
+         [PyTango.DevVoid, ""]],
+        }
+
+
+    #    Attribute definitions
+    attr_list = {
+        'RunLevel':
+            [[PyTango.DevLong,
+            PyTango.SCALAR,
+            PyTango.READ_WRITE]],
+        'Parameters':
+            [[PyTango.DevString,
+            PyTango.SCALAR,
+            PyTango.READ]],
+        }
+#------------------------------------------------------------------
+#    HDF5SavingDeviceServerClass Constructor
+#------------------------------------------------------------------
+    def __init__(self, name):
+        PyTango.DeviceClass.__init__(self, name)
+        self.set_type(name)
+
+_control_ref = None
+def set_control_ref(control_class_ref):
+    global _control_ref
+    _control_ref = control_class_ref
+
+def get_tango_specific_class_n_device() :
+    return HDF5SavingDeviceServerClass, HDF5SavingDeviceServer
+
