@@ -72,6 +72,8 @@ class Distortion(Plugin):
         shape = self.input_ds.shape
         output_hdf5_fn = kwargs.get("output_hdf5_filename", "")
         output_hdf5_ds = kwargs.get("output_hdf5_dataset", "")
+        if os.path.exists(output_hdf5_fn):
+            os.unlink(output_hdf5_fn)
         out_hdf5 = h5py.File(output_hdf5_fn)
         self.output_ds = out_hdf5.create_dataset(output_hdf5_ds, shape, "float32",
                                                  chunks=(1,) + shape[1:],
