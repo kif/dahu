@@ -4,7 +4,7 @@
 from __future__ import with_statement, print_function
 
 __doc__ = """
-Data Analysis Highly tailored fror Upbl09a 
+Data Analysis Highly tailored fror Upbl09a
 """
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
@@ -16,16 +16,17 @@ version = "0.1"
 from .factory import register, plugin_factory
 from .utils import fully_qualified_name
 import os
-
+import logging
+logger = logging.getLogger("dahu.plugin")
 class Plugin(object):
     """
     A plugin is instanciated
-    
+
     * Gets its input parameters as a dictionary from the setup method
     * Performs some work in the process
     * Sets the result as output attribute, should be a dictionary
-    * The process can be an infinite loop or a server which can be aborted using the abort method 
-    
+    * The process can be an infinite loop or a server which can be aborted using the abort method
+
     """
     DEFAULT_SET_UP = "setup"  # name of the method used to set-up the plugin (close connection, files)
     DEFAULT_PROCESS = "process"  # specify how to run the default processing
@@ -33,7 +34,7 @@ class Plugin(object):
     DEFAULT_ABORT = "abort"  # name of the method used to abort the plugin (if any. Tear_Down will be called)
 
     def __init__(self):
-        """         
+        """
         We assume an empty constructor
         """
         self.input = None
@@ -46,9 +47,9 @@ class Plugin(object):
 
     def setup(self, kwargs=None):
         """
-        This is the second constructor to setup 
+        This is the second constructor to setup
         input variables and possibly initialize
-        some objects 
+        some objects
         """
         self.input = kwargs
 
@@ -75,6 +76,16 @@ class Plugin(object):
         """
         self.is_aborted = True
 
+    def log_error(self, txt):
+        """
+        Way to log errors and raise error
+        """
+        err = "in %s :" % self.get_name() + txt
+        logger.error(err)
+        self._logging.append(err)
+        raise RuntimeError(err)
+
+
 
 class PluginFromFunction(Plugin):
     """
@@ -82,13 +93,13 @@ class PluginFromFunction(Plugin):
     """
     def __init__(self):
         """
-        @param funct: function to be wrapped  
+        @param funct: function to be wrapped
         """
         Plugin.__init__(self)
 
     def __call__(self, **kwargs):
         """
-        Behaves like a normal function: for debugging 
+        Behaves like a normal function: for debugging
         """
         self.setup(kwargs)
         self.process()
@@ -101,9 +112,9 @@ class PluginFromFunction(Plugin):
 
 def plugin_from_function(function):
     """
-    Create a plugin class from a given function and registers it into the 
-    
-    @param function: any function 
+    Create a plugin class from a given function and registers it into the
+
+    @param function: any function
     @return: plugin name to be used by the plugin_factory to get an instance
     """
     class_name = function.__module__ + "." + function.__name__
