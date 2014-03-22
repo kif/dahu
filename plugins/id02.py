@@ -23,7 +23,7 @@ from dahu.plugin import Plugin
 from dahu.factory import register
 
 import h5py
-import pyFAI
+import pyFAI, pyFAI.distortion
 
 @register
 class Distortion(Plugin):
