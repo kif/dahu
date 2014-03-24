@@ -23,7 +23,8 @@ import json
 import numpy
 import tempfile
 import logging
-logger = logging.getLogger("job")
+import traceback
+logger = logging.getLogger("dahu.job")
 from . import utils
 
 class Job(Thread):
@@ -92,7 +93,7 @@ class Job(Thread):
                 self._input_data = json.loads(input_data)
         else:
             self._input_data = dict(input_data)
-        self._status = Job.PLUGIN_STATE_UNITIALIZED
+        self._status = Job.STATE_UNITIALIZED
         with self.__class__._semaphore:
             self.__class__._id_class += 1
             self._jobId = self.__class__._id_class
@@ -104,10 +105,11 @@ class Job(Thread):
         self._plugin = None
         self._runtime = None
         self._start_time = time.time()
-        self._name = self._input_data.get("name", "Plugin")
+        self._name = self._input_data.get("plugin_name", "plugin.Plugin")
         # list of methods to be called at the end of the processing
         self._callbacks = []
 
+#todo: add REPR
 
     @property
     def input_data(self):
@@ -462,3 +464,12 @@ class Job(Thread):
         logger.info(strOutput)
         return strOutput
 
+def test_job():
+    print("Testing job")
+    dico = {"plugin_name": "example.square",
+            "x": 5 }
+    j = job(dico)
+    print(j)
+
+if __name__ == "__main__":
+    test_job()
