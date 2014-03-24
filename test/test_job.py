@@ -23,26 +23,27 @@ class TestJob(unittest.TestCase):
                 "setup": { "x": 5 }}
         j = dahu.job.Job(dico)
         j.connect_callback(self.callback)
-        print(j)
+        logger.info(j)
         j.start()
+        print(dahu.factory.Factory.registry)
         j.join()
-        print(j)
+        logger.info(j)
         if "error" in j.output_data:
             logger.error(os.linesep.join(j.output_data["error"]))
 
-        print(j.input_data)
-        print(j._plugin.input)
+        logger.info(j.input_data)
+        print(j.status)
         assert self.called
         assert j.output_data["result"] == 25
 
     def callback(self, *args, **kwargs):
-        print("I wall called with arguments %s and kwargs %s" % (args, kwargs))
+        logger.info("callback actually called with  arguments %s and kwargs %s" % (args, kwargs))
+        assert len(args) == 1
         self.called = True
 
 def test_suite_all_job():
     testSuite = unittest.TestSuite()
     testSuite.addTest(TestJob("test_plugin_from_function"))
-
     return testSuite
 
 if __name__ == '__main__':

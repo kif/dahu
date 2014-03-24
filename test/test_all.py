@@ -18,10 +18,12 @@ from utilstest import UtilsTest, getLogger
 logger = getLogger(__file__)
 
 from test_job import test_suite_all_job
+from test_plugin import test_suite_all_plugin
 
 def test_suite_all():
     testSuite = unittest.TestSuite()
     testSuite.addTest(test_suite_all_job())
+    testSuite.addTest(test_suite_all_plugin())
     return testSuite
 
 if __name__ == '__main__':

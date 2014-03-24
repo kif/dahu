@@ -73,6 +73,7 @@ class Factory(object):
                 with self.reg_sem:
                     self.modules[module_name] = mod
 
+
     def __call__(self, plugin_name):
         """
         create a plugin instance from its name
@@ -81,6 +82,7 @@ class Factory(object):
             return self.registry[plugin_name]()
         with self._sem:
             self.search_plugin(plugin_name)
+        print("plugin_factory called on %s %s %s %s" % (plugin_name, self.registry, __file__, id(self.__class__)))
         if plugin_name not in self.registry:
             logger.error("Plugin directories have been searched but plugin"
                            " %s was not found" % plugin_name)
@@ -103,6 +105,7 @@ class Factory(object):
         """
         if fqn is None:
             fqn = fully_qualified_name(klass)
+        print("Registering %s from %s with name %s into %s" % (klass, klass.__module__, fqn, id(cls)))
         with cls.reg_sem:
             cls.registry[fqn] = klass
         return klass

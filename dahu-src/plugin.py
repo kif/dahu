@@ -18,6 +18,7 @@ from .utils import fully_qualified_name
 import os
 import logging
 logger = logging.getLogger("dahu.plugin")
+
 class Plugin(object):
     """
     A plugin is instanciated
@@ -117,29 +118,11 @@ def plugin_from_function(function):
     @param function: any function
     @return: plugin name to be used by the plugin_factory to get an instance
     """
+    logger.debug("creating plugin from function %s" % function.__name__)
     class_name = function.__module__ + "." + function.__name__
     klass = type(class_name, (PluginFromFunction,),
                  {'function' : staticmethod(function)})
     register(klass, class_name)
     return class_name
-
-
-if __name__ == "__main__":
-    # here I should explain how to run the plugin as stand alone:
-    p = Plugin()
-    p.setup()
-    p.process()
-    p.teardown()
-
-    # second example: create a plugin from a function:
-    def square(a):
-        return a * a
-    plugin_name = plugin_from_function(square)
-    print(plugin_name)
-
-    # here is how to get a plugin instance from the
-    plugin = plugin_factory(plugin_name)
-    #plugin from functions are callable:
-    print(plugin(a=5))
 
 

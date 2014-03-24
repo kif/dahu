@@ -152,8 +152,16 @@ class Job(Thread):
             self._log_error("plugin %s failed to be instanciated." % self._name)
             self._run_callbacks()
         else:
-            #finally launch the new thread.
-            Thread.start(self)
+            if self._plugin is None:
+                self._log_error("plugin %s failed to be instanciated." % self._name)
+                logger.debug(plugin_factory.registry)
+            else:
+                #finally launch the new thread.
+                Thread.start(self)
+
+    def join(self, timeout=None):
+        if self._status == self.STATE_RUNNING:
+            Thread.join(self, timeout)
 
     def abort(self):
         """
@@ -204,6 +212,7 @@ class Job(Thread):
         @parma args: argument list to be passed to the method
         
         """
+
         methods = {"process":  self._plugin.DEFAULT_PROCESS,
                    "setup":    self._plugin.DEFAULT_SET_UP,
                    "teardown": self._plugin.DEFAULT_TEAR_DOWN,
