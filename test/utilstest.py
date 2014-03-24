@@ -7,6 +7,7 @@ __contact__ = "jerome.kieffer@esrf.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "20140324"
+
 import os, imp, sys, subprocess, threading
 import distutils.util
 import logging
@@ -52,9 +53,9 @@ class UtilsTest(object):
     sem = threading.Semaphore()
     recompiled = False
     name = "dahu"
-    image_home = os.path.join(test_home, "testimages")
-    if not os.path.isdir(image_home):
-        os.makedirs(image_home)
+#    image_home = os.path.join(test_home, "testimages")
+#    if not os.path.isdir(image_home):
+#        os.makedirs(image_home)
     platform = distutils.util.get_platform()
     architecture = "lib.%s-%i.%i" % (platform,
                                     sys.version_info[0], sys.version_info[1])
@@ -124,76 +125,76 @@ class UtilsTest(object):
                     cls.recompiled = True
 
 
+#
+#    @classmethod
+#    def timeoutDuringDownload(cls, imagename=None):
+#            """
+#            Function called after a timeout in the download part ...
+#            just raise an Exception.
+#            """
+#            if imagename is None:
+#                imagename = "2252/testimages.tar.bz2 unzip it "
+#            raise RuntimeError("Could not automatically \
+#                download test images!\n \ If you are behind a firewall, \
+#                please set both environment variable http_proxy and https_proxy.\
+#                This even works under windows ! \n \
+#                Otherwise please try to download the images manually from \n %s/%s and put it in in test/testimages." % (cls.url_base, imagename))
 
-    @classmethod
-    def timeoutDuringDownload(cls, imagename=None):
-            """
-            Function called after a timeout in the download part ...
-            just raise an Exception.
-            """
-            if imagename is None:
-                imagename = "2252/testimages.tar.bz2 unzip it "
-            raise RuntimeError("Could not automatically \
-                download test images!\n \ If you are behind a firewall, \
-                please set both environment variable http_proxy and https_proxy.\
-                This even works under windows ! \n \
-                Otherwise please try to download the images manually from \n %s/%s and put it in in test/testimages." % (cls.url_base, imagename))
-
-
-
-    @classmethod
-    def getimage(cls, imagename):
-        """
-        Downloads the requested image from Forge.EPN-campus.eu
-        @param: name of the image.
-        For the RedMine forge, the filename contains a directory name that is removed
-        @return: full path of the locally saved file
-        """
-        baseimage = os.path.basename(imagename)
-        logger.info("UtilsTest.getimage('%s')" % baseimage)
-        fullimagename = os.path.abspath(os.path.join(cls.image_home, baseimage))
-        if not os.path.isfile(fullimagename):
-            logger.info("Trying to download image %s, timeout set to %ss"
-                          % (imagename, cls.timeout))
-            dictProxies = {}
-            if "http_proxy" in os.environ:
-                dictProxies['http'] = os.environ["http_proxy"]
-                dictProxies['https'] = os.environ["http_proxy"]
-            if "https_proxy" in os.environ:
-                dictProxies['https'] = os.environ["https_proxy"]
-            if dictProxies:
-                proxy_handler = urllib2.ProxyHandler(dictProxies)
-                opener = urllib2.build_opener(proxy_handler).open
-            else:
-                opener = urllib2.urlopen
-
-#           Nota: since python2.6 there is a timeout in the urllib2
-            timer = threading.Timer(cls.timeout + 1, cls.timeoutDuringDownload, args=[imagename])
-            timer.start()
-            logger.info("wget %s/%s" % (cls.url_base, imagename))
-            if sys.version > (2, 6):
-                data = opener("%s/%s" % (cls.url_base, imagename),
-                              data=None, timeout=cls.timeout).read()
-            else:
-                data = opener("%s/%s" % (cls.url_base, imagename),
-                              data=None).read()
-            timer.cancel()
-            logger.info("Image %s successfully downloaded." % baseimage)
-
-            try:
-                open(fullimagename, "wb").write(data)
-            except IOError:
-                raise IOError("unable to write downloaded \
-                    data to disk at %s" % cls.image_home)
-
-            if not os.path.isfile(fullimagename):
-                raise RuntimeError("Could not automatically \
-                download test images %s!\n \ If you are behind a firewall, \
-                please set both environment variable http_proxy and https_proxy.\
-                This even works under windows ! \n \
-                Otherwise please try to download the images manually from \n%s/%s" % (imagename, cls.url_base, imagename))
-
-        return fullimagename
+#
+#
+#    @classmethod
+#    def getimage(cls, imagename):
+#        """
+#        Downloads the requested image from Forge.EPN-campus.eu
+#        @param: name of the image.
+#        For the RedMine forge, the filename contains a directory name that is removed
+#        @return: full path of the locally saved file
+#        """
+#        baseimage = os.path.basename(imagename)
+#        logger.info("UtilsTest.getimage('%s')" % baseimage)
+#        fullimagename = os.path.abspath(os.path.join(cls.image_home, baseimage))
+#        if not os.path.isfile(fullimagename):
+#            logger.info("Trying to download image %s, timeout set to %ss"
+#                          % (imagename, cls.timeout))
+#            dictProxies = {}
+#            if "http_proxy" in os.environ:
+#                dictProxies['http'] = os.environ["http_proxy"]
+#                dictProxies['https'] = os.environ["http_proxy"]
+#            if "https_proxy" in os.environ:
+#                dictProxies['https'] = os.environ["https_proxy"]
+#            if dictProxies:
+#                proxy_handler = urllib2.ProxyHandler(dictProxies)
+#                opener = urllib2.build_opener(proxy_handler).open
+#            else:
+#                opener = urllib2.urlopen
+#
+##           Nota: since python2.6 there is a timeout in the urllib2
+#            timer = threading.Timer(cls.timeout + 1, cls.timeoutDuringDownload, args=[imagename])
+#            timer.start()
+#            logger.info("wget %s/%s" % (cls.url_base, imagename))
+#            if sys.version > (2, 6):
+#                data = opener("%s/%s" % (cls.url_base, imagename),
+#                              data=None, timeout=cls.timeout).read()
+#            else:
+#                data = opener("%s/%s" % (cls.url_base, imagename),
+#                              data=None).read()
+#            timer.cancel()
+#            logger.info("Image %s successfully downloaded." % baseimage)
+#
+#            try:
+#                open(fullimagename, "wb").write(data)
+#            except IOError:
+#                raise IOError("unable to write downloaded \
+#                    data to disk at %s" % cls.image_home)
+#
+#            if not os.path.isfile(fullimagename):
+#                raise RuntimeError("Could not automatically \
+#                download test images %s!\n \ If you are behind a firewall, \
+#                please set both environment variable http_proxy and https_proxy.\
+#                This even works under windows ! \n \
+#                Otherwise please try to download the images manually from \n%s/%s" % (imagename, cls.url_base, imagename))
+#
+#        return fullimagename
 
 
 def recursive_delete(strDirname):

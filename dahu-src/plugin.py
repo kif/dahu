@@ -103,11 +103,11 @@ class PluginFromFunction(Plugin):
         """
         self.setup(kwargs)
         self.process()
-#        self.teardown()
-        return self.output
+        self.teardown()
+        return self.output["result"]
 
     def process(self):
-        self.output = self.function(**self.input)
+        self.output["result"] = self.function(**self.input)
 
 
 def plugin_from_function(function):

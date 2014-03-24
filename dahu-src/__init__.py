@@ -17,4 +17,4 @@ version = "0.1"
 from . import utils
 from . import factory
 from . import plugin
-#from . import job
+from . import job

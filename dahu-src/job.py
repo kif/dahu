@@ -26,6 +26,7 @@ import logging
 import traceback
 logger = logging.getLogger("dahu.job")
 from . import utils
+from .factory import plugin_factory
 
 class Job(Thread):
     """
@@ -109,6 +110,10 @@ class Job(Thread):
         # list of methods to be called at the end of the processing
         self._callbacks = []
 
+    def __repr__(self):
+        txt = "dahu job (thread) #%i using plugin %s currently %s" % (
+              self._jobId, self._plugin.__class__.__name__, self._status)
+        return txt
 #todo: add REPR
 
     @property
@@ -173,7 +178,7 @@ class Job(Thread):
         5) run the call-backs
         """
         self._status = self.STATE_RUNNING
-        self._run_("setup", kwargs=self._input_data)
+        self._run_("setup")
         if self._status == self.STATE_FAILURE:
             self._run_callbacks()
             return
@@ -191,7 +196,7 @@ class Job(Thread):
             self._status = self.STATE_SUCCESS
 
 
-    def _run_(self, what, args=None, kwargs=None):
+    def _run_(self, what):
         """
         run setup, process, teardown or abort ...
         
@@ -205,18 +210,22 @@ class Job(Thread):
                    "abort":    self._plugin.DEFAULT_ABORT    }
         assert what in methods
         name = methods.get(what)
-        if name in self._plugin:
+        if name in dir(self._plugin):
             method = self._plugin.__getattribute__(name)
             if "__call__" in dir(method):
-                if args is None:
-                    args = []
-                if kwargs is None:
-                    kwargs = {}
-                try:
-                    method(*args, **kwargs)
-                except Exception as error:
-                    self._log_error("Error %s while calling %s.%s" %
-                                    (error, self._plugin.__class__.__name__, what))
+                if what in self._input_data:
+                    try:
+                        method(self._input_data[what])
+                    except Exception as error:
+                        self._log_error("Error %s while calling %s.%s with argument %s" %
+                                        (error, self._plugin.__class__.__name__,
+                                         what, self._input_data[what]))
+                else:
+                    try:
+                        method()
+                    except Exception as error:
+                        self._log_error("Error %s while calling %s.%s without arguments" %
+                                        (error, self._plugin.__class__.__name__, what))
         else:
             logger.error("No such method %s in class %s" % (what, self._plugin.__class__.__name__))
 
@@ -464,12 +473,3 @@ class Job(Thread):
         logger.info(strOutput)
         return strOutput
 
-def test_job():
-    print("Testing job")
-    dico = {"plugin_name": "example.square",
-            "x": 5 }
-    j = job(dico)
-    print(j)
-
-if __name__ == "__main__":
-    test_job()

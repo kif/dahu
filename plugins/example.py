@@ -18,7 +18,7 @@ import os
 import numpy
 from dahu.plugin import plugin_from_function
 import logging
-logger = logging.getLogger("plugin.pyFAI")
+logger = logging.getLogger("plugin.example")
 
 def square(x):
     return x * x

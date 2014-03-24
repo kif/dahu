@@ -73,19 +73,19 @@ class Factory(object):
                 with self.reg_sem:
                     self.modules[module_name] = mod
 
-    def __call__(self, name):
+    def __call__(self, plugin_name):
         """
         create a plugin instance from its name
         """
-        if name in self.registry:
-            return self.registry[name]()
+        if plugin_name in self.registry:
+            return self.registry[plugin_name]()
         with self._sem:
-            self.search_plugin(name)
+            self.search_plugin(plugin_name)
         if plugin_name not in self.registry:
             logger.error("Plugin directories have been searched but plugin"
                            " %s was not found" % plugin_name)
         else:
-            return self.registry[name]()
+            return self.registry[plugin_name]()
 
 
     @classmethod
