@@ -13,7 +13,7 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "20140318"
 __status__ = "development"
 version = "0.1"
-from .factory import register, plugin_factory
+from .factory import plugin_factory
 from .utils import fully_qualified_name
 import os
 import logging
@@ -122,7 +122,7 @@ def plugin_from_function(function):
     class_name = function.__module__ + "." + function.__name__
     klass = type(class_name, (PluginFromFunction,),
                  {'function' : staticmethod(function)})
-    register(klass, class_name)
+    plugin_factory.register(klass, class_name)
     return class_name
 
 

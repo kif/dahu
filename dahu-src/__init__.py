@@ -20,4 +20,4 @@ logging.basicConfig()
 from . import utils
 from . import factory
 from . import plugin
-#from . import job
+from . import job
