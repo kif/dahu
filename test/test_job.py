@@ -25,14 +25,12 @@ class TestJob(unittest.TestCase):
         j.connect_callback(self.callback)
         logger.info(j)
         j.start()
-        print(dahu.factory.Factory.registry)
         j.join()
         logger.info(j)
         if "error" in j.output_data:
             logger.error(os.linesep.join(j.output_data["error"]))
 
         logger.info(j.input_data)
-        print(j.status)
         assert self.called
         assert j.output_data["result"] == 25
 

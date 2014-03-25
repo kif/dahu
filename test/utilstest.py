@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf8 -*-
 #
-from __future__ import with_statement, print_function
+from __future__ import with_statement, print_function, division
 __author__ = "Jérôme Kieffer"
 __contact__ = "jerome.kieffer@esrf.eu"
 __license__ = "MIT"
@@ -51,11 +51,9 @@ class UtilsTest(object):
 #    url_base = "https://forge.epn-campus.eu/attachments/download"
     test_home = os.path.dirname(os.path.abspath(__file__))
     sem = threading.Semaphore()
+    reloaded = False
     recompiled = False
     name = "dahu"
-#    image_home = os.path.join(test_home, "testimages")
-#    if not os.path.isdir(image_home):
-#        os.makedirs(image_home)
     platform = distutils.util.get_platform()
     architecture = "lib.%s-%i.%i" % (platform,
                                     sys.version_info[0], sys.version_info[1])
@@ -75,29 +73,29 @@ class UtilsTest(object):
                                  shell=False, cwd=os.path.dirname(test_home))
                 logger.info("subprocess ended with rc= %s" % p.wait())
                 recompiled = True
-#    opencl = os.path.join(os.path.dirname(test_home), "openCL")
-#    for clf in os.listdir(opencl):
-#        if clf.endswith(".cl") and clf not in os.listdir(os.path.join(dahu_home, "dahu")):
-#            copy(os.path.join(opencl, clf), os.path.join(dahu_home, "dahu", clf))
-    dahu = imp.load_module(*((name,) + imp.find_module(name, [dahu_home])))
-    sys.modules[name] = dahu
-    logger.info("dahu loaded from %s" % dahu.__file__)
 
     @classmethod
     def deep_reload(cls):
         logger.info("Loading dahu")
         cls.dahu = None
         dahu = None
-        sys.path.insert(0, cls.dahu_home)
+        if sys.path[0] != cls.dahu_home:
+            sys.path.insert(0, cls.dahu_home)
+        if "dahu" in sys.modules:
+            logger.info("dahu module was already loaded from  %s" % sys.modules["dahu"])
+            cls.dahu = None
+            sys.modules.pop("dahu")
+
         for key in sys.modules.copy():
             if key.startswith("dahu"):
                 sys.modules.pop(key)
 
-        import dahu
-        cls.dahu = dahu
-        logger.info("dahu loaded from %s" % dahu.__file__)
+        dahu = imp.load_module(*((cls.name,) + imp.find_module(cls.name, [cls.dahu_home])))
         sys.modules[cls.name] = dahu
-        return cls.dahu
+        logger.info("dahu loaded from %s" % dahu.__file__)
+        cls.dahu = dahu
+        cls.reloaded = True
+        return dahu
 
     @classmethod
     def forceBuild(cls, remove_first=True):
@@ -117,84 +115,10 @@ class UtilsTest(object):
                     p = subprocess.Popen([sys.executable, "setup.py", "build"],
                                      shell=False, cwd=os.path.dirname(cls.test_home))
                     logger.info("subprocess ended with rc= %s" % p.wait())
-#                    opencl = os.path.join(os.path.dirname(cls.test_home), "openCL")
-#                    for clf in os.listdir(opencl):
-#                        if clf.endswith(".cl") and clf not in os.listdir(os.path.join(cls.dahu_home, "dahu")):
-#                            copy(os.path.join(opencl, clf), os.path.join(cls.dahu_home, "dahu", clf))
-                    cls.dahu = cls.deep_reload()
+                    cls.deep_reload()
                     cls.recompiled = True
 
 
-#
-#    @classmethod
-#    def timeoutDuringDownload(cls, imagename=None):
-#            """
-#            Function called after a timeout in the download part ...
-#            just raise an Exception.
-#            """
-#            if imagename is None:
-#                imagename = "2252/testimages.tar.bz2 unzip it "
-#            raise RuntimeError("Could not automatically \
-#                download test images!\n \ If you are behind a firewall, \
-#                please set both environment variable http_proxy and https_proxy.\
-#                This even works under windows ! \n \
-#                Otherwise please try to download the images manually from \n %s/%s and put it in in test/testimages." % (cls.url_base, imagename))
-
-#
-#
-#    @classmethod
-#    def getimage(cls, imagename):
-#        """
-#        Downloads the requested image from Forge.EPN-campus.eu
-#        @param: name of the image.
-#        For the RedMine forge, the filename contains a directory name that is removed
-#        @return: full path of the locally saved file
-#        """
-#        baseimage = os.path.basename(imagename)
-#        logger.info("UtilsTest.getimage('%s')" % baseimage)
-#        fullimagename = os.path.abspath(os.path.join(cls.image_home, baseimage))
-#        if not os.path.isfile(fullimagename):
-#            logger.info("Trying to download image %s, timeout set to %ss"
-#                          % (imagename, cls.timeout))
-#            dictProxies = {}
-#            if "http_proxy" in os.environ:
-#                dictProxies['http'] = os.environ["http_proxy"]
-#                dictProxies['https'] = os.environ["http_proxy"]
-#            if "https_proxy" in os.environ:
-#                dictProxies['https'] = os.environ["https_proxy"]
-#            if dictProxies:
-#                proxy_handler = urllib2.ProxyHandler(dictProxies)
-#                opener = urllib2.build_opener(proxy_handler).open
-#            else:
-#                opener = urllib2.urlopen
-#
-##           Nota: since python2.6 there is a timeout in the urllib2
-#            timer = threading.Timer(cls.timeout + 1, cls.timeoutDuringDownload, args=[imagename])
-#            timer.start()
-#            logger.info("wget %s/%s" % (cls.url_base, imagename))
-#            if sys.version > (2, 6):
-#                data = opener("%s/%s" % (cls.url_base, imagename),
-#                              data=None, timeout=cls.timeout).read()
-#            else:
-#                data = opener("%s/%s" % (cls.url_base, imagename),
-#                              data=None).read()
-#            timer.cancel()
-#            logger.info("Image %s successfully downloaded." % baseimage)
-#
-#            try:
-#                open(fullimagename, "wb").write(data)
-#            except IOError:
-#                raise IOError("unable to write downloaded \
-#                    data to disk at %s" % cls.image_home)
-#
-#            if not os.path.isfile(fullimagename):
-#                raise RuntimeError("Could not automatically \
-#                download test images %s!\n \ If you are behind a firewall, \
-#                please set both environment variable http_proxy and https_proxy.\
-#                This even works under windows ! \n \
-#                Otherwise please try to download the images manually from \n%s/%s" % (imagename, cls.url_base, imagename))
-#
-#        return fullimagename
 
 
 def recursive_delete(strDirname):
@@ -232,10 +156,9 @@ def getLogger(filename=__file__):
         force_remove = True
         force_build = True
     mylogger = logging.getLogger(basename)
+    logger.setLevel(level)
     mylogger.setLevel(level)
     mylogger.debug("tests loaded from file: %s" % basename)
     if force_build:
         UtilsTest.forceBuild(force_remove)
-    else:
-        UtilsTest.deep_reload()
     return mylogger
