@@ -15,7 +15,7 @@ __date__ = "12/12/2013"
 __status__ = "beta"
 __docformat__ = 'restructuredtext'
 
-import os, json, threading, logging, posixpath, time, types
+import os, json, threading, logging, posixpath, time, types, sys
 logger = logging.getLogger("lima.hdf5")
 # set loglevel at least at INFO
 if logger.getEffectiveLevel() > logging.INFO:
@@ -217,7 +217,7 @@ class HDF5Writer(object):
         """
         self._sem = threading.Semaphore()
         self._initialized = False
-        self.filename = self.dirname = self.extension = self.subdir = self.hpath = self.lima_grp =None
+        self.filename = self.dirname = self.extension = self.subdir = self.hpath = self.lima_grp = None
         self.dataset_name = self.compression = self.min_size = self.detector_name = self.metadata_grp = None
         for kw, defval in self.CONFIG_ITEMS.items():
             self.__setattr__(kw, config.get(kw, defval))
@@ -253,9 +253,9 @@ class HDF5Writer(object):
                 raise RuntimeError(err)
             prefix = lima_cfg.get("prefix") or self.CONFIG_ITEMS["hpath"]
             if not prefix.endswith("_"):
-                prefix+="_"
+                prefix += "_"
             entries = len([i.startswith(prefix) for i in self.hdf5])
-            self.hpath = posixpath.join("%s%04d"%(prefix,entries),self.lima_grp)
+            self.hpath = posixpath.join("%s%04d" % (prefix, entries), self.lima_grp)
             self.group = self.hdf5.require_group(self.hpath)
             self.group.parent.attrs["NX_class"] = "NXentry"
             self.group.attrs["NX_class"] = "NXdata"
@@ -351,7 +351,6 @@ def test_basler():
     """
     """
     import argparse
-    from Lima import Basler
     parser = argparse.ArgumentParser(description="Demo for HDF5 writer plugin",
                                      epilog="Author: Jérôme KIEFFER")
     parser.add_argument("-v", "--verbose",
@@ -371,13 +370,24 @@ def test_basler():
                       help="number of frames to record")
     parser.add_argument('fname', nargs='*',
                    help='HDF5 filename ', default=["/tmp/lima_test.h5"])
-#    parser.add_option("-l", "--lima",
-#                      dest="lima", default=None,
-#                      help="Base installation of LImA")
+    parser.add_argument("-l", "--lima",
+                      dest="lima", default=None,
+                      help="Base installation of LImA")
     options = parser.parse_args()
     if options.verbose:
         logger.setLevel(logging.DEBUG)
         logger.debug("Entering debug mode")
+    if options.lima:
+        sys.path.insert(0, options.lima)
+        #Reload Lima:
+        globals()["Core"] = None
+        for mod in sys.modules.copy():
+            if mod.startswith("Lima"):
+                print("poping:", mod)
+                sys.modules.pop(mod)
+        from Lima import Core
+        globals()["Core"] = Core
+    from Lima import Basler
     cam = Basler.Camera(options.ip)
     iface = Basler.Interface(cam)
     ctrl = Core.CtControl(iface)
