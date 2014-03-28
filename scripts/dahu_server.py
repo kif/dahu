@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 # coding: utf8
+
+from __future__ import print_function, division, with_statement
+
 """
 
 Data analysis Tango device server ... for UPBL09a
@@ -7,15 +10,15 @@ Data analysis Tango device server ... for UPBL09a
 """
 __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
-__license__ = "GPLv3+"
+__license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "07/02/2014"
+__date__ = "25/03/2014"
 __status__ = "beta"
 __docformat__ = 'restructuredtext'
-from __future__ import with_statement, print_function
 import sys
 import logging
-logger = logging.getLogger("dahu")
+logging.basicConfig()
+logger = logging.getLogger("dahu_server")
 
 from dahu.server import DahuDSClass, DahuDS
 
@@ -26,7 +29,7 @@ try:
     from argparse import ArgumentParser
 except:
     from pyFAI.argparse import ArgumentParser
-#import h5py
+
 import PyTango
 
 if __name__ == '__main__':
