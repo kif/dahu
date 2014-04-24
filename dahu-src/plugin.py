@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# -*- coding: utf8 -*-
+# -*- coding: utf-8 -*-
 #
 from __future__ import with_statement, print_function
 
@@ -54,7 +54,7 @@ class Plugin(object):
         """
         self.input = kwargs
 
-    def process(self, kargs=None):
+    def process(self):
         """
         main processing of the plugin
         """
