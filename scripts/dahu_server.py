@@ -47,8 +47,8 @@ if __name__ == '__main__':
                         help="tango trace level")
     parser.add_argument("-f", "--file", dest="tango_file", default=None,
                         help="tango log filename")
-    parser.add_argument("-n", "--nbcpu", dest="nbcpu", type=int,
-                  help="Maximum bumber of processing threads to be started", default=None)
+#    parser.add_argument("-n", "--nbcpu", dest="nbcpu", type=int,
+#                  help="Maximum bumber of processing threads to be started", default=None)
     parser.add_argument(dest="tango", nargs="*", help="Tango device server options")
     options = parser.parse_args()
 

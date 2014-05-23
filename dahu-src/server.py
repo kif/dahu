@@ -22,6 +22,7 @@ import threading
 import logging
 import time
 import types
+import multiprocessing
 if sys.version > (3, 0):
     from queue import Queue
 else:
@@ -33,6 +34,13 @@ if logger.getEffectiveLevel() > logging.INFO:
 import numpy
 import PyTango
 from .job import Job, plugin_factory
+
+try:
+    from rfoo.utils import rconsole
+    rconsole.spawn_server()
+except ImportError:
+    logger.debug("No socket opened for debugging -> please install rfoo")
+
 
 class DahuDS(PyTango.Device_4Impl):
     """
@@ -49,6 +57,7 @@ class DahuDS(PyTango.Device_4Impl):
         self.last_success = -1
         self.statistics_threads = None #threading.Thread()
 #        self.statistics_threads.join()
+        self._ncpu_sem = threading.Semaphore(multiprocessing.cpu_count())
 
     def get_name(self):
         """Returns the name of the class"""
@@ -128,9 +137,11 @@ class DahuDS(PyTango.Device_4Impl):
         name, data_input = argin[:2]
         print(name, data_input)
         if data_input.strip() == "":
-            return
+            return -1
         job = Job(name, data_input)
-        print(job.data_input)
+        print(job)
+        print(job.input_data)
+        print(job)
         if job is None:
             return -1
         self.queue.put(job)
@@ -145,7 +156,7 @@ class DahuDS(PyTango.Device_4Impl):
         """
         with self.processing_lock:
             while not self.queue.empty():
-                self.__semaphoreNbThreads.acquire()
+                self._ncpu_sem.acquire()
                 job = self.queue.get()
                 job.connect_callback(self.finished_processing)
                 job.start()
@@ -158,7 +169,7 @@ class DahuDS(PyTango.Device_4Impl):
         """
         logger.debug("In %s.finished_processing(%s)" % (self.get_name(), job.id))
         with self.locked():
-            self.__semaphoreNbThreads.release()
+            self._ncpu_sem.release()
             job.clean()
             if job.status == "success":
                 self.last_success = job.id
