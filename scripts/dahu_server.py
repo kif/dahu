@@ -12,7 +12,7 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "25/03/2014"
+__date__ = "23/05/2014"
 __status__ = "beta"
 __docformat__ = 'restructuredtext'
 import sys
@@ -38,7 +38,7 @@ if __name__ == '__main__':
 """
     epilog = """ Provided by the Data analysis unit - ESRF 
         """
-    usage = "analysis_server [-d] --ncpu5  tango-options"
+    usage = "analysis_server [-d] --ncpu=5  tango-options"
     parser = ArgumentParser(description=description, epilog=epilog, add_help=True)
     parser.add_argument("-V", "--version", action='version', version='%(prog)s 0.0')
     parser.add_argument("-d", "--debug", dest="debug", default=False,

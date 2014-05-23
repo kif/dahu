@@ -11,22 +11,28 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/03/2014"
+__date__ = "23/05/2014"
 __status__ = "beta"
 __docformat__ = 'restructuredtext'
 
+import sys
 import os
 import json
 import threading
 import logging
 import time
 import types
+if sys.version > (3, 0):
+    from queue import Queue
+else:
+    from Queue import Queue
 logger = logging.getLogger("dahu.server")
 # set loglevel at least at INFO
 if logger.getEffectiveLevel() > logging.INFO:
     logger.setLevel(logging.INFO)
 import numpy
 import PyTango
+from .job import Job, plugin_factory
 
 class DahuDS(PyTango.Device_4Impl):
     """
@@ -35,14 +41,14 @@ class DahuDS(PyTango.Device_4Impl):
     def __init__(self, cl, name):
         PyTango.Device_4Impl.__init__(self, cl, name)
         self.init_device()
-        self.jobQueue = Queue()
-        self.processingSem = threading.Semaphore()
+        self.queue = Queue() #queue containing jobs to process
+        self.processing_lock = threading.Semaphore()
         self.statLock = threading.Semaphore()
         self.lastStatistics = "No statistics collected yet, please use the 'collectStatistics' method first"
-        self.lastFailure = "No job Failed (yet)"
-        self.lastSuccess = "No job succeeded (yet)"
-        self.statistics_threads = threading.Thread()
-        self.statistics_threads.join()
+        self.last_failure = -1
+        self.last_success = -1
+        self.statistics_threads = None #threading.Thread()
+#        self.statistics_threads.join()
 
     def get_name(self):
         """Returns the name of the class"""
@@ -68,10 +74,10 @@ class DahuDS(PyTango.Device_4Impl):
         logger.debug("In %s.read_attr_hardware()" % self.get_name())
 
     def read_jobSuccess(self, attr):
-        attr.set_value(self.lastSuccess)
+        attr.set_value(self.last_success)
 
     def read_jobFailure(self, attr):
-        attr.set_value(self.lastFailure)
+        attr.set_value(self.last_failure)
 
     def read_statisticsCollected(self, attr):
         attr.set_value(self.lastStatistics)
@@ -82,12 +88,21 @@ class DahuDS(PyTango.Device_4Impl):
     def cleanJob(self, jobId):
         return Job.cleanJobFromID(jobId)
 
-    def initPlugin(self, strPluginName):
-        plugin = EDFactoryPluginStatic.loadPlugin(strPluginName)
-        if plugin is None:
-            return "Plugin not found: %s" % strPluginName
+    def initPlugin(self, name):
+        """
+        Creates a job with the given plugin
+        """
+        logger.debug("In %s.initPlugin(%s)" % (self.get_name(), name))
+        err = None
+        try:
+            plugin = plugin_factory(name)
+        except Exception as error:
+            err = "plugin %s failed to be instanciated: %s" % (name, error)
+            logger.error(err)
+        if plugin is None or err:
+            return "Plugin not found: %s, err" % (name, err)
         else:
-            return "Plugin loaded: %s" % strPluginName
+            return "Plugin loaded: %s" % name
 
     def abort(self, jobId):
         """
@@ -102,76 +117,77 @@ class DahuDS(PyTango.Device_4Impl):
         logger.info("Quitting DahuDS")
         sys.exit()
 
-    def start(self, argin):
+    def startJob(self, argin):
         """
         Starts a job
-        @param argin: 2-list [ "EDPluginName", "<xml/><XSDataInputPluginName>...."]
-        @return: jobID which is a sting: Plugin-000001
+        
+        @param argin: 2-list [<Dahu plugin to execute>, <JSON serialized dict>]
+        @return: jobID which is an int (-1 for error) 
         """
         logger.debug("In %s.startJob()" % self.get_name())
-        name, xsd = argin[:2]
-        if xsd.strip() == "":
+        name, data_input = argin[:2]
+        print(name, data_input)
+        if data_input.strip() == "":
             return
-        edJob = Job(name)
-        if edJob is None:
-            return "Error in load Plugin"
-        jobId = edJob.getJobId()
-        edJob.setDataInput(xsd)
-        self.jobQueue.put(edJob)
-        if self.processingSem._Semaphore__value > 0 :
-            t = threading.Thread(target=self.startProcessing)
+        job = Job(name, data_input)
+        print(job.data_input)
+        if job is None:
+            return -1
+        self.queue.put(job)
+        if self.processing_lock._Semaphore__value > 0 :
+            t = threading.Thread(target=self.process_queue)
             t.start()
-        return jobId
+        return job.id
 
-    def startProcessing(self):
+    def process_queue(self):
         """
         Process all jobs in the queue.
         """
-        with self.processingSem:
-            while not self.jobQueue.empty():
+        with self.processing_lock:
+            while not self.queue.empty():
                 self.__semaphoreNbThreads.acquire()
-                edJob = self.jobQueue.get()
-                edJob.connectSUCCESS(self.successJobExecution)
-                edJob.connectFAILURE(self.failureJobExecution)
-                edJob.execute()
+                job = self.queue.get()
+                job.connect_callback(self.finished_processing)
+                job.start()
 
-    def successJobExecution(self, jobId):
-        logger.debug("In %s.successJobExecution(%s)" % (self.get_name(), jobId))
+    def finished_processing(self, job):
+        """
+        callback: when processing is done
+        
+        @param job: instance of dahu.job.Job
+        """
+        logger.debug("In %s.finished_processing(%s)" % (self.get_name(), job.id))
         with self.locked():
             self.__semaphoreNbThreads.release()
-            Job.cleanJobfromID(jobId, False)
-            self.lastSuccess = jobId
-            self.push_change_event("jobSuccess", jobId)
+            job.clean()
+            if job.status == "success":
+                self.last_success = job.id
+                self.push_change_event("jobSuccess", job.id)
+            else:
+                sys.stdout.flush()
+                sys.stderr.flush()
+                self.last_failure = job.id
+                self.push_change_event("jobFailure", job.id)
             gc.collect()
 
-    def failureJobExecution(self, jobId):
-        logger.debug("In %s.failureJobExecution(%s)" % (self.get_name(), jobId))
-        with self.locked():
-            self.__semaphoreNbThreads.release()
-            Job.cleanJobfromID(jobId, False)
-            self.lastFailure = jobId
-            self.push_change_event("jobFailure", jobId)
-            sys.stdout.flush()
-            sys.stderr.flush()
-            gc.collect()
-
-    def getRunning(self):
-        """
-        retrieve the list of plugins currently under execution (with their plugin-Id)
-        """
-        return EDStatus.getRunning()
-
-    def getSuccess(self):
-        """
-        retrieve the list of plugins finished with success (with their plugin-Id)
-        """
-        return EDStatus.getSuccess()
-
-    def getFailure(self):
-        """
-        retrieve the list of plugins finished with failure (with their plugin-Id)
-        """
-        return EDStatus.getFailure()
+#TODO one day
+#    def getRunning(self):
+#        """
+#        retrieve the list of plugins currently under execution (with their plugin-Id)
+#        """
+#        return EDStatus.getRunning()
+#
+#    def getSuccess(self):
+#        """
+#        retrieve the list of plugins finished with success (with their plugin-Id)
+#        """
+#        return EDStatus.getSuccess()
+#
+#    def getFailure(self):
+#        """
+#        retrieve the list of plugins finished with failure (with their plugin-Id)
+#        """
+#        return EDStatus.getFailure()
 
     def collectStatistics(self):
         """
@@ -180,7 +196,6 @@ class DahuDS(PyTango.Device_4Impl):
         """
         self.statistics_threads = threading.Thread(target=self.statistics)
         self.statistics_threads.start()
-
 
     def statistics(self):
         """
@@ -192,12 +207,12 @@ class DahuDS(PyTango.Device_4Impl):
             self.lastStatistics += os.linesep + "Statistics collected on %s, the collect took: %.3fs" % (time.asctime(), time.time() - fStartStat)
             self.push_change_event("statisticsCollected", self.lastStatistics)
 
-
     def getStatistics(self):
         """
         just return statistics previously calculated
         """
-        self.statistics_threads.join()
+        if self.statistics_threads:
+            self.statistics_threads.join()
         return self.lastStatistics
 
     def getJobOutput(self, jobId):
@@ -232,26 +247,26 @@ class DahuDSClass(PyTango.DeviceClass):
 
     #    Command definitions
     cmd_list = {
-        'startJob': [[PyTango.DevVarStringArray, "[<Dahu plugin to execute>,<XML input>]"], [PyTango.DevString, "job id"]],
-        'abort': [[PyTango.DevString, "job id"], [PyTango.DevBoolean, ""]],
-        'getJobState': [[PyTango.DevString, "job id"], [PyTango.DevString, "job state"]],
+        'startJob': [[PyTango.DevVarStringArray, "[<Dahu plugin to execute>, <JSON serialized dict>]"], [PyTango.DevLong64, "job id"]],
+        'abort': [[PyTango.DevLong64, "job id"], [PyTango.DevBoolean, ""]],
+        'getJobState': [[PyTango.DevLong64, "job id"], [PyTango.DevString, "job state"]],
         "initPlugin": [[PyTango.DevString, "plugin name"], [PyTango.DevString, "Message"]],
-        "cleanJob":[[PyTango.DevString, "job id"], [PyTango.DevString, "Message"]],
+        "cleanJob":[[PyTango.DevLong64, "job id"], [PyTango.DevString, "Message"]],
         "collectStatistics":[[PyTango.DevVoid, "nothing needed"], [PyTango.DevVoid, "Collect some statistics about jobs within Dahu"]],
         "getStatistics":[[PyTango.DevVoid, "nothing needed"], [PyTango.DevString, "Retrieve statistics about Dahu-jobs"]],
-        'getJobOutput': [[PyTango.DevString, "job id"], [PyTango.DevString, "job output XML"]],
-        'getJobInput': [[PyTango.DevString, "job id"], [PyTango.DevString, "job input XML"]],
+        'getJobOutput': [[PyTango.DevLong64, "job id"], [PyTango.DevString, "<JSON serialized dict>"]],
+        'getJobInput': [[PyTango.DevLong64, "job id"], [PyTango.DevString, "<JSON serialized dict>"]],
         }
 
 
     #    Attribute definitions
     attr_list = {
         'jobSuccess':
-            [[PyTango.DevString,
+            [[PyTango.DevLong64,
             PyTango.SCALAR,
             PyTango.READ]],
         'jobFailure':
-            [[PyTango.DevString,
+            [[PyTango.DevLong64,
             PyTango.SCALAR,
             PyTango.READ]],
         "statisticsCollected":

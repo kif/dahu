@@ -80,13 +80,16 @@ class Job(Thread):
         os.makedirs(_storage_dir)
 
 
-    def __init__(self, input_data):
+    def __init__(self, name="plugin.Plugin", input_data={}):
         """
         Constructor of the class Job
         
+        @param name: name of the plugin to be instanciated
         @param input_data: Should be a dictionary or a JSON string representing that dictionary
         """
         Thread.__init__(self)
+        self._status = Job.STATE_UNITIALIZED
+        self._name = name
         if type(input_data) in types.StringTypes:
             if os.path.isfile(input_data):
                 self._input_data = json.load(open(input_data))
@@ -94,7 +97,7 @@ class Job(Thread):
                 self._input_data = json.loads(input_data)
         else:
             self._input_data = dict(input_data)
-        self._status = Job.STATE_UNITIALIZED
+        self._input_data["plugin_name"] = self._name
         with self.__class__._semaphore:
             self.__class__._id_class += 1
             self._jobId = self.__class__._id_class
@@ -106,7 +109,6 @@ class Job(Thread):
         self._plugin = None
         self._runtime = None
         self._start_time = time.time()
-        self._name = self._input_data.get("plugin_name", "plugin.Plugin")
         # list of methods to be called at the end of the processing
         self._callbacks = []
 
@@ -303,7 +305,7 @@ class Job(Thread):
 # Properties
 ################################################################################
     @property
-    def jobId(self):
+    def id(self):
         """
         @return: JobId 
         @rtype: integer

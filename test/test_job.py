@@ -21,7 +21,7 @@ class TestJob(unittest.TestCase):
         self.called = False
         dico = {"plugin_name": "example.square",
                 "setup": { "x": 5 }}
-        j = dahu.job.Job(dico)
+        j = dahu.job.Job("example.square", dico)
         j.connect_callback(self.callback)
         logger.info(j)
         j.start()
