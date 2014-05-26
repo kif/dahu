@@ -31,6 +31,7 @@ logger = logging.getLogger("dahu.server")
 # set loglevel at least at INFO
 if logger.getEffectiveLevel() > logging.INFO:
     logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 import numpy
 import PyTango
 from .job import Job, plugin_factory
@@ -51,8 +52,8 @@ class DahuDS(PyTango.Device_4Impl):
         self.init_device()
         self.queue = Queue() #queue containing jobs to process
         self.processing_lock = threading.Semaphore()
-        self.statLock = threading.Semaphore()
-        self.lastStatistics = "No statistics collected yet, please use the 'collectStatistics' method first"
+        self.stat_lock = threading.Semaphore()
+        self.last_stats = "No statistics collected yet, please use the 'collectStatistics' method first"
         self.last_failure = -1
         self.last_success = -1
         self.statistics_threads = None #threading.Thread()
@@ -89,7 +90,7 @@ class DahuDS(PyTango.Device_4Impl):
         attr.set_value(self.last_failure)
 
     def read_statisticsCollected(self, attr):
-        attr.set_value(self.lastStatistics)
+        attr.set_value(self.last_stats)
 
     def getJobState(self, jobId):
         return Job.getStatusFromID(jobId)
@@ -168,18 +169,17 @@ class DahuDS(PyTango.Device_4Impl):
         @param job: instance of dahu.job.Job
         """
         logger.debug("In %s.finished_processing(%s)" % (self.get_name(), job.id))
-        with self.locked():
-            self._ncpu_sem.release()
-            job.clean()
-            if job.status == "success":
-                self.last_success = job.id
-                self.push_change_event("jobSuccess", job.id)
-            else:
-                sys.stdout.flush()
-                sys.stderr.flush()
-                self.last_failure = job.id
-                self.push_change_event("jobFailure", job.id)
-            gc.collect()
+        self._ncpu_sem.release()
+        job.clean()
+        if job.status == "success":
+            self.last_success = job.id
+            self.push_change_event("jobSuccess", job.id)
+        else:
+            sys.stdout.flush()
+            sys.stderr.flush()
+            self.last_failure = job.id
+            self.push_change_event("jobFailure", job.id)
+        gc.collect()
 
 #TODO one day
 #    def getRunning(self):
@@ -212,11 +212,11 @@ class DahuDS(PyTango.Device_4Impl):
         """
         retrieve some statistics about past jobs.
         """
-        with self.statLock:
+        with self.stat_lock:
             fStartStat = time.time()
-            self.lastStatistics = Job.stats()
-            self.lastStatistics += os.linesep + "Statistics collected on %s, the collect took: %.3fs" % (time.asctime(), time.time() - fStartStat)
-            self.push_change_event("statisticsCollected", self.lastStatistics)
+            self.last_stats = Job.stats()
+            self.last_stats += os.linesep + "Statistics collected on %s, the collect took: %.3fs" % (time.asctime(), time.time() - fStartStat)
+            self.push_change_event("statisticsCollected", self.last_stats)
 
     def getStatistics(self):
         """
@@ -224,7 +224,7 @@ class DahuDS(PyTango.Device_4Impl):
         """
         if self.statistics_threads:
             self.statistics_threads.join()
-        return self.lastStatistics
+        return self.last_stats
 
     def getJobOutput(self, jobId):
         """
@@ -258,26 +258,26 @@ class DahuDSClass(PyTango.DeviceClass):
 
     #    Command definitions
     cmd_list = {
-        'startJob': [[PyTango.DevVarStringArray, "[<Dahu plugin to execute>, <JSON serialized dict>]"], [PyTango.DevLong64, "job id"]],
-        'abort': [[PyTango.DevLong64, "job id"], [PyTango.DevBoolean, ""]],
-        'getJobState': [[PyTango.DevLong64, "job id"], [PyTango.DevString, "job state"]],
+        'startJob': [[PyTango.DevVarStringArray, "[<Dahu plugin to execute>, <JSON serialized dict>]"], [PyTango.DevLong, "job id"]],
+        'abort': [[PyTango.DevLong, "job id"], [PyTango.DevBoolean, ""]],
+        'getJobState': [[PyTango.DevLong, "job id"], [PyTango.DevString, "job state"]],
         "initPlugin": [[PyTango.DevString, "plugin name"], [PyTango.DevString, "Message"]],
-        "cleanJob":[[PyTango.DevLong64, "job id"], [PyTango.DevString, "Message"]],
+        "cleanJob":[[PyTango.DevLong, "job id"], [PyTango.DevString, "Message"]],
         "collectStatistics":[[PyTango.DevVoid, "nothing needed"], [PyTango.DevVoid, "Collect some statistics about jobs within Dahu"]],
         "getStatistics":[[PyTango.DevVoid, "nothing needed"], [PyTango.DevString, "Retrieve statistics about Dahu-jobs"]],
-        'getJobOutput': [[PyTango.DevLong64, "job id"], [PyTango.DevString, "<JSON serialized dict>"]],
-        'getJobInput': [[PyTango.DevLong64, "job id"], [PyTango.DevString, "<JSON serialized dict>"]],
+        'getJobOutput': [[PyTango.DevLong, "job id"], [PyTango.DevString, "<JSON serialized dict>"]],
+        'getJobInput': [[PyTango.DevLong, "job id"], [PyTango.DevString, "<JSON serialized dict>"]],
         }
 
 
     #    Attribute definitions
     attr_list = {
         'jobSuccess':
-            [[PyTango.DevLong64,
+            [[PyTango.DevLong,
             PyTango.SCALAR,
             PyTango.READ]],
         'jobFailure':
-            [[PyTango.DevLong64,
+            [[PyTango.DevLong,
             PyTango.SCALAR,
             PyTango.READ]],
         "statisticsCollected":

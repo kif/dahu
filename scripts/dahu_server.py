@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+#Example on how to launch it:
+#PYTHONPATH=build/lib.linux-x86_64-2.6/ TANGO_HOST=saxs1:20000 python scripts/dahu_server.py GPU1
+#Example for Jive:
+#"example.square",{\"x\":5}
 from __future__ import print_function, division, with_statement
-
 """
 
 Data analysis Tango device server ... for UPBL09a
