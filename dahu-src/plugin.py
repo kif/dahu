@@ -13,7 +13,7 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "20140318"
 __status__ = "development"
 version = "0.1"
-from .factory import plugin_factory
+from .factory import plugin_factory, register
 from .utils import fully_qualified_name
 import os
 import logging
@@ -108,6 +108,7 @@ class PluginFromFunction(Plugin):
         return self.output["result"]
 
     def process(self):
+        print("l111: self.input", self.input)
         self.output["result"] = self.function(**self.input)
 
 

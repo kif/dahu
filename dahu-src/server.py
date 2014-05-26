@@ -232,15 +232,15 @@ class DahuDS(PyTango.Device_4Impl):
         @param jobId: name of the job
         @return: output from a job
         """
-        return Job.getDataOutputFromId(jobId)
+        return Job.getDataOutputFromId(jobId, as_JSON=True)
 
     def getJobInput(self, jobId):
         """
-        Retrieve XML input from a job
-        @param jobId: name of the job
-        @return: xml input from a job
+        Retrieve input from a job as JSON string
+        @param jobId: identifier of the job (int)
+        @return: JSON serialized input from a job
         """
-        return Job.getDataInputFromId(jobId)
+        return Job.getDataInputFromId(jobId, as_JSON=True)
 
 class DahuDSClass(PyTango.DeviceClass):
     #    Class Properties

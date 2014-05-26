@@ -116,33 +116,6 @@ class Job(Thread):
         txt = "dahu job (thread) #%i using plugin %s currently %s" % (
               self._jobId, self._plugin.__class__.__name__, self._status)
         return txt
-#todo: add REPR
-
-    @property
-    def input_data(self):
-        """
-        Returns the job input data
-        """
-        if self.data_on_disk:
-            return json.load(open(self.data_on_disk + ".in"))
-        else:
-            return self._input_data
-
-    @property
-    def output_data(self):
-        """
-        Returns the job output data
-        @param _bWait: shall we wait for the plugin to finish to retrieve output data: Yes by default.
-        @type _bWait: boolean
-        """
-        if self._status in [self.STATE_SUCCESS, self.STATE_SUCCESS]:
-            if self.data_on_disk:
-                return json.load(open(self.data_on_disk + ".out"))
-            else:
-                return self._output_data
-        else:
-            logger.warning("Getting output_data for job id %d in state %s." % (self._jobId, self._status))
-            return self._output_data
 
     def start(self):
         """
@@ -328,6 +301,32 @@ class Job(Thread):
         """
         return self._status
 
+    @property
+    def input_data(self):
+        """
+        Returns the job input data
+        """
+        if self.data_on_disk:
+            return json.load(open(self.data_on_disk + ".in"))
+        else:
+            return self._input_data
+
+    @property
+    def output_data(self):
+        """
+        Returns the job output data
+        @param _bWait: shall we wait for the plugin to finish to retrieve output data: Yes by default.
+        @type _bWait: boolean
+        """
+        if self._status in [self.STATE_SUCCESS, self.STATE_SUCCESS]:
+            if self.data_on_disk:
+                return json.load(open(self.data_on_disk + ".out"))
+            else:
+                return self._output_data
+        else:
+            logger.warning("Getting output_data for job id %d in state %s." % (self._jobId, self._status))
+            return self._output_data
+        
     def getName(self):
         return self._name
     def setName(self, name):
@@ -412,7 +411,7 @@ class Job(Thread):
 
 
     @classmethod
-    def getDataOutputFromId(cls, jobId):
+    def getDataOutputFromId(cls, jobId, as_JSON=False):
         """
         Returns the Plugin Output Data
         @param jobId: job idenfier 
@@ -420,15 +419,21 @@ class Job(Thread):
         @return: Job.DataOutput XML string
         """
         output = None
-        job = cls.getJobFromId(jobId)
-        if job is not None:
-            output = job.getDataOutput()
+        if jobId in cls._dictJobs:
+            job = cls.getJobFromId(jobId)
+            if job is not None:
+                if as_JSON:
+                    output = json.dumps(job.output_data, skipkeys=True, allow_nan=True, indent=4, encoding="UTF-8")
+                else:
+                    output = job.output_data
+        else:
+            output = "No such job: %s" % jobId
         return output or ""
     getDataOutputFromID = getDataOutputFromId
 
 
     @classmethod
-    def getDataInputFromId(cls, jobId):
+    def getDataInputFromId(cls, jobId, as_JSON=False):
         """
         Returns the Plugin Input Data
         @param jobId: job idenfier 
@@ -436,9 +441,17 @@ class Job(Thread):
         @return: Job.DataInput XML string
         """
         output = None
+
         job = cls.getJobFromId(jobId)
-        if job is not None:
-            output = job.getDataInput()
+        if jobId in cls._dictJobs:
+            if job is not None:
+                if as_JSON:
+                    output = json.dumps(job.input_data, skipkeys=True, allow_nan=True, indent=4, encoding="UTF-8")
+                else:
+                    output = job.input_data
+        else:
+            output = "No such job: %s" % jobId
+
         return output or ""
     getDataInputFromID = getDataInputFromId
 
@@ -451,31 +464,33 @@ class Job(Thread):
         lstStrOut = [""]
         output = []
         run_time = time.time() - cls._global_start_time
-        keys = cls._dictJobs.keys()
+        keys = list(cls._dictJobs.keys())
+        l = len(keys)
         keys.sort()
 
-        output = [ (i, cls._dictJobs[i]._name, cls._dictJobs[i]._status, cls._dictJobs[i]._runtime)
-                  for i, k in enumerate(keys)]
+        output = [ (k, cls._dictJobs[k]._name, cls._dictJobs[k]._status, cls._dictJobs[k]._runtime)
+                  for k in keys]
         total_jobs = max(1, len(keys))
-        lstStrOut.append("_" * 110)
-        lstStrOut.append("%s\t|\t%s\t\t\t\t|\t%s\t|\t%s" % ("id", "Name", "Status", "run time"))
-        lstStrOut.append("_" * 110)
+        lstStrOut.append("_" * 80)
+        lstStrOut.append("%s\t|\t%s\t\t\t|\t%s\t|\t%s (sec)" % ("Id", "Name", "Status", "Run-time"))
+        lstStrOut.append("_" * 80)
         wall_time = 0.0
         fSumProd = 0.0
         fSumX = 0.0
         fSumX2 = 0.0
         for oneJob in output:
-            wall_time += oneJob[3]
-            fSumX += oneJob[0]
-            fSumX2 += oneJob[0] * oneJob[0]
-            fSumProd += oneJob[0] * oneJob[3]
-            lstStrOut.append("%s\t|\t%s\t|\t%s\t|\t%9.3f\t|\t%s" % tuple(oneJob))
-        lstStrOut.append("_" * 110)
+            if oneJob[3]:
+                wall_time += oneJob[3]
+                fSumX += oneJob[0]
+                fSumX2 += oneJob[0] * oneJob[0]
+                fSumProd += oneJob[0] * oneJob[3]
+            lstStrOut.append("%s\t|\t%s\t|\t%s\t|\t%s" % tuple(oneJob))
+        lstStrOut.append("_" * 80)
         lstStrOut.append("Total execution time (Wall): %.3fs, Execution time: %.3fs. SpeedUp: %.3f" % (wall_time, run_time, wall_time / run_time))
         lstStrOut.append("Average execution time (Wall/N): %.3fs, Average throughput: %.3fs" % (wall_time / total_jobs, run_time / total_jobs))
-        if len(keys) > 1:
-            fSlope = (total_jobs * fSumProd - fSumX * wall_time) / (iNbJob * fSumX2 - fSumX * fSumX)
-            fOrd = (wall_time - fSlope * fSumX) / iNbJob
+        if l > 1:
+            fSlope = (total_jobs * fSumProd - fSumX * wall_time) / (l * fSumX2 - fSumX * fSumX)
+            fOrd = (wall_time - fSlope * fSumX) / l
         else:
             fSlope = 0.0
             fOrd = wall_time

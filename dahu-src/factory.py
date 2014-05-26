@@ -104,6 +104,7 @@ class Factory(object):
         """
         if fqn is None:
             fqn = fully_qualified_name(klass)
+        logger.debug("Registering plugin %s as %s" % (klass, fqn))
         with cls.reg_sem:
             cls.registry[fqn] = klass
         return klass

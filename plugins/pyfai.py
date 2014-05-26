@@ -133,9 +133,9 @@ class PluginPyFAI(Plugin):
         self.npaOut = np.hstack((i.reshape(-1, 1) for i in out if i is not None))
 
 
-    def postProcess(self):
-        Plugin.postProcess(self)
-        logger.debug("PluginPyFAIv1_0.postProcess")
+    def teardown(self):
+        Plugin.teardown(self)
+        logger.debug("PluginPyFAIv1_0.teardown")
         # Create some output data
 
 

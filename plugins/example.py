@@ -16,9 +16,16 @@ version = "0.1"
 
 import os
 import numpy
-from dahu.plugin import plugin_from_function
+from dahu.plugin import plugin_from_function, Plugin, register
 import logging
 logger = logging.getLogger("plugin.example")
+
+@register
+class Cube(Plugin):
+    def process(self):
+        Plugin.process(self)
+        x = self.input.get("x", 0)
+        self.output[result] = x * x * x
 
 def square(x):
     return x * x
