@@ -1,0 +1,20 @@
+- Device Info ----------------------------------------
+
+Device:          dau/dahu/1
+type_id:         IDL:Tango/Device_4:1.0
+iiop_version:    1.2
+host:            192.168.5.1 (192.168.5.1)
+port:            59102
+Server:          DahuDS/gpu1
+Server PID:      6677
+Exported:        true
+
+- Polling Status -------------------------------------
+
+Desc -> Cannot import DAU/dahu/1 :
+	org.omg.CORBA.TRANSIENT: Retries exceeded, couldn't reconnect to 160.103.216.19:59102  vmcid: 0x0  minor code: 0  completed: No
+Reason -> TangoApi_CANNOT_IMPORT_DEVICE
+Origin -> Connection.dev_import(DAU/dahu/1)
+Desc -> Cannot import DAU/dahu/1
+Reason -> TangoApi_CANNOT_IMPORT_DEVICE
+Origin -> Connection.build_connection(DAU/dahu/1)
