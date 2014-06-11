@@ -10,9 +10,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20140303"
+__date__ = "2014-06-11"
 __status__ = "development"
-version = "0.1"
+version = "0.2.0"
 
 import sys, logging
 logging.basicConfig()

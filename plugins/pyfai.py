@@ -10,9 +10,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20140303"
+__date__ = "2014-06-11"
 __status__ = "development"
-version = "0.1"
+version = "0.2.0"
 
 import os
 import numpy
@@ -32,8 +32,8 @@ try:
 except ImportError:
     logger.error("Failed to import Fabio: download and install it from sourceforge")
 
-@register
-class PluginPyFAI(Plugin):
+#@register
+class PluginIntegrate(Plugin):
     """
     This is the basic plugin of PyFAI for azimuthal integration
     """
@@ -130,7 +130,7 @@ class PluginPyFAI(Plugin):
                                mask=self.mask,
                                dummy=self.dummy,
                                delta_dummy=self.delta_dummy)
-        self.npaOut = np.hstack((i.reshape(-1, 1) for i in out if i is not None))
+        self.npaOut = numpy.hstack((i.reshape(-1, 1) for i in out if i is not None))
 
 
     def teardown(self):
@@ -139,3 +139,11 @@ class PluginPyFAI(Plugin):
         # Create some output data
 
 
+#@register
+class PluginDistortion(Plugin):
+    """
+    This is the basic plugin of PyFAI for geometry distortion
+    """
+    _dictGeo = {} #key:tuple(ai.param), value= ai
+    _sem = Semaphore()
+    

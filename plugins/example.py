@@ -24,8 +24,10 @@ logger = logging.getLogger("plugin.example")
 class Cube(Plugin):
     def process(self):
         Plugin.process(self)
+        if self.input is None:
+            logger.warning("input is None")
         x = self.input.get("x", 0)
-        self.output[result] = x * x * x
+        self.output["result"] = x * x * x
 
 def square(x):
     return x * x

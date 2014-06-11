@@ -10,9 +10,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20140318"
+__date__ = "20140611"
 __status__ = "development"
-version = "0.1"
+version = "0.2.0"
 from .factory import plugin_factory, register
 from .utils import fully_qualified_name
 import os
@@ -38,7 +38,7 @@ class Plugin(object):
         """
         We assume an empty constructor
         """
-        self.input = None
+        self.input = {}
         self.output = {}
         self._logging = []  # stores the logging information to send back
         self.is_aborted = False
@@ -52,7 +52,8 @@ class Plugin(object):
         input variables and possibly initialize
         some objects
         """
-        self.input = kwargs
+        if kwargs is not None:
+            self.input.update(kwargs)
 
     def process(self):
         """
@@ -102,14 +103,21 @@ class PluginFromFunction(Plugin):
         """
         Behaves like a normal function: for debugging
         """
-        self.setup(kwargs)
+        self.input.update(kwargs)
         self.process()
         self.teardown()
         return self.output["result"]
 
     def process(self):
-        print("l111: self.input", self.input)
-        self.output["result"] = self.function(**self.input)
+        if self.input is None:
+            print("PluginFromFunction.process: self.input is None !!! %s", self.input)
+        else:
+            funct_input =  self.input.copy()
+            if "job_id" in funct_input:
+                funct_input.pop("job_id")
+            if "plugin_name" in funct_input:
+                funct_input.pop("plugin_name")
+            self.output["result"] = self.function(**funct_input)
 
 
 def plugin_from_function(function):

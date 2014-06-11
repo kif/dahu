@@ -10,12 +10,16 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20140318"
+__date__ = "20140611"
 __status__ = "development"
-version = "0.1"
+
 import os, sys
 from distutils.core import setup, Extension, Command
 import glob
+
+version = [eval(l.split("=")[1]) for l in open(os.path.join(os.path.dirname(
+    os.path.abspath(__file__)), "dahu-src", "__init__.py"))
+    if l.strip().startswith("version")][0]
 
 script_files = glob.glob("scripts/*")
 setup(name='dahu',

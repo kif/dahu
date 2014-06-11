@@ -10,9 +10,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20140304"
+__date__ = "2014-06-11"
 __status__ = "development"
-version = "0.1"
+version = "0.2.0"
 import os, sys, imp
 import os.path as op
 import logging
@@ -77,7 +77,11 @@ class Factory(object):
     def __call__(self, plugin_name):
         """
         create a plugin instance from its name
+        
+        @param plugin_name: name of the plugin as a string
+        @return: plugin instance
         """
+        plugin_name = plugin_name.lower()
         if plugin_name in self.registry:
             return self.registry[plugin_name]()
         with self._sem:

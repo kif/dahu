@@ -102,7 +102,7 @@ class Job(Thread):
             self.__class__._id_class += 1
             self._jobId = self.__class__._id_class
             self.__class__._dictJobs[self.__class__._id_class] = self
-        self._input_data["id"] = self._jobId
+        self._input_data["job_id"] = self._jobId
         self.data_on_disk = False
         self._output_data = {}
         self._sem = Semaphore()
@@ -161,6 +161,7 @@ class Job(Thread):
         5) run the call-backs
         """
         self._status = self.STATE_RUNNING
+        self._plugin.input.update(self._input_data)
         self._run_("setup")
         if self._status == self.STATE_FAILURE:
             self._run_callbacks()
@@ -197,19 +198,19 @@ class Job(Thread):
         if name in dir(self._plugin):
             method = self._plugin.__getattribute__(name)
             if "__call__" in dir(method):
-                if what in self._input_data:
-                    try:
-                        method(self._input_data[what])
-                    except Exception as error:
-                        self._log_error("Error %s while calling %s.%s with argument %s" %
-                                        (error, self._plugin.__class__.__name__,
-                                         what, self._input_data[what]))
-                else:
-                    try:
-                        method()
-                    except Exception as error:
-                        self._log_error("Error %s while calling %s.%s without arguments" %
-                                        (error, self._plugin.__class__.__name__, what))
+#                 if what in self._input_data:
+#                     try:
+#                         method(self._input_data[what])
+#                     except Exception as error:
+#                         self._log_error("Error %s while calling %s.%s with argument %s" %
+#                                         (error, self._plugin.__class__.__name__,
+#                                          what, self._input_data[what]))
+#                 else:
+                try:
+                    method()
+                except Exception as error:
+                    self._log_error("Error %s while calling %s.%s without arguments" %
+                                    (error, self._plugin.__class__.__name__, what))
         else:
             logger.error("No such method %s in class %s" % (what, self._plugin.__class__.__name__))
 
@@ -254,14 +255,17 @@ class Job(Thread):
                 else:
                     logger.error("Non callable callback method: %s" % method)
 
-    def clean(self, force=True):
+    def clean(self, force=True, wait=True):
         """
         Frees the memory associated with the plugin
         
         @param force: Force garbage collection after clean-up
-        TODO
+        @param wait: wait for job to be finished
+        
+        #TODO: save the input and output data to some path 
         """
-        self.synchronize()
+        if wait and self.is_alive():
+            self.join()
         with self._sem:
             if self._plugin is not None:
                 self.__pathXSDOutput = self._plugin.strPathDataOutput
@@ -272,8 +276,8 @@ class Job(Thread):
         if force:
             gc.collect()
 
-
-
+    synchronize = join
+    
 ################################################################################
 # Properties
 ################################################################################
@@ -349,7 +353,7 @@ class Job(Thread):
         listJob = cls._dictJobs.keys()
         for jobid in listJob:
             job = cls._dictJobs[jobid]
-            job.synchronize()
+            job.join()
         if len(cls._dictJobs) != len(listJob):
             logger.warning("Job.synchronize_all: New jobs have been launched while synchronizing")
 

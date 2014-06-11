@@ -64,8 +64,8 @@ def fully_qualified_name(obj):
     @param obj: any python object
     @return: the full name as a string
     """
-    if "__module__" not in dir(obj) or "__name__" not in dir(obj):
+    if "__module__" not in dir(obj):# or "__name__" not in dir(obj):
         obj = obj.__class__
-    module = obj.__module__
-    name = obj.__name__
+    module = obj.__module__.lower()
+    name = obj.__name__.lower()
     return module + "." + name

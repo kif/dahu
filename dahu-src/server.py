@@ -170,7 +170,7 @@ class DahuDS(PyTango.Device_4Impl):
         """
         logger.debug("In %s.finished_processing(%s)" % (self.get_name(), job.id))
         self._ncpu_sem.release()
-        job.clean()
+        job.clean(wait=False)
         if job.status == "success":
             self.last_success = job.id
             self.push_change_event("jobSuccess", job.id)
