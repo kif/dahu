@@ -23,6 +23,7 @@ import logging
 import time
 import types
 import multiprocessing
+import gc
 if sys.version > (3, 0):
     from queue import Queue
 else:

@@ -15,14 +15,19 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "23/05/2014"
+__date__ = "12/06/2014"
 __status__ = "beta"
 __docformat__ = 'restructuredtext'
+
 import sys
+import os
+import tempfile
 import logging
 logging.basicConfig()
 logger = logging.getLogger("dahu_server")
 
+
+import dahu.utils
 from dahu.server import DahuDSClass, DahuDS
 
 # set loglevel at least at INFO
@@ -50,11 +55,14 @@ if __name__ == '__main__':
                         help="tango trace level")
     parser.add_argument("-f", "--file", dest="tango_file", default=None,
                         help="tango log filename")
+    parser.add_argument("-l", "--log", dest="dahu_log", 
+                        default=os.path.join(os.environ.get("HOME",tempfile.gettempdir()),"log"),
+                        help="directory where dahu stores logs ")
 #    parser.add_argument("-n", "--nbcpu", dest="nbcpu", type=int,
 #                  help="Maximum bumber of processing threads to be started", default=None)
     parser.add_argument(dest="tango", nargs="*", help="Tango device server options")
     options = parser.parse_args()
-
+    dahu.utils.get_workdir(options.dahu_log)
     tangoParam = ["DahuDS"] + options.tango
     if options.tango_verbose:
         tangoParam += ["-v%s" % options.tango_verbose]

@@ -268,11 +268,24 @@ class Job(Thread):
             self.join()
         with self._sem:
             if self._plugin is not None:
-                self.__pathXSDOutput = self._plugin.strPathDataOutput
-                self.__pathXSDInput = self._plugin.strPathDataInput
-                self.__runtime = self._plugin.getRunTime()
+#                 print(utils.get_workdir())
+                if self._plugin.input:
+                    self._input_data.update(self._plugin.input)
+                if self._plugin.output:
+                    self._output_data.update(self._plugin.output)    
+                self._update_runtime()
+                self._output_data["job_runtime"] = self._runtime
+                base_path = os.path.join(utils.get_workdir(),"%05i_%s"%(self._jobId, self._name))
+                print("Dump in %s.inp: %s"%(base_path, self._input_data))
+                print("Dump in %s.out: %s"%(base_path, self._output_data))
+                with open(base_path+".inp","w") as infile:
+                    json.dump(self._input_data, infile, indent=2)
+                with open(base_path+".out","w") as infile:
+                    json.dump(self._output_data, infile, indent=2)
+#                 self._input_data = base_path+".inp"
+#                 self._output_data = base_path+".out"
                 self._plugin = None
-                self.data_on_disk = True
+                self.data_on_disk = base_path
         if force:
             gc.collect()
 
@@ -311,7 +324,7 @@ class Job(Thread):
         Returns the job input data
         """
         if self.data_on_disk:
-            return json.load(open(self.data_on_disk + ".in"))
+            return json.load(open(self.data_on_disk + ".inp"))
         else:
             return self._input_data
 
@@ -368,7 +381,7 @@ class Job(Thread):
         @rtype: string 
         """
         if jobId in cls._dictJobs:
-            strRet = cls._dictJobs[jobId].getStatus()
+            strRet = cls._dictJobs[jobId]._status
         else:
             strRet = "Unable to retrieve such job: %s" % jobId
             logger.warning(strRet)
