@@ -278,9 +278,9 @@ class Job(Thread):
                     self._output_data["job_runtime"] = self._runtime
                     base_path = os.path.join(utils.get_workdir(),"%05i_%s"%(self._jobId, self._name))
                     with open(base_path+".inp","w") as infile:
-                        json.dump(self._input_data, infile, indent=2)
+                        json.dump(self._input_data, infile, indent=4)
                     with open(base_path+".out","w") as infile:
-                        json.dump(self._output_data, infile, indent=2)
+                        json.dump(self._output_data, infile, indent=4)
                     self._plugin = None
                     self.data_on_disk = base_path
         if force:
@@ -320,10 +320,11 @@ class Job(Thread):
         """
         Returns the job input data
         """
-        if self.data_on_disk:
-            return json.load(open(self.data_on_disk + ".inp"))
-        else:
-            return self._input_data
+        with self._sem:
+            if self.data_on_disk:
+                return json.load(open(self.data_on_disk + ".inp"))
+            else:
+                return self._input_data
 
     @property
     def output_data(self):
@@ -332,14 +333,15 @@ class Job(Thread):
         @param _bWait: shall we wait for the plugin to finish to retrieve output data: Yes by default.
         @type _bWait: boolean
         """
-        if self._status in [self.STATE_SUCCESS, self.STATE_SUCCESS]:
-            if self.data_on_disk:
-                return json.load(open(self.data_on_disk + ".out"))
+        with self._sem:
+            if self._status in [self.STATE_SUCCESS, self.STATE_FAILURE,  self.STATE_ABORTED]:
+                if self.data_on_disk:
+                    return json.load(open(self.data_on_disk + ".out"))
+                else:
+                    return self._output_data
             else:
+                logger.warning("Getting output_data for job id %d in state %s." % (self._jobId, self._status))
                 return self._output_data
-        else:
-            logger.warning("Getting output_data for job id %d in state %s." % (self._jobId, self._status))
-            return self._output_data
         
     def getName(self):
         return self._name
@@ -434,12 +436,20 @@ class Job(Thread):
         """
         output = None
         if jobId in cls._dictJobs:
-            job = cls.getJobFromId(jobId)
+            job = cls._dictJobs[jobId]
             if job is not None:
-                if as_JSON:
-                    output = json.dumps(job.output_data, skipkeys=True, allow_nan=True, indent=4, encoding="UTF-8")
-                else:
-                    output = job.output_data
+                with job._sem:
+                    if job.data_on_disk:
+                        data = open(job.data_on_disk+".out").read() 
+                        if as_JSON:
+                            output = data
+                        else:
+                            output = json.loads(data)
+                    else:
+                        if as_JSON:
+                            output = json.dumps(job._output_data, skipkeys=True, allow_nan=True, indent=4, encoding="UTF-8")
+                        else:
+                            output = job._output_data
         else:
             output = "No such job: %s" % jobId
         return output or ""
@@ -455,14 +465,21 @@ class Job(Thread):
         @return: Job.DataInput XML string
         """
         output = None
-
-        job = cls.getJobFromId(jobId)
         if jobId in cls._dictJobs:
+            job = cls._dictJobs[jobId]
             if job is not None:
-                if as_JSON:
-                    output = json.dumps(job.input_data, skipkeys=True, allow_nan=True, indent=4, encoding="UTF-8")
-                else:
-                    output = job.input_data
+                with job._sem:
+                    if job.data_on_disk:
+                        data = open(job.data_on_disk+".inp").read()
+                        if as_JSON:
+                            output = data
+                        else:
+                            output = json.loads(data)
+                    else:
+                        if as_JSON:
+                            output = json.dumps(job._input_data, skipkeys=True, allow_nan=True, indent=4, encoding="UTF-8")
+                        else:
+                            output = job._input_data
         else:
             output = "No such job: %s" % jobId
 

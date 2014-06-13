@@ -57,9 +57,8 @@ class DahuDS(PyTango.Device_4Impl):
         self.last_stats = "No statistics collected yet, please use the 'collectStatistics' method first"
         self.last_failure = -1
         self.last_success = -1
-        self.statistics_threads = None #threading.Thread()
-#        self.statistics_threads.join()
-        self._ncpu_sem = threading.Semaphore(multiprocessing.cpu_count())
+        self.statistics_threads = None 
+#         self._ncpu_sem = threading.Semaphore(multiprocessing.cpu_count())
 
     def get_name(self):
         """Returns the name of the class"""
@@ -158,7 +157,7 @@ class DahuDS(PyTango.Device_4Impl):
         """
         with self.processing_lock:
             while not self.queue.empty():
-                self._ncpu_sem.acquire()
+#                 self._ncpu_sem.acquire()
                 job = self.queue.get()
                 job.connect_callback(self.finished_processing)
                 job.start()
@@ -170,7 +169,7 @@ class DahuDS(PyTango.Device_4Impl):
         @param job: instance of dahu.job.Job
         """
         logger.debug("In %s.finished_processing id:%s (%s)" % (self.get_name(), job.id, job.status))
-        self._ncpu_sem.release()
+#         self._ncpu_sem.release()
         job.clean(wait=False)
         if job.status == job.STATE_SUCCESS:
             self.last_success = job.id
