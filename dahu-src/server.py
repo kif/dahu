@@ -169,10 +169,10 @@ class DahuDS(PyTango.Device_4Impl):
         
         @param job: instance of dahu.job.Job
         """
-        logger.debug("In %s.finished_processing(%s)" % (self.get_name(), job.id))
+        logger.debug("In %s.finished_processing id:%s (%s)" % (self.get_name(), job.id, job.status))
         self._ncpu_sem.release()
         job.clean(wait=False)
-        if job.status == "success":
+        if job.status == job.STATE_SUCCESS:
             self.last_success = job.id
             self.push_change_event("jobSuccess", job.id)
         else:

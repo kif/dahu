@@ -25,6 +25,7 @@ import tempfile
 import logging
 import traceback
 logger = logging.getLogger("dahu.job")
+logger.setLevel(logging.DEBUG)
 from . import utils
 from .factory import plugin_factory
 
@@ -175,9 +176,9 @@ class Job(Thread):
             self._run_callbacks()
             return
         self._output_data.update(self._plugin.output)
-        self._run_callbacks()
         if self._status == self.STATE_RUNNING:
             self._status = self.STATE_SUCCESS
+        self._run_callbacks()
 
 
     def _run_(self, what):
@@ -222,7 +223,6 @@ class Job(Thread):
                     cb(self)
                 except Exception as error:
                     self._log_error("Error while calling %s" % cb)
-        self._status = self.STATE_SUCCESS
 
     def _log_error(self, msg):
         """
@@ -239,6 +239,7 @@ class Job(Thread):
                 self._output_data["error"] = err_msg
             else:
                 self._output_data["error"] += ["*"*50] + err_msg
+            logger.error(err_msg)
 
     def _update_runtime(self):
         with self._sem:
@@ -262,30 +263,26 @@ class Job(Thread):
         @param force: Force garbage collection after clean-up
         @param wait: wait for job to be finished
         
-        #TODO: save the input and output data to some path 
         """
+        logger.debug("In clean %s semaphore is %s"%(self._plugin, self._sem._Semaphore__value))
         if wait and self.is_alive():
             self.join()
-        with self._sem:
-            if self._plugin is not None:
-#                 print(utils.get_workdir())
-                if self._plugin.input:
-                    self._input_data.update(self._plugin.input)
-                if self._plugin.output:
-                    self._output_data.update(self._plugin.output)    
-                self._update_runtime()
-                self._output_data["job_runtime"] = self._runtime
-                base_path = os.path.join(utils.get_workdir(),"%05i_%s"%(self._jobId, self._name))
-                print("Dump in %s.inp: %s"%(base_path, self._input_data))
-                print("Dump in %s.out: %s"%(base_path, self._output_data))
-                with open(base_path+".inp","w") as infile:
-                    json.dump(self._input_data, infile, indent=2)
-                with open(base_path+".out","w") as infile:
-                    json.dump(self._output_data, infile, indent=2)
-#                 self._input_data = base_path+".inp"
-#                 self._output_data = base_path+".out"
-                self._plugin = None
-                self.data_on_disk = base_path
+        if self._plugin is not None:
+            self._update_runtime()
+            with self._sem:
+                if self._plugin is not None:
+                    if self._plugin.input:
+                        self._input_data.update(self._plugin.input)
+                    if self._plugin.output:
+                        self._output_data.update(self._plugin.output)                        
+                    self._output_data["job_runtime"] = self._runtime
+                    base_path = os.path.join(utils.get_workdir(),"%05i_%s"%(self._jobId, self._name))
+                    with open(base_path+".inp","w") as infile:
+                        json.dump(self._input_data, infile, indent=2)
+                    with open(base_path+".out","w") as infile:
+                        json.dump(self._output_data, infile, indent=2)
+                    self._plugin = None
+                    self.data_on_disk = base_path
         if force:
             gc.collect()
 
