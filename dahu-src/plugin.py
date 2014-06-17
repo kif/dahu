@@ -78,14 +78,15 @@ class Plugin(object):
         """
         self.is_aborted = True
 
-    def log_error(self, txt):
+    def log_error(self, txt, do_raise=True):
         """
         Way to log errors and raise error
         """
-        err = "in %s :" % self.get_name() + txt
+        err = "error in %s: %s" %( self.get_name(), txt)
         logger.error(err)
         self._logging.append(err)
-        raise RuntimeError(err)
+        if do_raise:
+            raise RuntimeError(err)
 
 
 

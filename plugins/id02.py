@@ -5,15 +5,15 @@ from __future__ import with_statement, print_function
 __doc__ = """
 Plugins for ID02:
 
-Distortion correction and
+Distortion correction
 """
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20140320"
+__date__ = "20140616"
 __status__ = "development"
-version = "0.1"
+version = "0.2"
 
 import sys, os, time
 import logging
@@ -23,7 +23,7 @@ from dahu.plugin import Plugin
 from dahu.factory import register
 
 import h5py
-import pyFAI, pyFAI.distortion
+import pyFAI, pyFAI._distortion, pyFAI.distortion
 
 @register
 class Distortion(Plugin):
@@ -44,25 +44,26 @@ class Distortion(Plugin):
         self.output_ds = None
         self.distortion = None
 
-    def setup(self, kwargs):
+    def setup(self, kwargs=None):
         """
         Structure of the input: {
             "input_hdf5_filename" : path,
-            input_hdf5_dataset : path,
-            output_hdf5_filename : path,
-            output_hdf5_dataset : path,
+            "input_hdf5_dataset : path,
+            "output_hdf5_filename" : path,
+            "output_hdf5_dataset" : path,
             #distortion_dx : path,
             #distortion_dy : path,
-            distortion_spline : path,
+            "distortion_spline" : path,
             ...
             }
         nota: dx is the row index, fast index, inside a line, small stride
         nota: dy is the line index, slow index, inside a column, large stride
 
         """
-        self.input = kwargs
-        input_hdf5_fn = kwargs.get("input_hdf5_filename", "")
-        input_hdf5_ds = kwargs.get("input_hdf5_dataset", "")
+        if kwargs is not None:
+            self.input.update(kwargs)
+        input_hdf5_fn = self.input.get("input_hdf5_filename", "")
+        input_hdf5_ds = self.input.get("input_hdf5_dataset", "")
         if not  os.path.isfile(input_hdf5_fn):
             self.log_error("No input HDF5 file %s" % input_hdf5_fn)
         in_hdf5 = h5py.File(input_hdf5_fn)
@@ -70,19 +71,28 @@ class Distortion(Plugin):
             self.log_error("HDF5 file %s has no dataset" % (input_hdf5_fn, input_hdf5_ds))
         self.input_ds = in_hdf5[input_hdf5_ds]
         shape = self.input_ds.shape
-        output_hdf5_fn = kwargs.get("output_hdf5_filename", "")
-        output_hdf5_ds = kwargs.get("output_hdf5_dataset", "")
+        output_hdf5_fn = self.input.get("output_hdf5_filename", "")
+        output_hdf5_ds = self.input.get("output_hdf5_dataset", "")
         if os.path.exists(output_hdf5_fn):
+            self.log_error("Replace output file %s"%output_hdf5_fn, False)
             os.unlink(output_hdf5_fn)
         out_hdf5 = h5py.File(output_hdf5_fn)
         self.output_ds = out_hdf5.create_dataset(output_hdf5_ds, shape, "float32",
                                                  chunks=(1,) + shape[1:],
                                                  maxshape=(None,) + shape[1:])
-        spline = kwargs.get("distortion_spline")
+        spline = self.input.get("distortion_spline")
         if not os.path.isfile(spline):
             self.log_error("No spline file %s" % spline)
         detector = pyFAI.detectors.Detector(splineFile=spline)
-        self.distortion = pyFAI.distortion.Distortion(detector, shape[-2:])
+        self.distortion_cy = pyFAI._distortion.Distortion(detector, shape[-2:])
+        self.distortion_cy.calc_LUT()
+        self.distortion_py = pyFAI._distortion.Distortion(detector, shape[-2:])
+        self.distortion_py.LUT = self.distortion_cy.LUT
+        self.distortion_py.pos = self.distortion_cy.pos
+        self.distortion_py.lut_size = self.distortion_cy.lut_size 
+        self.distortion_py.delta0 = self.distortion_py.delta0 
+        self.distortion_py.delta1 = self.distortion_py.delta1 
+        
 
     def process(self):
         """
