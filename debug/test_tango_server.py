@@ -18,8 +18,8 @@ print("%s id: %i"%(plugin, pid))
 print("Input: %s"% dahu.getJobInput(pid))
 print("Output: %s"% dahu.getJobOutput(pid))
 print("state: %s"% dahu.getJobState(pid))
-dahu.collectStatistics()
-print(dahu.getStatistics())
+# dahu.collectStatistics()
+# print(dahu.getStatistics())
 
 
 def startjob(method,device,wg):
@@ -37,14 +37,33 @@ def startjob(method,device,wg):
     while dahu.getJobState(pid) not in ["success", "failure"]:
         time.sleep(1)
     
-for device in (None,"CPU", "GPU"):
-    for method in ("csr","lut"):
-        for wg in [1,2,4,8,16,32]:
-            if (method != "CSR" or device == "None")and wg > 1:
-                continue
-            else:
-                startjob(method,device,wg)
+# for device in (None,"CPU", "GPU"):
+#     for method in ("csr","lut"):
+#         for wg in [1,2,4,8,16,32]:
+#             if (method != "CSR" or device == "None")and wg > 1:
+#                 continue
+#             else:
+#                 startjob(method,device,wg)
 
-dahu.collectStatistics()
-time.sleep(1)
-print(dahu.getStatistics())
+data=      {"hdf5_filename":"/tmp/metadata.h5",
+        "entry": "entry",
+        "instrument":"id02",
+        "c216":"id02/c216/0",
+        "cycle":1,
+        }
+
+pid = dahu.startJob(["id02.metadata", json.dumps(data)])
+print("%s id: %i"%(plugin, pid))
+print("Input: %s"% dahu.getJobInput(pid))
+print("Output: %s"% dahu.getJobOutput(pid))
+print("state: %s"% dahu.getJobState(pid))
+while dahu.getJobState(pid) not in ["success", "failure"]:
+    time.sleep(1)
+
+# dahu.collectStatistics()
+# time.sleep(5)
+# print(dahu.getStatistics())
+print("Input: %s"% dahu.getJobInput(pid))
+print("Output: %s"% dahu.getJobOutput(pid))
+print("state: %s"% dahu.getJobState(pid))
+print("error: %s"% dahu.getJobError(pid))

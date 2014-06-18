@@ -82,8 +82,12 @@ class Plugin(object):
         """
         Way to log errors and raise error
         """
-        err = "error in %s: %s" %( self.get_name(), txt)
-        logger.error(err)
+        if do_raise:
+            err = "ERROR in %s: %s" %( self.get_name(), txt)
+            logger.error(err)
+        else:
+            err = "Warning in %s: %s" %( self.get_name(), txt)
+            logger.warning(err)
         self._logging.append(err)
         if do_raise:
             raise RuntimeError(err)

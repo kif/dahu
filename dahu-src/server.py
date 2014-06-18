@@ -242,6 +242,15 @@ class DahuDS(PyTango.Device_4Impl):
         """
         return Job.getDataInputFromId(jobId, as_JSON=True)
 
+    def getJobError(self, jobId):
+        """
+        Retrieve error message from a job as a string
+        @param jobId: identifier of the job (int)
+        @return: Error message
+        """
+        return Job.getErrorFromId(jobId)
+
+
 class DahuDSClass(PyTango.DeviceClass):
     #    Class Properties
     class_property_list = {
@@ -267,6 +276,7 @@ class DahuDSClass(PyTango.DeviceClass):
         "getStatistics":[[PyTango.DevVoid, "nothing needed"], [PyTango.DevString, "Retrieve statistics about Dahu-jobs"]],
         'getJobOutput': [[PyTango.DevLong, "job id"], [PyTango.DevString, "<JSON serialized dict>"]],
         'getJobInput': [[PyTango.DevLong, "job id"], [PyTango.DevString, "<JSON serialized dict>"]],
+        'getJobError': [[PyTango.DevLong, "job id"], [PyTango.DevString, "Error message"]],
         }
 
 

@@ -375,7 +375,7 @@ class Job(Thread):
         Retrieve the job (hence the plugin) status
         
         @param jobId: the Job identification number
-        @type jobId: string
+        @type jobId: int
         @return: the Job status 
         @rtype: string 
         """
@@ -411,7 +411,7 @@ class Job(Thread):
         Frees the memory associated with the top level plugin
         
         @param jobId: the Job identification number
-        @type jobId: string
+        @type jobId: int
         @param forceGC: Force garbage collection after clean-up
         @type forceGC: boolean
         """
@@ -431,8 +431,8 @@ class Job(Thread):
         """
         Returns the Plugin Output Data
         @param jobId: job idenfier 
-        @type jobId: string
-        @return: Job.DataOutput XML string
+        @type jobId: int
+        @return: Job.DataOutput JSON string
         """
         output = None
         if jobId in cls._dictJobs:
@@ -461,8 +461,8 @@ class Job(Thread):
         """
         Returns the Plugin Input Data
         @param jobId: job idenfier 
-        @type jobId: string
-        @return: Job.DataInput XML string
+        @type jobId: int
+        @return: Job.DataInput JSON string
         """
         output = None
         if jobId in cls._dictJobs:
@@ -486,7 +486,19 @@ class Job(Thread):
         return output or ""
     getDataInputFromID = getDataInputFromId
 
+    @classmethod
+    def getErrorFromId(cls, jobId):
+        """
+        Returns the error messages from plugin
+        @param jobId: job idenfier 
+        @type jobId: int
+        @return: error message as a string
+        """
+        out = cls.getDataOutputFromId(jobId)
+        return os.linesep.join(out.get("error",[])).encode("UTF-8")
+            
 
+    getErrorFromID = getErrorFromId
     @classmethod
     def stats(cls):
         """
