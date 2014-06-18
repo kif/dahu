@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20140616"
+__date__ = "20140617"
 __status__ = "development"
 version = "0.2"
 
@@ -55,10 +55,11 @@ class Distortion(Plugin):
             #distortion_dy : path,
             "distortion_spline" : path,
             ...
+            method: "lut" or "csr"
+            device: "cpu" or "gpu"
             }
         nota: dx is the row index, fast index, inside a line, small stride
         nota: dy is the line index, slow index, inside a column, large stride
-
         """
         if kwargs is not None:
             self.input.update(kwargs)
@@ -84,14 +85,11 @@ class Distortion(Plugin):
         if not os.path.isfile(spline):
             self.log_error("No spline file %s" % spline)
         detector = pyFAI.detectors.Detector(splineFile=spline)
-        self.distortion_cy = pyFAI._distortion.Distortion(detector, shape[-2:])
-        self.distortion_cy.calc_LUT()
-        self.distortion_py = pyFAI._distortion.Distortion(detector, shape[-2:])
-        self.distortion_py.LUT = self.distortion_cy.LUT
-        self.distortion_py.pos = self.distortion_cy.pos
-        self.distortion_py.lut_size = self.distortion_cy.lut_size 
-        self.distortion_py.delta0 = self.distortion_py.delta0 
-        self.distortion_py.delta1 = self.distortion_py.delta1 
+        method = self.input.get("method", "lut")
+        device = self.input.get("device", None)
+        workgroup = self.input.get("workgroup", None)
+        self.distortion = pyFAI.distortion.Distortion(detector, shape[-2:], method=method, device=device, workgroup=workgroup)
+        self.distortion.calc_init()
         
 
     def process(self):

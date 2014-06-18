@@ -264,7 +264,7 @@ class Job(Thread):
         @param wait: wait for job to be finished
         
         """
-        logger.debug("In clean %s semaphore is %s"%(self._plugin, self._sem._Semaphore__value))
+        logger.debug("In clean %s"%(self._plugin))
         if wait and self.is_alive():
             self.join()
         if self._plugin is not None:
