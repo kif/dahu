@@ -162,8 +162,8 @@ class Metadata(Plugin):
         self.tfg_grp["data"] = tfg
         self.tfg_grp["cycle"] = cycle
         self.tfg_grp["data"].attrs["interpretation"] = "scalar"
-        #handle the case of multiple cycles: n*more frames, exposure time divided by n
-        tmp=numpy.outer(numpy.ones(self.cycle),tfg).reshape(-1,2)/self.cycle
+        #handle the case of multiple cycles: n*more frames, exposure time always the same
+        tmp=numpy.outer(numpy.ones(self.cycle),tfg).reshape(-1,2)
         self.tfg_grp["live_time"] = tmp[:,1]
         self.tfg_grp["live_time"].attrs["interpretation"] = "scalar"
         self.tfg_grp["dead_time"] = tmp[:,1]
@@ -192,6 +192,7 @@ class Metadata(Plugin):
         self.group.parent.attrs["NX_class"] = "NXentry"
         self.group.attrs["NX_class"] = "NXinstrument"
         self.tfg_grp = self.hdf5.require_group(posixpath.join(self.instrument, "TFG"))
+        self.tfg_grp.attrs["NX_class"] = "NXcollection"
         self.tfg_grp["device"] = numpy.string_(self.c216)
         
         self.group.parent["title"] = numpy.string_("id02.metadata")
