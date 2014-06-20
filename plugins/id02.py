@@ -141,6 +141,7 @@ class Metadata(Plugin):
         "entry": "entry",
         "instrument":"id02"
         "c216":"id02/c216/0",
+        
         }
         """
         Plugin.setup(self, kwargs)
@@ -153,23 +154,74 @@ class Metadata(Plugin):
         self.instrument = self.input.get("instrument","id02")
 
     def process(self):
-        
         self.create_hdf5()
-        self.log_error("before error C216=%s TANGO_HOST=%s"%(self.c216,os.environ.get("TANGO_HOST")),False)
-        c216ds = PyTango.DeviceProxy(str(self.c216))
-        tfg = c216ds.GetTfuFrameTimes()
-        cycle = c216ds.GetTfuCycles()
-        self.tfg_grp["data"] = tfg
-        self.tfg_grp["cycle"] = cycle
-        self.tfg_grp["data"].attrs["interpretation"] = "scalar"
-        #handle the case of multiple cycles: n*more frames, exposure time always the same
-        tmp=numpy.outer(numpy.ones(self.cycle),tfg).reshape(-1,2)
-        self.tfg_grp["live_time"] = tmp[:,1]
-        self.tfg_grp["live_time"].attrs["interpretation"] = "scalar"
-        self.tfg_grp["dead_time"] = tmp[:,1]
-        self.tfg_grp["dead_time"].attrs["interpretation"] = "scalar"
+        self.read_c216()
         
+    def read_c216(self):
+        """
+        Manage the metadata coming from C216 Time Frame Generator
+        """        
+        c216ds = PyTango.DeviceProxy(str(self.c216))
+        if c216ds.CompStatus("Tango::RUNNING") == "Tango::ON":
+            msg = "C216 is running while reading counters ... possible issue"
+            self._logging.append(msg)
+            logger.warning(msg)
+        
+        raw_status = c216ds.GetCompleteConfigAndStatus()
+        status = {"TFU_MODE":          raw_status[0],
+                  "TFU_FRAME_MODE":    raw_status[1],
+                  "START_MODE":        raw_status[2],
+                  "FRAMES"     :       raw_status[14] // 2,
+                  "CYCLES"      :      raw_status[17],
+                  "CHANNELS"    :      raw_status[19],
+                  "ACQ_BANK"       :   raw_status[65],
+                  "TFU_CONFIG":        raw_status[:28],
+                  "DIGI_IN":           raw_status[28:44],
+                  "ANA_IN":            raw_status[44:60]}
 
+        cycles = status["CYCLES"]
+        frames = status["FRAMES"]
+        tfg = c216ds.GetTfuFrameTimes()
+        self.tfg_grp["frame_time"] = tfg
+        self.tfg_grp["frame_time"].attrs["interpretation"] = "scalar"
+        self.tfg_grp["cycles"] = cycles
+        self.tfg_grp["frames"] = frames
+        #handle the case of multiple cycles: n*more frames, exposure time always the same
+        tmp = numpy.outer(numpy.ones(cycles),tfg)
+        live_time =  tmp[1::2]
+        self.tfg_grp["live_time"] = live_time
+        self.tfg_grp["live_time"].attrs["interpretation"] = "scalar"
+        self.tfg_grp["dead_time"] = tmp[0::2]
+        self.tfg_grp["dead_time"].attrs["interpretation"] = "scalar"
+        self.tfg_grp["delta_time"] = tmp.cumsum()[0::2]
+        #raw scalers:
+        raw_scalers = c216ds.ReadScalersForNLiveFrames([0, frames - 1])
+        raw_scalers.shape = frames, -1
+        counters = raw_scalers.shape[1]
+        self.tfg_grp["HS32C"] = raw_scalers
+#         modes = self.tfg_grp["HS32M"] #c216ds.GetTfuFrameMode()
+        modes = numpy.zeros(counters, dtype=numpy.int32)
+        raw_modes = numpy.array(self.tfg_grp["HS32C"])
+        modes[:raw_modes.size] = raw_modes
+#         self.tfg_grp["HHS32M"] = modes
+        values = numpy.zeros((frames,counters), dtype=numpy.float32)
+        assert modes.size == counters
+        if "interpreted" in self.tfg_grp:
+            exptime = numpy.outer(tfg[1::2], numpy.ones(counters))
+            zero = numpy.outer(numpy.ones(frames), self.tfg_grp["HHS32Z"])
+            factor = numpy.outer(numpy.ones(frames), self.tfg_grp["HHS32F"])
+            values_int = (raw_scalers-zero*exptime)*factor
+            values_avg = (raw_scalers/exptime-zero)*factor           
+            mask =(numpy.outer(numpy.ones(frames),modes)).astype(bool)
+            values[mask] = values_int[mask]
+            nmask = numpy.logical_not(mask)
+            values[nmask] = values_avg[nmask]
+            self.tfg_grp["HHS32V"] = values
+            for i, name in enumerate(self.tfg_grp["interpreted"]):
+                fullname =  "interpreted/%s"%name
+                self.tfg_grp[fullname]=values[:,i]
+                self.tfg_grp[fullname].attrs["interpretation"] = "scalar"
+         
         
     def create_hdf5(self):
         """
@@ -194,7 +246,24 @@ class Metadata(Plugin):
         self.tfg_grp = self.hdf5.require_group(posixpath.join(self.instrument, "TFG"))
         self.tfg_grp.attrs["NX_class"] = "NXcollection"
         self.tfg_grp["device"] = numpy.string_(self.c216)
-        
+        #Factor
+        H32F = self.input.get("H32F")
+        if H32F is not None:
+            self.tfg_grp["H32F"] = H32F
+        #Zero
+        H32Z = self.input.get("H32Z")
+        if H32Z is not None:
+            self.tfg_grp["H32Z"] = H32Z
+        #Name
+        H32N = self.input.get("H32N")
+        if H32N is not None:
+            self.tfg_grp["H32N"] = H32N
+        #Mode
+        H32M = self.input.get("H32M")
+        if H32M is not None:
+            self.tfg_grp["H32M"] = H32M
+        if H32N and H32Z and H32F and H32M:
+            self.tfg_grp.require_group("interpreted")
         self.group.parent["title"] = numpy.string_("id02.metadata")
         self.group.parent["program"] = numpy.string_("Dahu")
         self.group.parent["start_time"] = numpy.string_(get_isotime())
