@@ -132,6 +132,7 @@ class Metadata(Plugin):
         self.instrument = None
         self.group = None
         self.tfg_grp = None
+        self.mcs_grp = None
         
     def setup(self, kwargs=None):
         """
@@ -156,6 +157,59 @@ class Metadata(Plugin):
     def process(self):
         self.create_hdf5()
         self.read_c216()
+
+    def create_hdf5(self):
+        """
+        Create a HDF5 file and datastructure
+        """
+        try:
+            self.hdf5 = h5py.File(self.hdf5_filename, 'a')
+        except IOError as error:
+            os.unlink(self.hdf5_filename)
+            self.log_error("Unable to open %s: %s. Removing file and starting from scratch" % (self.hdf5_filename, error), False)
+            self.hdf5 = h5py.File(self.hdf5_filename)
+
+
+        if not self.entry.endswith("_"):
+            self.entry += "_"
+        entries = len([i.startswith(self.entry) for i in self.hdf5])
+        self.entry = posixpath.join("", "%s%04d" % (self.entry, entries))
+        self.instrument = posixpath.join(self.entry, self.instrument)
+        self.group = self.hdf5.require_group(self.instrument)
+        self.group.parent.attrs["NX_class"] = "NXentry"
+        self.group.attrs["NX_class"] = "NXinstrument"
+        # TimeFrameGenerator
+        self.tfg_grp = self.hdf5.require_group(posixpath.join(self.instrument, "TFG"))
+        self.tfg_grp.attrs["NX_class"] = "NXcollection"
+        self.tfg_grp["device"] = numpy.string_(self.c216)
+
+        #MultiCounterScaler
+        self.mcs_grp = self.hdf5.require_group(posixpath.join(self.instrument, "MCS"))
+        self.mcs_grp.attrs["NX_class"] = "NXcollection"
+        self.mcs_grp["device"] = numpy.string_(self.c216)
+
+        #Factor
+        HS32F = self.input.get("HS32F")
+        if HS32F is not None:
+            self.mcs_grp["HS32F"] = HS32F
+        #Zero
+        HS32Z = self.input.get("HS32Z")
+        if HS32Z is not None:
+            self.mcs_grp["HS32Z"] = HS32Z
+        #Name
+        HS32N = self.input.get("HS32N")
+        if HS32N is not None:
+            self.mcs_grp["HS32N"] = HS32N
+        #Mode
+        HS32M = self.input.get("HS32M")
+        if HS32M is not None:
+            self.mcs_grp["HS32M"] = HS32M
+        if HS32N and HS32Z and HS32F and HS32M:
+            self.mcs_grp.require_group("interpreted")
+        self.group.parent["title"] = numpy.string_("id02.metadata")
+        self.group.parent["program"] = numpy.string_("Dahu")
+        self.group.parent["start_time"] = numpy.string_(get_isotime())
+
         
     def read_c216(self):
         """
@@ -198,73 +252,28 @@ class Metadata(Plugin):
         raw_scalers = c216ds.ReadScalersForNLiveFrames([0, frames - 1])
         raw_scalers.shape = frames, -1
         counters = raw_scalers.shape[1]
-        self.tfg_grp["HS32C"] = raw_scalers
+        self.mcs_grp["HS32C"] = raw_scalers
         modes = numpy.zeros(counters, dtype=numpy.int32)
-        raw_modes = numpy.array(self.tfg_grp["HS32C"])
+        raw_modes = numpy.array(self.mcs_grp["HS32M"])
         modes[:raw_modes.size] = raw_modes
         values = numpy.zeros((frames,counters), dtype=numpy.float32)
-        assert modes.size == counters
-        if "interpreted" in self.tfg_grp:
+
+        if "interpreted" in self.mcs_grp:
             exptime = numpy.outer(tfg[1::2], numpy.ones(counters))
-            zero = numpy.outer(numpy.ones(frames), numpy.array(self.tfg_grp["HS32Z"]))
-            factor = numpy.outer(numpy.ones(frames), numpy.array(self.tfg_grp["HS32F"]))
+            zero = numpy.outer(numpy.ones(frames), numpy.array(self.mcs_grp["HS32Z"]))
+            factor = numpy.outer(numpy.ones(frames), numpy.array(self.mcs_grp["HS32F"]))
             values_int = (raw_scalers-zero*exptime)*factor
             values_avg = (raw_scalers/exptime-zero)*factor           
             mask =(numpy.outer(numpy.ones(frames),modes)).astype(bool)
             values[mask] = values_int[mask]
             nmask = numpy.logical_not(mask)
             values[nmask] = values_avg[nmask]
-            self.tfg_grp["HS32V"] = values
+            self.mcs_grp["HS32V"] = values.astype(numpy.float32)
+            self.mcs_grp["HS32V"].attrs["interpretation"] = "scalar"
             for i, name in enumerate(self.tfg_grp["interpreted"]):
                 fullname =  "interpreted/%s"%name
                 self.tfg_grp[fullname]=values[:,i]
                 self.tfg_grp[fullname].attrs["interpretation"] = "scalar"
-         
-        
-    def create_hdf5(self):
-        """
-        Create a HDF5 file and datastructure
-        """
-        try:
-            self.hdf5 = h5py.File(self.hdf5_filename, 'a')
-        except IOError as error:
-            os.unlink(self.hdf5_filename)
-            self.log_error("Unable to open %s: %s. Removing file and starting from scratch"%(self.hdf5_filename, error),False)
-            self.hdf5 = h5py.File(self.hdf5_filename)
-
-
-        if not self.entry.endswith("_"):
-            self.entry += "_"
-        entries = len([i.startswith(self.entry) for i in self.hdf5])
-        self.entry = posixpath.join("","%s%04d" % (self.entry, entries))
-        self.instrument = posixpath.join(self.entry, self.instrument)
-        self.group = self.hdf5.require_group(self.instrument)
-        self.group.parent.attrs["NX_class"] = "NXentry"
-        self.group.attrs["NX_class"] = "NXinstrument"
-        self.tfg_grp = self.hdf5.require_group(posixpath.join(self.instrument, "TFG"))
-        self.tfg_grp.attrs["NX_class"] = "NXcollection"
-        self.tfg_grp["device"] = numpy.string_(self.c216)
-        #Factor
-        H32F = self.input.get("H32F")
-        if H32F is not None:
-            self.tfg_grp["H32F"] = H32F
-        #Zero
-        H32Z = self.input.get("H32Z")
-        if H32Z is not None:
-            self.tfg_grp["H32Z"] = H32Z
-        #Name
-        H32N = self.input.get("H32N")
-        if H32N is not None:
-            self.tfg_grp["H32N"] = H32N
-        #Mode
-        H32M = self.input.get("H32M")
-        if H32M is not None:
-            self.tfg_grp["H32M"] = H32M
-        if H32N and H32Z and H32F and H32M:
-            self.tfg_grp.require_group("interpreted")
-        self.group.parent["title"] = numpy.string_("id02.metadata")
-        self.group.parent["program"] = numpy.string_("Dahu")
-        self.group.parent["start_time"] = numpy.string_(get_isotime())
 
     def teardown(self):
         if self.group:
@@ -272,6 +281,7 @@ class Metadata(Plugin):
         if self.hdf5:
             self.hdf5.close()
         Plugin.teardown(self)
+
         
 if __name__ == "__main__":
     p = Distortion()
