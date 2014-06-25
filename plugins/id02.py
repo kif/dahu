@@ -199,24 +199,22 @@ class Metadata(Plugin):
         raw_scalers.shape = frames, -1
         counters = raw_scalers.shape[1]
         self.tfg_grp["HS32C"] = raw_scalers
-#         modes = self.tfg_grp["HS32M"] #c216ds.GetTfuFrameMode()
         modes = numpy.zeros(counters, dtype=numpy.int32)
         raw_modes = numpy.array(self.tfg_grp["HS32C"])
         modes[:raw_modes.size] = raw_modes
-#         self.tfg_grp["HHS32M"] = modes
         values = numpy.zeros((frames,counters), dtype=numpy.float32)
         assert modes.size == counters
         if "interpreted" in self.tfg_grp:
             exptime = numpy.outer(tfg[1::2], numpy.ones(counters))
-            zero = numpy.outer(numpy.ones(frames), self.tfg_grp["HHS32Z"])
-            factor = numpy.outer(numpy.ones(frames), self.tfg_grp["HHS32F"])
+            zero = numpy.outer(numpy.ones(frames), numpy.array(self.tfg_grp["HS32Z"]))
+            factor = numpy.outer(numpy.ones(frames), numpy.array(self.tfg_grp["HS32F"]))
             values_int = (raw_scalers-zero*exptime)*factor
             values_avg = (raw_scalers/exptime-zero)*factor           
             mask =(numpy.outer(numpy.ones(frames),modes)).astype(bool)
             values[mask] = values_int[mask]
             nmask = numpy.logical_not(mask)
             values[nmask] = values_avg[nmask]
-            self.tfg_grp["HHS32V"] = values
+            self.tfg_grp["HS32V"] = values
             for i, name in enumerate(self.tfg_grp["interpreted"]):
                 fullname =  "interpreted/%s"%name
                 self.tfg_grp[fullname]=values[:,i]

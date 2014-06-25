@@ -45,7 +45,7 @@ def startjob(method,device,wg):
 #             else:
 #                 startjob(method,device,wg)
 
-data=      {"hdf5_filename":"/tmp/metadata.h5",
+data = {"hdf5_filename":"/tmp/metadata.h5",
         "entry": "entry",
         "instrument":"id02",
         "c216":"id02/c216/0",
