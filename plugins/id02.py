@@ -253,12 +253,12 @@ class Metadata(Plugin):
         raw_scalers.shape = frames, -1
         counters = raw_scalers.shape[1]
         self.mcs_grp["HS32C"] = raw_scalers
-        modes = numpy.zeros(counters, dtype=numpy.int32)
-        raw_modes = numpy.array(self.mcs_grp["HS32M"])
-        modes[:raw_modes.size] = raw_modes
-        values = numpy.zeros((frames,counters), dtype=numpy.float32)
 
         if "interpreted" in self.mcs_grp:
+            modes = numpy.zeros(counters, dtype=numpy.int32)
+            raw_modes = numpy.array(self.mcs_grp["HS32M"])
+            modes[:raw_modes.size] = raw_modes
+            values = numpy.zeros((frames,counters), dtype=numpy.float32)
             exptime = numpy.outer(tfg[1::2], numpy.ones(counters))
             zero = numpy.outer(numpy.ones(frames), numpy.array(self.mcs_grp["HS32Z"]))
             factor = numpy.outer(numpy.ones(frames), numpy.array(self.mcs_grp["HS32F"]))
@@ -270,10 +270,10 @@ class Metadata(Plugin):
             values[nmask] = values_avg[nmask]
             self.mcs_grp["HS32V"] = values.astype(numpy.float32)
             self.mcs_grp["HS32V"].attrs["interpretation"] = "scalar"
-            for i, name in enumerate(self.tfg_grp["interpreted"]):
+            for i, name in enumerate(self.mcs_grp["HS32N"]):
                 fullname =  "interpreted/%s"%name
-                self.tfg_grp[fullname]=values[:,i]
-                self.tfg_grp[fullname].attrs["interpretation"] = "scalar"
+                self.mcs_grp[fullname]=values[:,i]
+                self.mcs_grp[fullname].attrs["interpretation"] = "scalar"
 
     def teardown(self):
         if self.group:

@@ -222,7 +222,7 @@ class Job(Thread):
                 try:
                     cb(self)
                 except Exception as error:
-                    self._log_error("Error while calling %s" % cb)
+                    self._log_error("Error while calling %s: %s" % (cb, error))
 
     def _log_error(self, msg):
         """
@@ -276,7 +276,7 @@ class Job(Thread):
                     if self._plugin.output:
                         self._output_data.update(self._plugin.output)                        
                     self._output_data["job_runtime"] = self._runtime
-                    base_path = os.path.join(utils.get_workdir(),"%05i_%s"%(self._jobId, self._name))
+                    base_path = os.path.join(utils.get_workdir(), "%05i_%s"%(self._jobId, self._name))
                     with open(base_path+".inp","w") as infile:
                         json.dump(self._input_data, infile, indent=4)
                     with open(base_path+".out","w") as infile:
@@ -379,6 +379,8 @@ class Job(Thread):
         @return: the Job status 
         @rtype: string 
         """
+        if jobId < 0:
+            jobId = len(cls._dictJobs) + jobId + 1
         if jobId in cls._dictJobs:
             strRet = cls._dictJobs[jobId]._status
         else:
@@ -397,6 +399,8 @@ class Job(Thread):
         @return: the "Job instance", which contains the plugin and the status
         @rtype: a Python object, instance of Job. 
         """
+        if jobId < 0:
+            jobId = len(cls._dictJobs) + jobId + 1
         if jobId in cls._dictJobs:
             return cls._dictJobs[jobId]
         else:
@@ -415,6 +419,8 @@ class Job(Thread):
         @param forceGC: Force garbage collection after clean-up
         @type forceGC: boolean
         """
+        if jobId < 0:
+            jobId = len(cls._dictJobs) + jobId + 1
         if jobId in cls._dictJobs:
             job = cls._dictJobs[jobId]
             job.cleanJob(forceGC)
@@ -435,6 +441,8 @@ class Job(Thread):
         @return: Job.DataOutput JSON string
         """
         output = None
+        if jobId < 0:
+            jobId = len(cls._dictJobs) + jobId + 1
         if jobId in cls._dictJobs:
             job = cls._dictJobs[jobId]
             if job is not None:
@@ -465,6 +473,8 @@ class Job(Thread):
         @return: Job.DataInput JSON string
         """
         output = None
+        if jobId < 0:
+            jobId = len(cls._dictJobs) + jobId + 1
         if jobId in cls._dictJobs:
             job = cls._dictJobs[jobId]
             if job is not None:
@@ -495,7 +505,7 @@ class Job(Thread):
         @return: error message as a string
         """
         out = cls.getDataOutputFromId(jobId)
-        return os.linesep.join(out.get("error",[])).encode("UTF-8")
+        return os.linesep.join(out.get("error", [])).encode("UTF-8")
             
 
     getErrorFromID = getErrorFromId
@@ -504,41 +514,39 @@ class Job(Thread):
         """
         Retrieve some statistics and print them
         """
-        lstStrOut = [""]
+        lout = [""]
         output = []
         run_time = time.time() - cls._global_start_time
         keys = list(cls._dictJobs.keys())
-        l = len(keys)
         keys.sort()
-
         output = [ (k, cls._dictJobs[k]._name, cls._dictJobs[k]._status, cls._dictJobs[k]._runtime)
                   for k in keys]
         total_jobs = max(1, len(keys))
-        lstStrOut.append("_" * 80)
-        lstStrOut.append("%s\t|\t%s\t\t\t|\t%s\t|\t%s (sec)" % ("Id", "Name", "Status", "Run-time"))
-        lstStrOut.append("_" * 80)
+        lout.append("_" * 80)
+        lout.append("%s\t|\t%s\t\t\t|\t%s\t|\t%s (sec)" % ("Id", "Name", "Status", "Run-time"))
+        lout.append("_" * 80)
         wall_time = 0.0
-        fSumProd = 0.0
-        fSumX = 0.0
-        fSumX2 = 0.0
-        for oneJob in output:
-            if oneJob[3]:
-                wall_time += oneJob[3]
-                fSumX += oneJob[0]
-                fSumX2 += oneJob[0] * oneJob[0]
-                fSumProd += oneJob[0] * oneJob[3]
-            lstStrOut.append("%s\t|\t%s\t|\t%s\t|\t%s" % tuple(oneJob))
-        lstStrOut.append("_" * 80)
-        lstStrOut.append("Total execution time (Wall): %.3fs, Execution time: %.3fs. SpeedUp: %.3f" % (wall_time, run_time, wall_time / run_time))
-        lstStrOut.append("Average execution time (Wall/N): %.3fs, Average throughput: %.3fs" % (wall_time / total_jobs, run_time / total_jobs))
-        if l > 1:
-            fSlope = (total_jobs * fSumProd - fSumX * wall_time) / (l * fSumX2 - fSumX * fSumX)
-            fOrd = (wall_time - fSlope * fSumX) / l
+        sum_xy = 0.0
+        sum_x = 0.0
+        sum_xx = 0.0
+        for ajob in output:
+            if ajob[3]:
+                wall_time += ajob[3]
+                sum_x += ajob[0]
+                sum_xx += ajob[0] * ajob[0]
+                sum_xy += ajob[0] * ajob[3]
+            lout.append("%s\t|\t%s\t|\t%s\t|\t%s" % tuple(ajob))
+        lout.append("_" * 80)
+        lout.append("Total execution time (Wall): %.3fs, Execution time: %.3fs. SpeedUp: %.3f" % (wall_time, run_time, wall_time / run_time))
+        lout.append("Average execution time (Wall/N): %.3fs, Average throughput: %.3fs" % (wall_time / total_jobs, run_time / total_jobs))
+        if len(keys) > 1:
+            slope = (total_jobs * sum_xy - sum_x * wall_time) / (len(keys) * sum_xx - sum_x * sum_x)
+            ord0 = (wall_time - slope * sum_x) / len(keys)
         else:
-            fSlope = 0.0
-            fOrd = wall_time
-        lstStrOut.append("Regression of execution time: ExecTime = %.3f + %f * NbJob" % (fOrd, fSlope))
-        strOutput = os.linesep.join(lstStrOut)
-        logger.info(strOutput)
-        return strOutput
+            slope = 0.0
+            ord0 = wall_time
+        lout.append("Regression of execution time: ExecTime = %.3f + %f * NbJob" % (ord0, slope))
+        sout = os.linesep.join(lout)
+        logger.info(sout)
+        return sout
 
