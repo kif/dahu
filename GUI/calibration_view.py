@@ -25,7 +25,7 @@
 """
 pyFAI-calib
 
-A tool for determining the position of a detector using a reference 
+A tool for determining the position of a detector using a reference
 sample called calibrant using Debye-Scerrer rings.
 
 """
@@ -39,13 +39,13 @@ __status__ = "development"
 
 import fabio
 import logging
+from pyFAI.gui_utils import pylab, QtGui, QtCore, uic, matplotlib
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QTAgg as NavigationToolbar
 from matplotlib.figure import Figure
 import numpy
 import os
 import pyFAI
-from pyFAI.gui_utils import pylab, QtGui, QtCore, uic
 import sys
 
 
@@ -59,7 +59,7 @@ cw = None
 class CalibrationWindow(QtGui.QMainWindow):
     """
     Order on the layers in the right tab
-     
+
     mask > data > massif > solid_angle
     """
     ZORDER = {"contour":5,
@@ -69,6 +69,8 @@ class CalibrationWindow(QtGui.QMainWindow):
               "massif": 1,
               "solidangle": 0,
               }
+    INTERPOLATION="nearest"
+    ORIGIN="lower"
 
     def __init__(self, imagename=None):
         QtGui.QWidget.__init__(self)
@@ -142,19 +144,24 @@ class CalibrationWindow(QtGui.QMainWindow):
 
     def set_data(self, data, display=True, target="data"):
         """
-        Display an array in the  data layer  
+        Display an array in the  data layer
         @param data: the numpy array with the data in it
-        @param display: shall the data be displayed  
+        @param display: shall the data be displayed
         """
         self.__setattr__(target, data)
         artist = self.__getattribute__("ar_%s" % target)
+
         if self.axes is None:
             return
+        show_data = self.calc_RGBA(data, target)
         if artist is None:
-            artist = self.axes.imshow(data, zorder=self.ZORDER[target])
+            artist = self.axes.imshow(show_data,
+                                      zorder=self.ZORDER[target],
+                                      interpolation=self.INTERPOLATION,
+                                      origin=self.ORIGIN)
             self.__setattr__("ar_%s" % target, artist)
         else:
-            artist.set_data(data)
+            artist.set_data(show_data)
         artist.set_visible(display)
         self.canvas.draw()
         if display:
@@ -163,24 +170,41 @@ class CalibrationWindow(QtGui.QMainWindow):
     def calc_RGBA(self, data, target="data"):
         """
         Apply the colormap depending on the target
-        
+
         @param data: array of floats
         @return: y,x,4 array of uint8
-        
-        TODO
-        """
-        if target == "data":
-            datamin = data.min()
-            showData = numpy.log1p(data - self.data.min())
-#            self.ax.set_title('Log colour scale (skipping lowest/highest per mille)')
-#        else:
-#            showData = self.data
-#            self.ax.set_title('Linear colour scale (skipping lowest/highest per mille)')
 
-        # skip lowest and highest per mille of image values via vmin/vmax
-        showMin = percentile(showData, .1)
-        showMax = percentile(showData, 99.9)
-        im = self.ax.imshow(showData, vmin=showMin, vmax=showMax, origin="lower", interpolation="nearest")
+        TODO: one day, replace with cython implementation
+        """
+        if target=="mask":
+            shape = data.shape
+            mask = numpy.ascontiguousarray(data, dtype=bool)
+            self.mask = mask
+            res = numpy.zeros((shape[0],shape[1],4),dtype=numpy.uint8)
+            res[:, :, 0] = numpy.uint8(255) * mask
+            res[:, :, 3] = numpy.uint8(255) * mask
+            return res
+        elif target == "data":
+            if self.mask is not None:
+                mask = numpy.ascontiguousarray(self.mask, dtype=bool)
+                valid = data[numpy.logical_not(mask)]
+            else:
+                valid = data.ravel()
+            sorted_v = numpy.sort(valid)
+            # remove first ans last per thousand
+            size = valid.size
+            show_min = sorted_v[int(0.001 * size)]
+            show_max = sorted_v[min(int(0.999 * size), size - 1)]
+            show_data = numpy.log1p((data - show_min).astype(numpy.float32) / (show_max - show_min) * (numpy.e - 1))
+            return matplotlib.cm.jet(show_data, bytes=True)
+        elif target == "solidangle":
+            # should always be between 0 and 1 ...
+            return matplotlib.cm.jet(data, bytes=True)
+        elif target == "massif":
+            # should always be between 0 and 1 ...
+            return matplotlib.cm.jet(data, bytes=True)
+
+
 
     def any_display(self):
         if self.axes is not None:
@@ -210,7 +234,8 @@ if __name__ == "__main__":
     cw = CalibrationWindow()
 
     cw.show()
-    cw.set_data(fabio.open(filename).data)
     det = pyFAI.detectors.Pilatus1M()
     cw.set_data(det.mask, target="mask")
+
+    cw.set_data(fabio.open(filename).data)
     sys.exit(app.exec_())
