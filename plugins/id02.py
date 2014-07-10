@@ -2,39 +2,48 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import with_statement, print_function
+
+
+import PyTango
+import h5py
+import logging
+import numpy
+import pyFAI.distortion
+import sys, os, time, posixpath
+
+from dahu.factory import register
+from dahu.plugin import Plugin
+from dahu.utils import get_isotime
+
+
 __doc__ = """
 Plugins for ID02:
 
-Distortion correction
+* Distortion correction
+* Metadata saving (C216)
 """
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20140617"
+__date__ = "10/072014"
 __status__ = "development"
 version = "0.2"
 
-import sys, os, time, posixpath
-import numpy
-import logging
 logger = logging.getLogger("dahu.id02")
 
-from dahu.plugin import Plugin
-from dahu.factory import register
-from dahu.utils import get_isotime
 
-import h5py
 # silence non serious error messages, which are printed
 # because we use h5py in a new thread (not in the main one)
 # this is a bug seems to be fixed on newer version !!
 # see this h5py issue 206: https://code.google.com/p/h5py/issues/detail?id=206
-h5py._errors.silence_errors()
+try:
+    h5py._errors.silence_errors()
+except:
+    pass
 
-import pyFAI.distortion
 if "TANGO_HOST" not in os.environ:
     raise RuntimeError("No TANGO_HOST defined")
-import PyTango
 
 
 @register
@@ -86,7 +95,7 @@ class Distortion(Plugin):
         output_hdf5_fn = self.input.get("output_hdf5_filename", "")
         output_hdf5_ds = self.input.get("output_hdf5_dataset", "")
         if os.path.exists(output_hdf5_fn):
-            self.log_error("Replace output file %s"%output_hdf5_fn, False)
+            self.log_error("Replace output file %s" % output_hdf5_fn, False)
             os.unlink(output_hdf5_fn)
         out_hdf5 = h5py.File(output_hdf5_fn)
         self.output_ds = out_hdf5.create_dataset(output_hdf5_ds, shape, "float32",
@@ -101,7 +110,6 @@ class Distortion(Plugin):
         workgroup = self.input.get("workgroup", None)
         self.distortion = pyFAI.distortion.Distortion(detector, shape[-2:], method=method, device=device, workgroup=workgroup)
         self.distortion.calc_init()
-        
 
     def process(self):
         """
@@ -133,7 +141,7 @@ class Metadata(Plugin):
         self.group = None
         self.tfg_grp = None
         self.mcs_grp = None
-        
+
     def setup(self, kwargs=None):
         """
         Structure of the input data:
@@ -146,13 +154,13 @@ class Metadata(Plugin):
         }
         """
         Plugin.setup(self, kwargs)
-        self.c216 = self.input.get("c216","id02/c216/0")
-        self.cycle = self.input.get("cycle",1)
+        self.c216 = self.input.get("c216", "id02/c216/0")
+        self.cycle = self.input.get("cycle", 1)
         if "hdf5_filename" not in self.input:
             self.log_error("hdf5_filename not in input")
         self.hdf5_filename = self.input.get("hdf5_filename")
-        self.entry = self.input.get("entry","entry")
-        self.instrument = self.input.get("instrument","id02")
+        self.entry = self.input.get("entry", "entry")
+        self.instrument = self.input.get("instrument", "id02")
 
     def process(self):
         self.create_hdf5()
@@ -169,7 +177,6 @@ class Metadata(Plugin):
             self.log_error("Unable to open %s: %s. Removing file and starting from scratch" % (self.hdf5_filename, error), False)
             self.hdf5 = h5py.File(self.hdf5_filename)
 
-
         if not self.entry.endswith("_"):
             self.entry += "_"
         entries = len([i.startswith(self.entry) for i in self.hdf5])
@@ -183,24 +190,24 @@ class Metadata(Plugin):
         self.tfg_grp.attrs["NX_class"] = "NXcollection"
         self.tfg_grp["device"] = numpy.string_(self.c216)
 
-        #MultiCounterScaler
+        # MultiCounterScaler
         self.mcs_grp = self.hdf5.require_group(posixpath.join(self.instrument, "MCS"))
         self.mcs_grp.attrs["NX_class"] = "NXcollection"
         self.mcs_grp["device"] = numpy.string_(self.c216)
 
-        #Factor
+        # Factor
         HS32F = self.input.get("HS32F")
         if HS32F is not None:
             self.mcs_grp["HS32F"] = HS32F
-        #Zero
+        # Zero
         HS32Z = self.input.get("HS32Z")
         if HS32Z is not None:
             self.mcs_grp["HS32Z"] = HS32Z
-        #Name
+        # Name
         HS32N = self.input.get("HS32N")
         if HS32N is not None:
             self.mcs_grp["HS32N"] = HS32N
-        #Mode
+        # Mode
         HS32M = self.input.get("HS32M")
         if HS32M is not None:
             self.mcs_grp["HS32M"] = HS32M
@@ -210,17 +217,16 @@ class Metadata(Plugin):
         self.group.parent["program"] = numpy.string_("Dahu")
         self.group.parent["start_time"] = numpy.string_(get_isotime())
 
-        
     def read_c216(self):
         """
         Manage the metadata coming from C216 Time Frame Generator
-        """        
+        """
         c216ds = PyTango.DeviceProxy(str(self.c216))
         if c216ds.CompStatus("Tango::RUNNING") == "Tango::ON":
             msg = "C216 is running while reading counters ... possible issue"
             self._logging.append(msg)
             logger.warning(msg)
-        
+
         raw_status = c216ds.GetCompleteConfigAndStatus()
         status = {"TFU_MODE":          raw_status[0],
                   "TFU_FRAME_MODE":    raw_status[1],
@@ -240,15 +246,15 @@ class Metadata(Plugin):
         self.tfg_grp["frame_time"].attrs["interpretation"] = "scalar"
         self.tfg_grp["cycles"] = cycles
         self.tfg_grp["frames"] = frames
-        #handle the case of multiple cycles: n*more frames, exposure time always the same
-        tmp = numpy.outer(numpy.ones(cycles),tfg)
-        live_time =  tmp[1::2]
+        # handle the case of multiple cycles: n*more frames, exposure time always the same
+        tmp = numpy.outer(numpy.ones(cycles), tfg).ravel()
+        live_time = tmp[1::2]
         self.tfg_grp["live_time"] = live_time
         self.tfg_grp["live_time"].attrs["interpretation"] = "scalar"
         self.tfg_grp["dead_time"] = tmp[0::2]
         self.tfg_grp["dead_time"].attrs["interpretation"] = "scalar"
         self.tfg_grp["delta_time"] = tmp.cumsum()[0::2]
-        #raw scalers:
+        # raw scalers:
         raw_scalers = c216ds.ReadScalersForNLiveFrames([0, frames - 1])
         raw_scalers.shape = frames, -1
         counters = raw_scalers.shape[1]
@@ -258,21 +264,21 @@ class Metadata(Plugin):
             modes = numpy.zeros(counters, dtype=numpy.int32)
             raw_modes = numpy.array(self.mcs_grp["HS32M"])
             modes[:raw_modes.size] = raw_modes
-            values = numpy.zeros((frames,counters), dtype=numpy.float32)
+            values = numpy.zeros((frames, counters), dtype=numpy.float32)
             exptime = numpy.outer(tfg[1::2], numpy.ones(counters))
             zero = numpy.outer(numpy.ones(frames), numpy.array(self.mcs_grp["HS32Z"]))
             factor = numpy.outer(numpy.ones(frames), numpy.array(self.mcs_grp["HS32F"]))
-            values_int = (raw_scalers-zero*exptime)*factor
-            values_avg = (raw_scalers/exptime-zero)*factor           
-            mask =(numpy.outer(numpy.ones(frames),modes)).astype(bool)
+            values_int = (raw_scalers - zero * exptime) * factor
+            values_avg = (raw_scalers / exptime - zero) * factor
+            mask = (numpy.outer(numpy.ones(frames), modes)).astype(bool)
             values[mask] = values_int[mask]
             nmask = numpy.logical_not(mask)
             values[nmask] = values_avg[nmask]
             self.mcs_grp["HS32V"] = values.astype(numpy.float32)
             self.mcs_grp["HS32V"].attrs["interpretation"] = "scalar"
             for i, name in enumerate(self.mcs_grp["HS32N"]):
-                fullname =  "interpreted/%s"%name
-                self.mcs_grp[fullname]=values[:,i]
+                fullname = "interpreted/%s" % name
+                self.mcs_grp[fullname] = values[:, i]
                 self.mcs_grp[fullname].attrs["interpretation"] = "scalar"
 
     def teardown(self):
@@ -282,7 +288,7 @@ class Metadata(Plugin):
             self.hdf5.close()
         Plugin.teardown(self)
 
-        
+
 if __name__ == "__main__":
     p = Distortion()
     t0 = time.time()
