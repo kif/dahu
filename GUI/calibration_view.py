@@ -34,7 +34,7 @@ __author__ = u"Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "GPLv3+"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/07/2014"
+__date__ = "10/07/2014"
 __status__ = "development"
 
 import fabio
@@ -42,6 +42,7 @@ import logging
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QTAgg as NavigationToolbar
 from matplotlib.figure import Figure
+import numpy
 import os
 import pyFAI
 from pyFAI.gui_utils import pylab, QtGui, QtCore, uic
@@ -52,6 +53,8 @@ SIGNAL = pyFAI.gui_utils.QtCore.SIGNAL
 
 logger = logging.getLogger("calibration_view")
 
+#for debug
+cw = None
 
 class CalibrationWindow(QtGui.QMainWindow):
     """
@@ -74,8 +77,11 @@ class CalibrationWindow(QtGui.QMainWindow):
         self.connect(self.actionAbout_calibrate, SIGNAL("triggered()"), self.on_about)
         self.dpi = 100
         self.fig = self.canvas = self.mpl_toolbar = self.pix_coords_label = None
-        self.data_axes = self.mask_axes = self.massif_axes = self.contour_axes = self.solid_angle_axis = None
-        self.data = self.massif = self.solid_angle = None
+        self.axes = None
+        # ar is for artists: plot, images or labels...
+        self.ar_data = self.ar_mask = self.ar_massif = self.ar_contour = self.ar_solidangle = self.ar_points = None
+        self.data = self.massif = self.solid_angle = self.mask = None
+        self.display_checks = {}
         self.display_widget = None
         self.build_right_frame()
 
@@ -99,8 +105,8 @@ class CalibrationWindow(QtGui.QMainWindow):
         # Create the navigation toolbar, tied to the canvas
         self.mpl_toolbar = NavigationToolbar(self.canvas, self.image_frame, coordinates=False)
 
-        self.data_axes = self.fig.add_subplot(111)
-        self.data_axes.set_visible(False)
+        self.axes = self.fig.add_subplot(111)
+        self.axes.set_visible(False)
         # Bind the 'pick' event for clicking on one of the bars
         self.canvas.mpl_connect('motion_notify_event', self.on_pick)
 
@@ -113,7 +119,14 @@ class CalibrationWindow(QtGui.QMainWindow):
         vbox.addWidget(self.display_widget, alignment=QtCore.Qt.AlignVCenter)
         self.image_frame.setLayout(vbox)
         # few signals about those new widgets:
-        self.connect(self.display_widget.show_data, SIGNAL("stateChanged(int)"), self.toggle_show_data)
+        self.display_checks = {"data": self.display_widget.show_data,
+                               "mask": self.display_widget.show_mask,
+                               "massif": self.display_widget.show_massif,
+                               "points": self.display_widget.show_points,
+                               "contour": self.display_widget.show_contour,
+                               "solidangle": self.display_widget.show_solidangle}
+        for v in self.display_checks.itervalues():
+            self.connect(v, SIGNAL("stateChanged(int)"), self.toggle_show)
 
     def on_pick(self, event):
         if event.inaxes and self.data is not None and self.data.any():
@@ -127,31 +140,66 @@ class CalibrationWindow(QtGui.QMainWindow):
         else:
             self.pix_coords_label.setText("x= None , y= None , I= None ")
 
-    def set_data(self, data, display=True):
+    def set_data(self, data, display=True, target="data"):
         """
         Display an array in the  data layer  
         @param data: the numpy array with the data in it
-        @param displa: shall the data  
+        @param display: shall the data be displayed  
         """
-        self.data_axes.imshow(data)
-        self.data_axes.set_visible(display)
+        self.__setattr__(target, data)
+        artist = self.__getattribute__("ar_%s" % target)
+        if self.axes is None:
+            return
+        if artist is None:
+            artist = self.axes.imshow(data, zorder=self.ZORDER[target])
+            self.__setattr__("ar_%s" % target, artist)
+        else:
+            artist.set_data(data)
+        artist.set_visible(display)
         self.canvas.draw()
         if display:
-            self.display_widget.show_data.setChecked(True)
+            self.display_checks[target].setChecked(True)
 
-    def toggle_show_data(self):
-        if self.data_axes is not None:
-            self.data_axes.set_visible(self.display_widget.show_data.isChecked())
+    def calc_RGBA(self, data, target="data"):
+        """
+        Apply the colormap depending on the target
+        
+        @param data: array of floats
+        @return: y,x,4 array of uint8
+        
+        TODO
+        """
+        if target == "data":
+            datamin = data.min()
+            showData = numpy.log1p(data - self.data.min())
+#            self.ax.set_title('Log colour scale (skipping lowest/highest per mille)')
+#        else:
+#            showData = self.data
+#            self.ax.set_title('Linear colour scale (skipping lowest/highest per mille)')
+
+        # skip lowest and highest per mille of image values via vmin/vmax
+        showMin = percentile(showData, .1)
+        showMax = percentile(showData, 99.9)
+        im = self.ax.imshow(showData, vmin=showMin, vmax=showMax, origin="lower", interpolation="nearest")
+
+    def any_display(self):
+        if self.axes is not None:
+            display = False
+            for v in self.display_checks.values():
+                display = display or v.isChecked()
+            self.axes.set_visible(display)
             self.canvas.draw()
 
-    def toggle_show_mask(self):
-        if self.mask_axes is not None:
-            self.mask_axes.set_visible(self.display_widget.show_mask.isChecked())
-            self.canvas.draw()
-
-    def toggle_show_data(self):
-        if self.data_axes is not None:
-            self.data_axes.set_visible(self.display_widget.show_data.isChecked())
+    def toggle_show(self):
+        if self.axes is not None:
+            display = False
+            for k, v in self.display_checks.iteritems():
+                artist = self.__getattribute__("ar_" + k)
+                if artist is not None:
+                    display_artsist = v.isChecked()
+                    artist.set_visible(display_artsist)
+                    display = display or display_artsist
+            self.axes.set_visible(display)
             self.canvas.draw()
 
 
@@ -163,4 +211,6 @@ if __name__ == "__main__":
 
     cw.show()
     cw.set_data(fabio.open(filename).data)
+    det = pyFAI.detectors.Pilatus1M()
+    cw.set_data(det.mask, target="mask")
     sys.exit(app.exec_())
