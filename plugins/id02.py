@@ -107,7 +107,7 @@ class Distortion(Plugin):
         detector = pyFAI.detectors.Detector(splineFile=spline)
         method = self.input.get("method", "lut")
         device = self.input.get("device", None)
-        workgroup = self.input.get("workgroup", None)
+        workgroup = self.input.get("workgroup", 8)
         self.distortion = pyFAI.distortion.Distortion(detector, shape[-2:], method=method, device=device, workgroup=workgroup)
         self.distortion.calc_init()
 
