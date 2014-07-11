@@ -34,19 +34,19 @@ __author__ = u"Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "GPLv3+"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/07/2014"
+__date__ = "11/07/2014"
 __status__ = "development"
 
+from PyQt4.QtGui import   QSizePolicy
 import fabio
 import logging
-from pyFAI.gui_utils import pylab, QtGui, QtCore, uic, matplotlib
-from PyQt4.QtGui import   QSizePolicy
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QTAgg as NavigationToolbar
 from matplotlib.figure import Figure
 import numpy
 import os
 import pyFAI
+from pyFAI.gui_utils import pylab, QtGui, QtCore, uic, matplotlib
 import sys
 
 
@@ -70,8 +70,8 @@ class CalibrationWindow(QtGui.QMainWindow):
               "massif": 1,
               "solidangle": 0,
               }
-    INTERPOLATION="nearest"
-    ORIGIN="lower"
+    INTERPOLATION = "nearest"
+    ORIGIN = "lower"
 
     def __init__(self, imagename=None):
         QtGui.QWidget.__init__(self)
@@ -105,7 +105,6 @@ class CalibrationWindow(QtGui.QMainWindow):
         self.fig = Figure(dpi=self.dpi)
         self.canvas = FigureCanvas(self.fig)
         self.canvas.setParent(self.image_frame)
-        self.canvas.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
 
         # Create the navigation toolbar, tied to the canvas
         self.mpl_toolbar = NavigationToolbar(self.canvas, self.image_frame, coordinates=False)
@@ -117,15 +116,21 @@ class CalibrationWindow(QtGui.QMainWindow):
 
         self.pix_coords_label = QtGui.QLabel("x= None , y= None , i= None ", self)
         self.mpl_toolbar.addWidget(self.pix_coords_label)
-        pol = QSizePolicy(QSizePolicy.Maximum, QSizePolicy.Minimum)
-        self.mpl_toolbar.setSizePolicy(pol)
+
         self.display_widget = uic.loadUi("display_widget.ui")
-        self.mpl_toolbar.setSizePolicy(pol)
+
         vbox = QtGui.QVBoxLayout()
-        vbox.addWidget(self.mpl_toolbar, alignment=QtCore.Qt.AlignVCenter)
-        vbox.addWidget(self.canvas, alignment=QtCore.Qt.AlignVCenter)
-        vbox.addWidget(self.display_widget, alignment=QtCore.Qt.AlignVCenter)
+        vbox.addWidget(self.mpl_toolbar, alignment=QtCore.Qt.AlignTop)
+        vbox.addWidget(self.canvas)
+        vbox.addWidget(self.display_widget, alignment=QtCore.Qt.AlignBottom)
         self.image_frame.setLayout(vbox)
+
+        # Enforce the size Policy of sub-widgets
+        pol = QSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        self.mpl_toolbar.setSizePolicy(pol)
+        self.display_widget.setSizePolicy(pol)
+        self.canvas.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
+
         # few signals about those new widgets:
         self.display_checks = {"data": self.display_widget.show_data,
                                "mask": self.display_widget.show_mask,
@@ -182,11 +187,11 @@ class CalibrationWindow(QtGui.QMainWindow):
 
         TODO: one day, replace with cython implementation
         """
-        if target=="mask":
+        if target == "mask":
             shape = data.shape
             mask = numpy.ascontiguousarray(data, dtype=bool)
             self.mask = mask
-            res = numpy.zeros((shape[0],shape[1],4),dtype=numpy.uint8)
+            res = numpy.zeros((shape[0], shape[1], 4), dtype=numpy.uint8)
             res[:, :, 0] = numpy.uint8(255) * mask
             res[:, :, 3] = numpy.uint8(255) * mask
             return res
