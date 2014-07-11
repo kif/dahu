@@ -112,7 +112,7 @@ class DahuDS(PyTango.Device_4Impl):
         if plugin is None or err:
             return "Plugin not found: %s, err" % (name, err)
         else:
-            return "Plugin loaded: %s" % name
+            return "Plugin loaded: %s%s%s" % (name,os.linesep,plugin.__doc__)
 
     def abort(self, jobId):
         """
