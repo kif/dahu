@@ -37,8 +37,7 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "11/07/2014"
 __status__ = "development"
 
-from PyQt4.QtGui import   QSizePolicy
-import fabio
+from PyQt4.QtGui import  QSizePolicy
 import logging
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QTAgg as NavigationToolbar
@@ -165,6 +164,7 @@ class CalibrationWindow(QtGui.QMainWindow):
         if self.axes is None:
             return
         show_data = self.calc_RGBA(data, target)
+
         if artist is None:
             artist = self.axes.imshow(show_data,
                                       zorder=self.ZORDER[target],
@@ -210,11 +210,13 @@ class CalibrationWindow(QtGui.QMainWindow):
             return matplotlib.cm.jet(show_data, bytes=True)
         elif target == "solidangle":
             # should always be between 0 and 1 ...
-            return matplotlib.cm.jet(data, bytes=True)
+            dmin = data.min()
+            dmax = data.max()
+            return matplotlib.cm.jet((data * 1.0 - dmin) / (dmax - dmin), bytes=True)
         elif target == "massif":
-            mask = (data == 0)
+            mask = (data != 0)
             show_data = matplotlib.cm.jet(data * 1.0 / data.max(), bytes=True)
-            show_data[:, :3] = mask * numpy.uint8(255)
+            show_data[:, :, 3] = mask * numpy.uint8(255)
             return show_data
 
     def any_display(self):
@@ -239,6 +241,9 @@ class CalibrationWindow(QtGui.QMainWindow):
 
 
 if __name__ == "__main__":
+    import fabio
+    import pyFAI.massif
+
     filename = os.path.join(os.environ["HOME"], "workspace", "pyFAI", "test",
                             "testimages", "Pilatus1M.edf")
     app = QtGui.QApplication(sys.argv)
@@ -247,6 +252,10 @@ if __name__ == "__main__":
     cw.show()
     det = pyFAI.detectors.Pilatus1M()
     cw.set_data(det.mask, target="mask")
-
-    cw.set_data(fabio.open(filename).data)
+    data = fabio.open(filename).data
+    cw.set_data(data)
+    massif = pyFAI.massif.Massif(data)
+    cw.set_data(massif.getLabeledMassif(), target="massif")
+    ai = pyFAI.load(filename[:-3] + "poni")
+    cw.set_data(ai.solidAngleArray(data.shape), target="solidangle")
     sys.exit(app.exec_())
