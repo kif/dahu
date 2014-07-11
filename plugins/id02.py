@@ -57,6 +57,22 @@ class Distortion(Plugin):
     normalization for solid angle correction
     normalization for exposure time
     normalization for beam intensity
+
+    Structure of the input: {
+            "input_hdf5_filename" : path,
+            "input_hdf5_dataset : path,
+            "output_hdf5_filename" : path,
+            "output_hdf5_dataset" : path,
+            #distortion_dx : path,
+            #distortion_dy : path,
+            "distortion_spline" : path,
+            ...
+            method: "lut" or "csr",
+            device: "cpu" or "gpu",
+            }
+        nota: dx is the row index, fast index, inside a line, small stride
+        nota: dy is the line index, slow index, inside a column, large stride
+
     """
     def __init__(self):
         Plugin.__init__(self)
@@ -102,22 +118,29 @@ class Distortion(Plugin):
                                                  chunks=(1,) + shape[1:],
                                                  maxshape=(None,) + shape[1:])
         spline = self.input.get("distortion_spline")
-        if not os.path.isfile(spline):
-            self.log_error("No spline file %s" % spline)
-        detector = pyFAI.detectors.Detector(splineFile=spline)
+        if spline and os.path.isfile(spline):
+            detector = pyFAI.detectors.Detector(splineFile=spline)
+        else:
+            self.log_error("No spline file %s" % spline, do_raise=False)
+            detector=None
         method = self.input.get("method", "lut")
         device = self.input.get("device", None)
         workgroup = self.input.get("workgroup", 8)
-        self.distortion = pyFAI.distortion.Distortion(detector, shape[-2:], method=method, device=device, workgroup=workgroup)
-        self.distortion.calc_init()
+        if detector:
+            self.distortion = pyFAI.distortion.Distortion(detector, shape[-2:], method=method, device=device, workgroup=workgroup)
+            self.distortion.calc_init()
 
     def process(self):
         """
         process every single frame in the HDF5 dataset
         """
-        for i in range(self.input_ds.shape[0]):
-            self.output_ds[i] = self.distortion.correct(self.input_ds[i])
-
+        if self.distortion:
+            for i in range(self.input_ds.shape[0]):
+                self.output_ds[i] = self.distortion.correct(self.input_ds[i])
+        else:
+            for i in range(self.input_ds.shape[0]):
+                self.output_ds[i] = self.input_ds[i]
+                
     def teardown(self):
         if self.input_ds:
             self.input_ds.file.close()
@@ -129,6 +152,165 @@ class Distortion(Plugin):
 class Metadata(Plugin):
     """
     Plugin in charge of retrieving all metadata for ID02 and storing them into a HDF5 file
+
+    Structure of the input data:
+        {
+        "hdf5_filename":"/tmp/metadata.h5"
+        "entry": "entry",
+        "instrument":"id02"
+        "c216":"id02/c216/0"
+        "HS32F": [1e-06, 1, 7763480, 8176290, 342239, 967341, 5541980, ...],
+        "HS32Z": [0, 0, 383.55, ...],
+        "HS32N": ["TIME","AUX1", "PIN41", ]
+        "HSI0": ...,
+        "HSI1": ...,
+        "HSTime": ...,
+        
+        }
+    
+   ID02META_GENERAL["DetectorInfo"] = "VxH:detbox=14952.235x0.000x1.000,dettab=-62.000x-245.000"
+ID02META_GENERAL["ExperimentInfo"] = 0
+ID02META_GENERAL["HMStartEpoch"] = 1405087717.12159
+ID02META_GENERAL["HMStartTime"] = "2014-07-11T16:08:37.121591+0200"
+ID02META_GENERAL["HS32Depth"] = 32
+ID02META_GENERAL["HS32F01"] = 1e-06
+ID02META_GENERAL["HS32F02"] = 1
+ID02META_GENERAL["HS32F03"] = 7763480
+ID02META_GENERAL["HS32F04"] = 8176290
+ID02META_GENERAL["HS32F05"] = 342239
+ID02META_GENERAL["HS32F06"] = 967341
+ID02META_GENERAL["HS32F07"] = 5541980
+ID02META_GENERAL["HS32F08"] = 1739160
+ID02META_GENERAL["HS32F09"] = 2753.61
+ID02META_GENERAL["HS32F10"] = 1351920
+ID02META_GENERAL["HS32F11"] = 140000000
+ID02META_GENERAL["HS32F12"] = 16719500
+ID02META_GENERAL["HS32F13"] = 1
+ID02META_GENERAL["HS32F14"] = 0.000995868
+ID02META_GENERAL["HS32F15"] = 0.000995868
+ID02META_GENERAL["HS32F16"] = 1
+ID02META_GENERAL["HS32Len"] = 16
+ID02META_GENERAL["HS32N01"] = "TIME"
+ID02META_GENERAL["HS32N02"] = "AUX1"
+ID02META_GENERAL["HS32N03"] = "PIN41"
+ID02META_GENERAL["HS32N04"] = "PIN42"
+ID02META_GENERAL["HS32N05"] = "PIN5"
+ID02META_GENERAL["HS32N06"] = "PIN6"
+ID02META_GENERAL["HS32N07"] = "PIN7"
+ID02META_GENERAL["HS32N08"] = "PIN8"
+ID02META_GENERAL["HS32N09"] = "PIN1"
+ID02META_GENERAL["HS32N10"] = "PIN2"
+ID02META_GENERAL["HS32N11"] = "PIN3"
+ID02META_GENERAL["HS32N12"] = "PIN4"
+ID02META_GENERAL["HS32N13"] = "AUX2"
+ID02META_GENERAL["HS32N14"] = "THC1"
+ID02META_GENERAL["HS32N15"] = "THC2"
+ID02META_GENERAL["HS32N16"] = "PRESS"
+ID02META_GENERAL["HS32Z01"] = 0
+ID02META_GENERAL["HS32Z02"] = 0
+ID02META_GENERAL["HS32Z03"] = 383.55
+ID02META_GENERAL["HS32Z04"] = 126.4
+ID02META_GENERAL["HS32Z05"] = 6582.1
+ID02META_GENERAL["HS32Z06"] = 6973.6
+ID02META_GENERAL["HS32Z07"] = 162.95
+ID02META_GENERAL["HS32Z08"] = 0
+ID02META_GENERAL["HS32Z09"] = 221.2
+ID02META_GENERAL["HS32Z10"] = 207.8
+ID02META_GENERAL["HS32Z11"] = 315.26
+ID02META_GENERAL["HS32Z12"] = 145.11
+ID02META_GENERAL["HS32Z13"] = 323.76
+ID02META_GENERAL["HS32Z14"] = 170
+ID02META_GENERAL["HS32Z15"] = 170
+ID02META_GENERAL["HS32Z16"] = 228.4
+ID02META_GENERAL["HSI0"] = 12
+ID02META_GENERAL["HSI1"] = 7
+ID02META_GENERAL["HSTime"] = 1
+ID02META_GENERAL["MachineInfo"] = "Ie=183.27mA,u35u=100.000mm/0.001mm,u21m=100.000mm/0.000mm,u21d=100.000mm/-0.000mm"
+ID02META_GENERAL["MirrorInfo"] = "rz=-3.600mrad,ty=0.455mm,ty1=2.075mm,ty2=-1.165mm,tz1=-0.030mm,tz2=-0.090mm,mir2rz=2.000mrad"
+ID02META_GENERAL["OpticsInfo"] = "egy=12460.0eV,theta=9.132deg,hgt=11.7mm,tilt=4.440deg,tra=1.963mm"
+ID02META_GENERAL["ProposalInfo"] = 0
+ID02META_GENERAL["StationInfo"] = "ID02"
+ID02META_GENERAL_NAME = "ID02META_GENERAL"
+
+
+######
+###  meta-data to DahuDS for saving with C216 data to hdf5
+###
+###
+Pass to DahuDS server metat-data from ID02META_GENERAL:
+
+startJob cmd with argin[0]="id02.metadata" argin[1] = "{  ......}"
+
+  Plugin in charge of retrieving all metadata for ID02 and storing them into a HDF5 file
+
+    Structure of the input data:
+        {
+        "hdf5_filename":"/tmp/metadata.h5"
+        "entry": "entry",
+        "instrument":"id02"
+        "c216":"id02/c216/0"
+        "HS32F": [1e-06, 1, 7763480, 8176290, 342239, 967341, 5541980, ...],
+        "HS32Z": [0, 0, 383.55, ...],
+        "HS32N": ["TIME","AUX1", "PIN41", ]
+        "HSI0": ...,
+        "HSI1": ...,
+        "HSTime": ...,
+        
+        }
+
+
+
+
+18.FRELON> syms -v ID02*STATIC**
+
+ID02META_STATIC_NAME["frelon"] = "ID02META_STATIC_frelon"
+ID02META_STATIC_NAME["saxs"] = "ID02META_STATIC_saxs"
+ID02META_STATIC_frelon["BSize_1"] = 0
+ID02META_STATIC_frelon["BSize_2"] = 0
+ID02META_STATIC_frelon["Center_1"] = 0
+ID02META_STATIC_frelon["Center_2"] = 0
+ID02META_STATIC_frelon["DDummy"] = 0
+ID02META_STATIC_frelon["DetectorName"] = 0
+ID02META_STATIC_frelon["DetectorPosition"] = 14.9522
+ID02META_STATIC_frelon["Dummy"] = 0
+ID02META_STATIC_frelon["Offset_1"] = 0
+ID02META_STATIC_frelon["Offset_2"] = 0
+ID02META_STATIC_frelon["PSize_1"] = 0
+ID02META_STATIC_frelon["PSize_2"] = 0
+ID02META_STATIC_frelon["RasterOrientation"] = 0
+ID02META_STATIC_frelon["SampleDistance"] = 14.9522
+ID02META_STATIC_frelon["SaxsDataVersion"] = "saxs_data_version"
+ID02META_STATIC_frelon["Title"] = 0
+ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
+
+19.FRELON> syms -v ID02*STATIC**
+
+ID02META_STATIC_NAME["frelon"] = "ID02META_STATIC_frelon"
+ID02META_STATIC_NAME["saxs"] = "ID02META_STATIC_saxs"
+ID02META_STATIC_frelon["BSize_1"] = 0
+ID02META_STATIC_frelon["BSize_2"] = 0
+ID02META_STATIC_frelon["Center_1"] = 0
+ID02META_STATIC_frelon["Center_2"] = 0
+ID02META_STATIC_frelon["DDummy"] = 0
+ID02META_STATIC_frelon["DetectorName"] = 0
+ID02META_STATIC_frelon["DetectorPosition"] = 14.9522
+ID02META_STATIC_frelon["Dummy"] = 0
+ID02META_STATIC_frelon["Offset_1"] = 0
+ID02META_STATIC_frelon["Offset_2"] = 0
+ID02META_STATIC_frelon["PSize_1"] = 0
+ID02META_STATIC_frelon["PSize_2"] = 0
+ID02META_STATIC_frelon["RasterOrientation"] = 0
+ID02META_STATIC_frelon["SampleDistance"] = 14.9522
+ID02META_STATIC_frelon["SaxsDataVersion"] = "saxs_data_version"
+ID02META_STATIC_frelon["Title"] = 0
+ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
+
+####
+## meta-data to be saved with detector images in hdf5 files
+## use LIMA common header 
+###
+
+ 
     """
     def __init__(self):
         Plugin.__init__(self)
@@ -144,14 +326,7 @@ class Metadata(Plugin):
 
     def setup(self, kwargs=None):
         """
-        Structure of the input data:
-        {
-        "hdf5_filename":"/tmp/metadata.h5"
-        "entry": "entry",
-        "instrument":"id02"
-        "c216":"id02/c216/0",
-        
-        }
+        see class documentation
         """
         Plugin.setup(self, kwargs)
         self.c216 = self.input.get("c216", "id02/c216/0")
