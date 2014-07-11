@@ -212,10 +212,10 @@ class CalibrationWindow(QtGui.QMainWindow):
             # should always be between 0 and 1 ...
             return matplotlib.cm.jet(data, bytes=True)
         elif target == "massif":
-            # should always be between 0 and 1 ...
-            return matplotlib.cm.jet(data, bytes=True)
-
-
+            mask = (data == 0)
+            show_data = matplotlib.cm.jet(data * 1.0 / data.max(), bytes=True)
+            show_data[:, :3] = mask * numpy.uint8(255)
+            return show_data
 
     def any_display(self):
         if self.axes is not None:
