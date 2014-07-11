@@ -53,8 +53,9 @@ SIGNAL = pyFAI.gui_utils.QtCore.SIGNAL
 
 logger = logging.getLogger("calibration_view")
 
-#for debug
+# for debug
 cw = None
+
 
 class CalibrationWindow(QtGui.QMainWindow):
     """
@@ -72,9 +73,8 @@ class CalibrationWindow(QtGui.QMainWindow):
     INTERPOLATION = "nearest"
     ORIGIN = "lower"
 
-    def __init__(self, imagename=None):
+    def __init__(self,):
         QtGui.QWidget.__init__(self)
-        self.imagename = imagename
         uic.loadUi("calibration_main.ui", self)
         self.connect(self.actionAbout_calibrate, SIGNAL("triggered()"), self.on_about)
         self.dpi = 100

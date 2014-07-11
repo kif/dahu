@@ -41,7 +41,7 @@
               </widget>
              </item>
              <item>
-              <widget class="QLineEdit" name="poni">
+              <widget class="QLineEdit" name="data_file">
                <property name="toolTip">
                 <string>File containing the experiment geometry setup</string>
                </property>
@@ -482,7 +482,7 @@
            <item>
             <layout class="QHBoxLayout" name="horizontalLayout_11">
              <item>
-              <widget class="QCheckBox" name="do_data_hdf5_2">
+              <widget class="QCheckBox" name="do_dspacing">
                <property name="toolTip">
                 <string>Mask-out pixels</string>
                </property>
@@ -492,7 +492,7 @@
               </widget>
              </item>
              <item>
-              <widget class="QLineEdit" name="data_file_hdf5_2">
+              <widget class="QLineEdit" name="dspacing">
                <property name="toolTip">
                 <string>File containing the image of the mask</string>
                </property>
@@ -617,6 +617,7 @@
     <property name="title">
      <string>File</string>
     </property>
+    <addaction name="separator"/>
    </widget>
    <widget class="QMenu" name="menuHelp">
     <property name="title">
@@ -627,7 +628,13 @@
     <addaction name="separator"/>
     <addaction name="actionAbout_calibrate"/>
    </widget>
+   <widget class="QMenu" name="menuWindows">
+    <property name="title">
+     <string>Windows</string>
+    </property>
+   </widget>
    <addaction name="menuFile"/>
+   <addaction name="menuWindows"/>
    <addaction name="menuHelp"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
