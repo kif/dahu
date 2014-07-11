@@ -40,6 +40,7 @@ __status__ = "development"
 import fabio
 import logging
 from pyFAI.gui_utils import pylab, QtGui, QtCore, uic, matplotlib
+from PyQt4.QtGui import   QSizePolicy
 from matplotlib.backends.backend_qt4agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt4agg import NavigationToolbar2QTAgg as NavigationToolbar
 from matplotlib.figure import Figure
@@ -104,6 +105,8 @@ class CalibrationWindow(QtGui.QMainWindow):
         self.fig = Figure(dpi=self.dpi)
         self.canvas = FigureCanvas(self.fig)
         self.canvas.setParent(self.image_frame)
+        self.canvas.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
+
         # Create the navigation toolbar, tied to the canvas
         self.mpl_toolbar = NavigationToolbar(self.canvas, self.image_frame, coordinates=False)
 
@@ -114,7 +117,10 @@ class CalibrationWindow(QtGui.QMainWindow):
 
         self.pix_coords_label = QtGui.QLabel("x= None , y= None , i= None ", self)
         self.mpl_toolbar.addWidget(self.pix_coords_label)
+        pol = QSizePolicy(QSizePolicy.Maximum, QSizePolicy.Minimum)
+        self.mpl_toolbar.setSizePolicy(pol)
         self.display_widget = uic.loadUi("display_widget.ui")
+        self.mpl_toolbar.setSizePolicy(pol)
         vbox = QtGui.QVBoxLayout()
         vbox.addWidget(self.mpl_toolbar, alignment=QtCore.Qt.AlignVCenter)
         vbox.addWidget(self.canvas, alignment=QtCore.Qt.AlignVCenter)
