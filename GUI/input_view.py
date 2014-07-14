@@ -73,7 +73,7 @@ class InputWidget(QtGui.QWidget):
         self.connect(self.energy, SIGNAL("editingFinished ()"), self.energy_changed)
 
         # connect file selection windows
-        self.connect(self.file_data, SIGNAL("clicked()"), self.select_ponifile)
+        self.connect(self.file_data, SIGNAL("clicked()"), self.select_datafile)
         self.connect(self.file_mask_file, SIGNAL("clicked()"), self.select_maskfile)
         self.connect(self.file_dark_current, SIGNAL("clicked()"), self.select_darkcurrent)
         self.connect(self.file_flat_field, SIGNAL("clicked()"), self.select_flatfield)
