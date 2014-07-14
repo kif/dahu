@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>480</width>
-    <height>538</height>
+    <width>520</width>
+    <height>494</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -35,7 +35,7 @@
        <item>
         <widget class="QToolButton" name="file_poni">
          <property name="toolTip">
-          <string>Select graphically the geometry setup file</string>
+          <string>Select the data file from disk</string>
          </property>
          <property name="text">
           <string>...</string>
@@ -60,10 +60,7 @@
         </spacer>
        </item>
        <item>
-        <widget class="QCheckBox" name="do_data_hdf5">
-         <property name="toolTip">
-          <string>Mask-out pixels</string>
-         </property>
+        <widget class="QLabel" name="label">
          <property name="text">
           <string>HDF5 path</string>
          </property>
@@ -78,6 +75,9 @@
        </item>
        <item>
         <widget class="QToolButton" name="path_data_hdf5">
+         <property name="toolTip">
+          <string>Select the dataset within the HDF file</string>
+         </property>
          <property name="text">
           <string>...</string>
          </property>
@@ -113,6 +113,9 @@
        </item>
        <item>
         <widget class="QToolButton" name="file_mask_file">
+         <property name="toolTip">
+          <string>Select the mask from a file</string>
+         </property>
          <property name="text">
           <string>...</string>
          </property>
@@ -136,17 +139,14 @@
         </spacer>
        </item>
        <item>
-        <widget class="QCheckBox" name="do_data_hdf5_5">
-         <property name="toolTip">
-          <string>Mask-out pixels</string>
-         </property>
+        <widget class="QLabel" name="label_8">
          <property name="text">
           <string>HDF5 path</string>
          </property>
         </widget>
        </item>
        <item>
-        <widget class="QLineEdit" name="data_file_hdf5_5">
+        <widget class="QLineEdit" name="mask_file_hdf5">
          <property name="toolTip">
           <string>File containing the image of the mask</string>
          </property>
@@ -154,6 +154,9 @@
        </item>
        <item>
         <widget class="QToolButton" name="path_data_hdf5_5">
+         <property name="toolTip">
+          <string>Select the dataset within the HDF file</string>
+         </property>
          <property name="text">
           <string>...</string>
          </property>
@@ -182,6 +185,9 @@
        </item>
        <item>
         <widget class="QToolButton" name="file_dark_current">
+         <property name="toolTip">
+          <string>Select the dark current image from a file</string>
+         </property>
          <property name="text">
           <string>...</string>
          </property>
@@ -223,6 +229,9 @@
        </item>
        <item>
         <widget class="QToolButton" name="path_data_hdf5_4">
+         <property name="toolTip">
+          <string>Select the dataset within the HDF file</string>
+         </property>
          <property name="text">
           <string>...</string>
          </property>
@@ -251,6 +260,9 @@
        </item>
        <item>
         <widget class="QToolButton" name="file_flat_field">
+         <property name="toolTip">
+          <string>Select the flat field image from a file</string>
+         </property>
          <property name="text">
           <string>...</string>
          </property>
@@ -284,7 +296,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QLineEdit" name="data_file_hdf5_3">
+        <widget class="QLineEdit" name="flat_file_hdf5">
          <property name="toolTip">
           <string>File containing the image of the mask</string>
          </property>
@@ -292,6 +304,9 @@
        </item>
        <item>
         <widget class="QToolButton" name="path_data_hdf5_3">
+         <property name="toolTip">
+          <string>Select the dataset within the HDF file</string>
+         </property>
          <property name="text">
           <string>...</string>
          </property>
@@ -374,16 +389,16 @@
           </widget>
          </item>
          <item>
-          <widget class="QLineEdit" name="splineFile">
+          <widget class="QLineEdit" name="detectorfile">
            <property name="toolTip">
-            <string>File containing the cubic spline distortion of the detector</string>
+            <string>File containing the description of the detector</string>
            </property>
           </widget>
          </item>
          <item>
-          <widget class="QToolButton" name="file_splinefile">
+          <widget class="QToolButton" name="file_detectorfile">
            <property name="toolTip">
-            <string>select spline file graphically</string>
+            <string>select the detector file graphically</string>
            </property>
            <property name="text">
             <string>...</string>
@@ -425,7 +440,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QLineEdit" name="wavelength_2">
+        <widget class="QLineEdit" name="energy">
          <property name="toolTip">
           <string>Used only for calculating the momentum transfer (q)</string>
          </property>
@@ -487,40 +502,6 @@
         <widget class="QToolButton" name="path_data_hdf5_2">
          <property name="text">
           <string>...</string>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </item>
-     <item>
-      <widget class="Line" name="line_3">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <layout class="QHBoxLayout" name="horizontalLayout_2">
-       <item>
-        <spacer name="horizontalSpacer">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-       <item>
-        <widget class="QPushButton" name="pushButton">
-         <property name="toolTip">
-          <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Read the data, apply dark/flat correction&lt;/p&gt;&lt;p&gt;Load the mask&lt;/p&gt;&lt;p&gt;Initialize the detector&lt;/p&gt;&lt;p&gt;&lt;br/&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-         </property>
-         <property name="text">
-          <string>Next</string>
          </property>
         </widget>
        </item>
