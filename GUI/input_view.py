@@ -44,6 +44,7 @@ import json
 from pyFAI.gui_utils import pylab, QtGui, QtCore, uic, matplotlib
 from pyFAI.utils import float_, int_, str_
 from pyFAI.units import hc
+from pyFAI.io import is_hdf5
 import pyFAI
 import sys
 from PyQt4.QtCore import SIGNAL
@@ -167,6 +168,8 @@ class InputWidget(QtGui.QWidget):
     def select_datafile(self):
         datafile = QtGui.QFileDialog.getOpenFileName()
         self.data_file.setText(datafile)
+        if is_hdf5(datafile):
+            pass
         #Check here for HDF5 and open next windows if needed
 
 

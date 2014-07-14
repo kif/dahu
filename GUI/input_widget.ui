@@ -33,7 +33,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QToolButton" name="file_poni">
+        <widget class="QToolButton" name="file_data">
          <property name="toolTip">
           <string>Select the data file from disk</string>
          </property>
@@ -499,7 +499,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QToolButton" name="path_data_hdf5_2">
+        <widget class="QToolButton" name="filedspacing_file">
          <property name="text">
           <string>...</string>
          </property>
