@@ -21,6 +21,7 @@ Plugins for ID02:
 
 * Distortion correction
 * Metadata saving (C216)
+* 
 """
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
@@ -359,7 +360,7 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
         HS32M = self.input.get("HS32M")
         if HS32M is not None:
             self.mcs_grp["HS32M"] = HS32M
-        if HS32N and HS32Z and HS32F and HS32M:
+        if HS32N and HS32Z and HS32F:
             self.mcs_grp.require_group("interpreted")
         self.group.parent["title"] = numpy.string_("id02.metadata")
         self.group.parent["program"] = numpy.string_("Dahu")
@@ -411,6 +412,9 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
             pin = int(self.input["HSTime"])
             if pin > counters:
                 self.log_error("invalid pin number %s" % pin)
+            self.mcs_grp["HSTime"] = pin
+            self.mcs_grp["HSTime"].attrs["interpretation"] = "scalar"
+            self.mcs_grp["HSTime"].attrs["counter"] = "1-based pin number"
             pin -= 1  # 1 based pin number
             time_counter = raw_scalers[:, pin]
             if "HS32F" in self.mcs_grp:
@@ -419,8 +423,8 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
                 self.log_error("No factors provided for time measurement: defaulting to 1e-6", False)
                 factor = 1e-6
             measured_time = time_counter * factor
-            self.tfg_grp["meas_time"] = measured_time
-            self.tfg_grp["meas_time"].attrs["interpretation"] = "scalar"
+            self.mcs_grp["meas_time"] = measured_time
+            self.mcs_grp["meas_time"].attrs["interpretation"] = "scalar"
         else:
             self.log_error("No HSTime pin number, using TFG time")
             measured_time = tfg[1::2]
@@ -431,13 +435,16 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
                     pin = int(self.input[I])
                     if pin > counters:
                         self.log_error("invalid pin number %s" % pin)
+                    self.mcs_grp[I] = pin
+                    self.tfg_grp[I].attrs["interpretation"] = "scalar"
+                    self.tfg_grp[I].attrs["counter"] = "1-based pin number"
                     pin -= 1  # 1 based pin number
                     counter = raw_scalers[:, pin]
                     factor = self.mcs_grp["HS32F"][pin]
                     zero = self.mcs_grp["HS32Z"][pin]
                     measured = (counter - measured_time * zero) * factor
-                    self.tfg_grp[I] = measured
-                    self.tfg_grp[I].attrs["interpretation"] = "scalar"
+                    self.mcs_grp[I[2:]] = measured
+                    self.mcs_grp[I[2:]].attrs["interpretation"] = "scalar"
         else:
             self.log_error("Not factor/zero to calculate I0/I1", True)
 
@@ -474,6 +481,7 @@ class BlaBla(Plugin):
     """
     This plugin does all processing needed 
     """
+
 if __name__ == "__main__":
     p = Distortion()
     t0 = time.time()
