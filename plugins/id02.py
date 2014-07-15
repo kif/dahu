@@ -425,7 +425,7 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
             self.log_error("No HSTime pin number, using TFG time")
             measured_time = tfg[1::2]
 
-        if "HS32F" in self.mcs_grp and "HS32FZ" in self.mcs_grp:
+        if ("HS32F" in self.mcs_grp) and ("HS32Z" in self.mcs_grp):
             for I in ("HSI0", "HSI1"):
                 if I in self.input:
                     pin = int(self.input[I])
