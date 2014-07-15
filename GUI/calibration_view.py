@@ -54,6 +54,7 @@ import sys
 SIGNAL = pyFAI.gui_utils.QtCore.SIGNAL
 
 logger = logging.getLogger("calibration_view")
+from input_view import InputWidget
 
 # for debug
 cw = None
@@ -87,7 +88,9 @@ class CalibrationWindow(QtGui.QMainWindow):
         self.data = self.massif = self.solid_angle = self.mask = None
         self.display_checks = {}
         self.display_widget = None
+        self.input_widget = None
         self.build_right_frame()
+        self.build_input_tab()
 
     def on_about(self):
         msg = [__doc__,
@@ -141,6 +144,18 @@ class CalibrationWindow(QtGui.QMainWindow):
                                "solidangle": self.display_widget.show_solidangle}
         for v in self.display_checks.itervalues():
             self.connect(v, SIGNAL("stateChanged(int)"), self.toggle_show)
+
+    def build_input_tab(self):
+        self.input_widget = InputWidget()
+        self.scrollArea_input.setWidget(self.input_widget)
+
+#        area->setWidget(widget);
+#        box = QtGui.QHBoxLayout()
+#        box.addWidget(self.input_widget)
+#        self.input_frame.setLayout(box)
+#        self.input_widget.setSizePolicy(QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred))
+#        self.input_frame.setSizePolicy(QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred))
+
 
     def on_pick(self, event):
         if event.inaxes and self.data is not None and self.data.any():

@@ -58,18 +58,18 @@ class InputWidget(QtGui.QWidget):
     """
     widget handling
     """
-    def __init__(self, ui_file="input_widget.ui"):
-        QtGui.QWidget.__init__(self)
+    def __init__(self, parent=None, ui_file="input_widget.ui"):
+        QtGui.QWidget.__init__(self, parent=parent)
         uic.loadUi(ui_file, self)
         self.wavelength.setValidator(QtGui.QDoubleValidator())
         self.energy.setValidator(QtGui.QDoubleValidator())
         self.pixel1.setValidator(QtGui.QDoubleValidator())
         self.pixel2.setValidator(QtGui.QDoubleValidator())
 
-        all_detectors = pyFAI.detectors.ALL_DETECTORS.keys()
-        all_detectors.sort()
-        self.detector.addItems([i.capitalize() for i in all_detectors])
-        self.detector.setCurrentIndex(all_detectors.index("detector"))
+        self.all_detectors = pyFAI.detectors.ALL_DETECTORS.keys()
+        self.all_detectors.sort()
+        self.detector.addItems([i.capitalize() for i in self.all_detectors])
+        self.detector.setCurrentIndex(self.all_detectors.index("detector"))
 
         self.connect(self.detector, SIGNAL("currentIndexChanged(int)"), self.detector_changed)
         self.connect(self.wavelength, SIGNAL("editingFinished ()"), self.wavelength_changed)
@@ -161,11 +161,22 @@ class InputWidget(QtGui.QWidget):
         elif self.detectorfile.text():
             detectorfile = str(self.detectorfile.text()).strip()
             if op.isfile(detectorfile):
-                inst.set_splineFile(detectorfile)
-                self.pixel1.setText(str(inst.pixel1))
-                self.pixel2.setText(str(inst.pixel2))
+                if is_hdf5(detectorfile):
+                    det = pyFAI.detectors.detector_factory(detectorfile)
+                    self.pixel1.setText(str(det.pixel1))
+                    self.pixel2.setText(str(det.pixel2))
+                    self.detector.setCurrentIndex(self.all_detectors.index("nexusdetector"))
+                else:
+                    try:
+                        spline = pyFAI.spline.Spline(detectorfile)
+                    except Exception as error:
+                        logger.error("failed %s on %s" % (error, detectorfile))
+                    else:
+                        self.pixel1.setText(str(spline.pixelSize[1] * 1e-6))
+                        self.pixel2.setText(str(spline.pixelSize[0] * 1e-6))
+                        self.detector.setCurrentIndex(self.all_detectors.index("frelon"))
             else:
-                logger.warning("No such spline file %s" % detectorfile)
+                logger.warning("No such detector file %s" % detectorfile)
 
 
     def energy_changed(self):
@@ -201,14 +212,17 @@ class InputWidget(QtGui.QWidget):
                 det = pyFAI.detectors.detector_factory(splinefile)
                 self.pixel1.setText(str(det.pixel1))
                 self.pixel2.setText(str(det.pixel2))
+                self.detector.setCurrentIndex(self.all_detectors.index("nexusdetector"))
             else:
                 try:
                     spline = pyFAI.spline.Spline(splinefile)
                 except Exception as error:
                     logger.error("failed %s on %s" % (error, splinefile))
                 else:
-                    self.pixel1.setText(str(spline.pixelSize[1] * 1e-6))
-                    self.pixel2.setText(str(spline.pixelSize[0] * 1e-6))
+                    if spline.pixelSize:
+                        self.pixel1.setText(str(spline.pixelSize[1] * 1e-6))
+                        self.pixel2.setText(str(spline.pixelSize[0] * 1e-6))
+                        self.detector.setCurrentIndex(self.all_detectors.index("frelon"))
 
     def select_maskfile(self):
         logger.debug("select_maskfile")
