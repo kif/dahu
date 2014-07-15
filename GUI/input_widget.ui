@@ -153,7 +153,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QToolButton" name="path_data_hdf5_5">
+        <widget class="QToolButton" name="path_mask_hdf5">
          <property name="toolTip">
           <string>Select the dataset within the HDF file</string>
          </property>
@@ -211,24 +211,21 @@
         </spacer>
        </item>
        <item>
-        <widget class="QCheckBox" name="do_data_hdf5_4">
-         <property name="toolTip">
-          <string>Mask-out pixels</string>
-         </property>
+        <widget class="QLabel" name="label_9">
          <property name="text">
           <string>HDF5 path</string>
          </property>
         </widget>
        </item>
        <item>
-        <widget class="QLineEdit" name="data_file_hdf5_4">
+        <widget class="QLineEdit" name="dark_current_hdf5">
          <property name="toolTip">
           <string>File containing the image of the mask</string>
          </property>
         </widget>
        </item>
        <item>
-        <widget class="QToolButton" name="path_data_hdf5_4">
+        <widget class="QToolButton" name="path_dark_hdf5">
          <property name="toolTip">
           <string>Select the dataset within the HDF file</string>
          </property>
@@ -286,24 +283,21 @@
         </spacer>
        </item>
        <item>
-        <widget class="QCheckBox" name="do_data_hdf5_3">
-         <property name="toolTip">
-          <string>Mask-out pixels</string>
-         </property>
+        <widget class="QLabel" name="label_10">
          <property name="text">
           <string>HDF5 path</string>
          </property>
         </widget>
        </item>
        <item>
-        <widget class="QLineEdit" name="flat_file_hdf5">
+        <widget class="QLineEdit" name="flat_field_hdf5">
          <property name="toolTip">
           <string>File containing the image of the mask</string>
          </property>
         </widget>
        </item>
        <item>
-        <widget class="QToolButton" name="path_data_hdf5_3">
+        <widget class="QToolButton" name="path_flat_hdf5">
          <property name="toolTip">
           <string>Select the dataset within the HDF file</string>
          </property>
@@ -499,7 +493,7 @@
         </widget>
        </item>
        <item>
-        <widget class="QToolButton" name="filedspacing_file">
+        <widget class="QToolButton" name="file_dspacing">
          <property name="text">
           <string>...</string>
          </property>

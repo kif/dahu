@@ -27,7 +27,7 @@ __author__ = "V.A. Sole - ESRF Data Analysis"
 __contact__ = "sole@esrf.fr"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-import sys
+import sys, logging
 """
 This module simplifies writing code that has to deal with with PySide and PyQt4.
 
@@ -59,7 +59,7 @@ else:
         sip.setapi("QString", 2)
         sip.setapi("QVariant", 2)
     except:
-        print("API 1 -> Console widget not available")
+        logging.debug("API 1 -> Console widget not available")
 
     from PyQt4.QtCore import *
     from PyQt4.QtGui import *

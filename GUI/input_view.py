@@ -34,7 +34,7 @@ __author__ = u"Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "GPLv3+"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "11/07/2014"
+__date__ = "15/07/2014"
 __status__ = "development"
 
 import logging
@@ -45,9 +45,12 @@ from pyFAI.gui_utils import pylab, QtGui, QtCore, uic, matplotlib
 from pyFAI.utils import float_, int_, str_
 from pyFAI.units import hc
 from pyFAI.io import is_hdf5
+import pyFAI.calibrant
 import pyFAI
 import sys
-from PyQt4.QtCore import SIGNAL
+SIGNAL = QtCore.SIGNAL
+from HDF5Dialog import HDF5Dialog
+
 logger = logging.getLogger("calibration_view")
 
 
@@ -73,12 +76,20 @@ class InputWidget(QtGui.QWidget):
         self.connect(self.energy, SIGNAL("editingFinished ()"), self.energy_changed)
 
         # connect file selection windows
+        self.connect(self.file_detectorfile, SIGNAL("clicked()"), self.select_detectorfile)
         self.connect(self.file_data, SIGNAL("clicked()"), self.select_datafile)
         self.connect(self.file_mask_file, SIGNAL("clicked()"), self.select_maskfile)
         self.connect(self.file_dark_current, SIGNAL("clicked()"), self.select_darkcurrent)
         self.connect(self.file_flat_field, SIGNAL("clicked()"), self.select_flatfield)
-        self.connect(self.file_dspacing_file, SIGNAL("clicked()"), self.select_splinefile)
+        self.connect(self.file_dspacing, SIGNAL("clicked()"), self.select_dspacing)
+        self.connect(self.path_data_hdf5, SIGNAL("clicked()"), self.select_data_hdf5)
+        self.connect(self.path_mask_hdf5, SIGNAL("clicked()"), self.select_mask_hdf5)
+        self.connect(self.path_dark_hdf5, SIGNAL("clicked()"), self.select_dark_hdf5)
+        self.connect(self.path_flat_hdf5, SIGNAL("clicked()"), self.select_flat_hdf5)
 
+        self.all_calibrants = ["User defined"] + pyFAI.calibrant.ALL_CALIBRANTS.keys()
+        self.calibrant.addItems(self.all_calibrants)
+        self.calibrant.setCurrentIndex(self.all_calibrants.index("LaB6"))
 
 
 
@@ -165,25 +176,39 @@ class InputWidget(QtGui.QWidget):
         logger.debug("wavelength_changed")
         self.energy.setText(str(hc / float(self.wavelength.text())))
 
+    def select_dspacing(self):
+        datafile = QtGui.QFileDialog.getOpenFileName()
+        self.dspacing.setText(datafile)
+        datafile = str(datafile)
+        if datafile:
+            self.do_dspacing.setChecked(True)
+            self.calibrant.setCurrentIndex(self.all_calibrants.index("User defined"))
+
     def select_datafile(self):
         datafile = QtGui.QFileDialog.getOpenFileName()
         self.data_file.setText(datafile)
-        if is_hdf5(datafile):
-            pass
-        #Check here for HDF5 and open next windows if needed
+        datafile = str(datafile)
+        if datafile and is_hdf5(datafile):
+            path = HDF5Dialog.getPath(datafile)
+            self.data_file_hdf5.setText(path or "")
 
-
-    def select_splinefile(self):
-        logger.debug("select_splinefile")
+    def select_detectorfile(self):
+        logger.debug("select_detectorfile")
         splinefile = str(QtGui.QFileDialog.getOpenFileName())
         if splinefile:
-            try:
-                self.ai.detector.set_splineFile(splinefile)
-                self.pixel1.setText(str(self.ai.pixel1))
-                self.pixel2.setText(str(self.ai.pixel2))
-                self.splineFile.setText(self.ai.detector.splineFile or "")
-            except Exception as error:
-                logger.error("failed %s on %s" % (error, splinefile))
+            self.detectorfile.setText(splinefile)
+            if is_hdf5(splinefile):
+                det = pyFAI.detectors.detector_factory(splinefile)
+                self.pixel1.setText(str(det.pixel1))
+                self.pixel2.setText(str(det.pixel2))
+            else:
+                try:
+                    spline = pyFAI.spline.Spline(splinefile)
+                except Exception as error:
+                    logger.error("failed %s on %s" % (error, splinefile))
+                else:
+                    self.pixel1.setText(str(spline.pixelSize[1] * 1e-6))
+                    self.pixel2.setText(str(spline.pixelSize[0] * 1e-6))
 
     def select_maskfile(self):
         logger.debug("select_maskfile")
@@ -191,6 +216,9 @@ class InputWidget(QtGui.QWidget):
         if maskfile:
             self.mask_file.setText(maskfile or "")
             self.do_mask.setChecked(True)
+            if is_hdf5(maskfile):
+                path = HDF5Dialog.getPath(maskfile)
+                self.mask_file_hdf5.setText(path or "")
 
     def select_darkcurrent(self):
         logger.debug("select_darkcurrent")
@@ -198,6 +226,9 @@ class InputWidget(QtGui.QWidget):
         if darkcurrent:
             self.dark_current.setText(str_(darkcurrent))
             self.do_dark.setChecked(True)
+            if is_hdf5(darkcurrent):
+                path = HDF5Dialog.getPath(darkcurrent)
+                self.dark_current_hdf5.setText(path or "")
 
     def select_flatfield(self):
         logger.debug("select_flatfield")
@@ -205,6 +236,37 @@ class InputWidget(QtGui.QWidget):
         if flatfield:
             self.flat_field.setText(str_(flatfield))
             self.do_flat.setChecked(True)
+            if is_hdf5(flatfield):
+                path = HDF5Dialog.getPath(flatfield)
+                self.flat_field_hdf5.setText(path or "")
+
+    def select_data_hdf5(self):
+        logger.debug("select_data_hdf5")
+        datafile = str(self.data_file.text())
+        if datafile and is_hdf5(datafile):
+            path = HDF5Dialog.getPath(datafile)
+            self.data_file_hdf5.setText(path or "")
+
+    def select_mask_hdf5(self):
+        logger.debug("select_mask_hdf5")
+        datafile = str(self.mask_file.text())
+        if datafile and is_hdf5(datafile):
+            path = HDF5Dialog.getPath(datafile)
+            self.mask_file_hdf5.setText(path or "")
+
+    def select_flat_hdf5(self):
+        logger.debug("select_flat_hdf5")
+        datafile = str(self.flat_field.text())
+        if datafile and is_hdf5(datafile):
+            path = HDF5Dialog.getPath(datafile)
+            self.flat_field_hdf5.setText(path or "")
+
+    def select_dark_hdf5(self):
+        logger.debug("select_dark_hdf5")
+        datafile = str(self.dark_current.text())
+        if datafile and is_hdf5(datafile):
+            path = HDF5Dialog.getPath(datafile)
+            self.dark_current_hdf5.setText(path or "")
 
 
 if __name__ == "__main__":
