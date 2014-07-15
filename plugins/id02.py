@@ -354,7 +354,7 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
         # Name
         HS32N = self.input.get("HS32N")
         if HS32N is not None:
-            self.mcs_grp["HS32N"] = HS32N
+            self.mcs_grp["HS32N"] = [str(i) for i in HS32N]
         # Mode
         HS32M = self.input.get("HS32M")
         if HS32M is not None:
