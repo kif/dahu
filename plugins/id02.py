@@ -483,7 +483,7 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
 class BlaBla(Plugin):
     """
     This plugin does all processing needed
-    input = { save = {"raw", flat" 
+    input = { save = {"raw", "dark", "flat", "distortion", "normalization",  
     """
     def __init__(self):
         Plugin.__init__(self)
