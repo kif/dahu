@@ -360,6 +360,7 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
         HS32M = self.input.get("HS32M")
         if HS32M is not None:
             self.mcs_grp["HS32M"] = HS32M
+
         if HS32N and HS32Z and HS32F:
             self.mcs_grp.require_group("interpreted")
         self.group.parent["title"] = numpy.string_("id02.metadata")
@@ -450,8 +451,10 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
 
         if "interpreted" in self.mcs_grp:
             modes = numpy.zeros(counters, dtype=numpy.int32)
-            raw_modes = numpy.array(self.mcs_grp["HS32M"])
-            modes[:raw_modes.size] = raw_modes
+            if "HS32M" in self.mcs_grp:
+                raw_modes = numpy.array(self.mcs_grp["HS32M"])
+                modes[:raw_modes.size] = raw_modes
+            # else: mode=0
             values = numpy.zeros((frames, counters), dtype=numpy.float32)
             exptime = numpy.outer(tfg[1::2], numpy.ones(counters))
             zero = numpy.outer(numpy.ones(frames), numpy.array(self.mcs_grp["HS32Z"]))
