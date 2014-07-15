@@ -436,8 +436,8 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
                     if pin > counters:
                         self.log_error("invalid pin number %s" % pin)
                     self.mcs_grp[I] = pin
-                    self.tfg_grp[I].attrs["interpretation"] = "scalar"
-                    self.tfg_grp[I].attrs["counter"] = "1-based pin number"
+                    self.mcs_grp[I].attrs["interpretation"] = "scalar"
+                    self.mcs_grp[I].attrs["counter"] = "1-based pin number"
                     pin -= 1  # 1 based pin number
                     counter = raw_scalers[:, pin]
                     factor = self.mcs_grp["HS32F"][pin]
@@ -479,8 +479,11 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
 @register
 class BlaBla(Plugin):
     """
-    This plugin does all processing needed 
+    This plugin does all processing needed
+    input = { save = {"raw", flat" 
     """
+    def __init__(self):
+        Plugin.__init__(self)
 
 if __name__ == "__main__":
     p = Distortion()
