@@ -25,7 +25,7 @@
 """
 pyFAI-calib
 
-A tool for determining the position of a detector using a reference 
+A tool for determining the position of a detector using a reference
 sample called calibrant using Debye-Scerrer rings.
 
 """
@@ -34,10 +34,10 @@ __author__ = u"Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "GPLv3+"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/07/2014"
+__date__ = "11/07/2014"
 __status__ = "development"
 
-import fabio
+from PyQt4.QtGui import  QSizePolicy
 import logging
 import matplotlib
 matplotlib.use('Qt4Agg')
@@ -47,7 +47,7 @@ from matplotlib.figure import Figure
 import numpy
 import os
 import pyFAI
-from pyFAI.gui_utils import pylab, QtGui, QtCore, uic
+from pyFAI.gui_utils import pylab, QtGui, QtCore, uic, matplotlib
 import sys
 
 
@@ -55,13 +55,14 @@ SIGNAL = pyFAI.gui_utils.QtCore.SIGNAL
 
 logger = logging.getLogger("calibration_view")
 
-#for debug
+# for debug
 cw = None
+
 
 class CalibrationWindow(QtGui.QMainWindow):
     """
     Order on the layers in the right tab
-     
+
     mask > data > massif > solid_angle
     """
     ZORDER = {"contour":5,
@@ -71,10 +72,11 @@ class CalibrationWindow(QtGui.QMainWindow):
               "massif": 1,
               "solidangle": 0,
               }
+    INTERPOLATION = "nearest"
+    ORIGIN = "lower"
 
-    def __init__(self, imagename=None):
+    def __init__(self,):
         QtGui.QWidget.__init__(self)
-        self.imagename = imagename
         uic.loadUi("calibration_main.ui", self)
         self.connect(self.actionAbout_calibrate, SIGNAL("triggered()"), self.on_about)
         self.dpi = 100
@@ -104,6 +106,7 @@ class CalibrationWindow(QtGui.QMainWindow):
         self.fig = Figure(dpi=self.dpi)
         self.canvas = FigureCanvas(self.fig)
         self.canvas.setParent(self.image_frame)
+
         # Create the navigation toolbar, tied to the canvas
         self.mpl_toolbar = NavigationToolbar(self.canvas, self.image_frame, coordinates=False)
 
@@ -114,12 +117,21 @@ class CalibrationWindow(QtGui.QMainWindow):
 
         self.pix_coords_label = QtGui.QLabel("x= None , y= None , i= None ", self)
         self.mpl_toolbar.addWidget(self.pix_coords_label)
+
         self.display_widget = uic.loadUi("display_widget.ui")
+
         vbox = QtGui.QVBoxLayout()
-        vbox.addWidget(self.mpl_toolbar, alignment=QtCore.Qt.AlignVCenter)
-        vbox.addWidget(self.canvas, alignment=QtCore.Qt.AlignVCenter)
-        vbox.addWidget(self.display_widget, alignment=QtCore.Qt.AlignVCenter)
+        vbox.addWidget(self.mpl_toolbar, alignment=QtCore.Qt.AlignTop)
+        vbox.addWidget(self.canvas)
+        vbox.addWidget(self.display_widget, alignment=QtCore.Qt.AlignBottom)
         self.image_frame.setLayout(vbox)
+
+        # Enforce the size Policy of sub-widgets
+        pol = QSizePolicy(QSizePolicy.Minimum, QSizePolicy.Minimum)
+        self.mpl_toolbar.setSizePolicy(pol)
+        self.display_widget.setSizePolicy(pol)
+        self.canvas.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
+
         # few signals about those new widgets:
         self.display_checks = {"data": self.display_widget.show_data,
                                "mask": self.display_widget.show_mask,
@@ -144,19 +156,25 @@ class CalibrationWindow(QtGui.QMainWindow):
 
     def set_data(self, data, display=True, target="data"):
         """
-        Display an array in the  data layer  
+        Display an array in the  data layer
         @param data: the numpy array with the data in it
-        @param display: shall the data be displayed  
+        @param display: shall the data be displayed
         """
         self.__setattr__(target, data)
         artist = self.__getattribute__("ar_%s" % target)
+
         if self.axes is None:
             return
+        show_data = self.calc_RGBA(data, target)
+
         if artist is None:
-            artist = self.axes.imshow(data, zorder=self.ZORDER[target])
+            artist = self.axes.imshow(show_data,
+                                      zorder=self.ZORDER[target],
+                                      interpolation=self.INTERPOLATION,
+                                      origin=self.ORIGIN)
             self.__setattr__("ar_%s" % target, artist)
         else:
-            artist.set_data(data)
+            artist.set_data(show_data)
         artist.set_visible(display)
         self.canvas.draw()
         if display:
@@ -165,24 +183,43 @@ class CalibrationWindow(QtGui.QMainWindow):
     def calc_RGBA(self, data, target="data"):
         """
         Apply the colormap depending on the target
-        
+
         @param data: array of floats
         @return: y,x,4 array of uint8
-        
-        TODO
-        """
-        if target == "data":
-            datamin = data.min()
-            showData = numpy.log1p(data - self.data.min())
-#            self.ax.set_title('Log colour scale (skipping lowest/highest per mille)')
-#        else:
-#            showData = self.data
-#            self.ax.set_title('Linear colour scale (skipping lowest/highest per mille)')
 
-        # skip lowest and highest per mille of image values via vmin/vmax
-        showMin = percentile(showData, .1)
-        showMax = percentile(showData, 99.9)
-        im = self.ax.imshow(showData, vmin=showMin, vmax=showMax, origin="lower", interpolation="nearest")
+        TODO: one day, replace with cython implementation
+        """
+        if target == "mask":
+            shape = data.shape
+            mask = numpy.ascontiguousarray(data, dtype=bool)
+            self.mask = mask
+            res = numpy.zeros((shape[0], shape[1], 4), dtype=numpy.uint8)
+            res[:, :, 0] = numpy.uint8(255) * mask
+            res[:, :, 3] = numpy.uint8(255) * mask
+            return res
+        elif target == "data":
+            if self.mask is not None:
+                mask = numpy.ascontiguousarray(self.mask, dtype=bool)
+                valid = data[numpy.logical_not(mask)]
+            else:
+                valid = data.ravel()
+            sorted_v = numpy.sort(valid)
+            # remove first ans last per thousand
+            size = valid.size
+            show_min = sorted_v[int(0.001 * size)]
+            show_max = sorted_v[min(int(0.999 * size), size - 1)]
+            show_data = numpy.log1p((data - show_min).astype(numpy.float32) / (show_max - show_min) * (numpy.e - 1))
+            return matplotlib.cm.jet(show_data, bytes=True)
+        elif target == "solidangle":
+            # should always be between 0 and 1 ...
+            dmin = data.min()
+            dmax = data.max()
+            return matplotlib.cm.jet((data * 1.0 - dmin) / (dmax - dmin), bytes=True)
+        elif target == "massif":
+            mask = (data != 0)
+            show_data = matplotlib.cm.jet(data * 1.0 / data.max(), bytes=True)
+            show_data[:, :, 3] = mask * numpy.uint8(255)
+            return show_data
 
     def any_display(self):
         if self.axes is not None:
@@ -206,13 +243,21 @@ class CalibrationWindow(QtGui.QMainWindow):
 
 
 if __name__ == "__main__":
+    import fabio
+    import pyFAI.massif
+
     filename = os.path.join(os.environ["HOME"], "workspace", "pyFAI", "test",
                             "testimages", "Pilatus1M.edf")
     app = QtGui.QApplication(sys.argv)
     cw = CalibrationWindow()
 
     cw.show()
-    cw.set_data(fabio.open(filename).data)
     det = pyFAI.detectors.Pilatus1M()
     cw.set_data(det.mask, target="mask")
+    data = fabio.open(filename).data
+    cw.set_data(data)
+    massif = pyFAI.massif.Massif(data)
+    cw.set_data(massif.getLabeledMassif(), target="massif")
+    ai = pyFAI.load(filename[:-3] + "poni")
+    cw.set_data(ai.solidAngleArray(data.shape), target="solidangle")
     sys.exit(app.exec_())

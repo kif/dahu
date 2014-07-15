@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>892</width>
-    <height>316</height>
+    <height>38</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -15,23 +15,9 @@
   </property>
   <layout class="QHBoxLayout" name="horizontalLayout">
    <item>
-    <widget class="QCheckBox" name="show_data">
+    <widget class="QCheckBox" name="show_contour">
      <property name="text">
-      <string>Data</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QCheckBox" name="show_mask">
-     <property name="text">
-      <string>Mask</string>
-     </property>
-    </widget>
-   </item>
-   <item>
-    <widget class="QCheckBox" name="show_massif">
-     <property name="text">
-      <string>Massif</string>
+      <string>Contour</string>
      </property>
     </widget>
    </item>
@@ -43,9 +29,23 @@
     </widget>
    </item>
    <item>
-    <widget class="QCheckBox" name="show_contour">
+    <widget class="QCheckBox" name="show_mask">
      <property name="text">
-      <string>Contour</string>
+      <string>Mask</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="show_data">
+     <property name="text">
+      <string>Data</string>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QCheckBox" name="show_massif">
+     <property name="text">
+      <string>Massif</string>
      </property>
     </widget>
    </item>
