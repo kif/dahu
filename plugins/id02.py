@@ -21,6 +21,7 @@ Plugins for ID02:
 
 * Distortion correction
 * Metadata saving (C216)
+* 
 """
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
@@ -122,7 +123,7 @@ class Distortion(Plugin):
             detector = pyFAI.detectors.Detector(splineFile=spline)
         else:
             self.log_error("No spline file %s" % spline, do_raise=False)
-            detector=None
+            detector = None
         method = self.input.get("method", "lut")
         device = self.input.get("device", None)
         workgroup = self.input.get("workgroup", 8)
@@ -140,7 +141,7 @@ class Distortion(Plugin):
         else:
             for i in range(self.input_ds.shape[0]):
                 self.output_ds[i] = self.input_ds[i]
-                
+
     def teardown(self):
         if self.input_ds:
             self.input_ds.file.close()
@@ -153,25 +154,43 @@ class Metadata(Plugin):
     """
     Plugin in charge of retrieving all metadata for ID02 and storing them into a HDF5 file
 
+
+    NOTA: pin number are 1-based (I0, I1, time)
+
     Structure of the input data:
-        {
-        "hdf5_filename":"/tmp/metadata.h5"
+input = {
+        "hdf5_filename":"/nobackup/lid02gpu11/metadata/test.h5",
         "entry": "entry",
-        "instrument":"id02"
-        "c216":"id02/c216/0"
-        "HS32F": [1e-06, 1, 7763480, 8176290, 342239, 967341, 5541980, ...],
-        "HS32Z": [0, 0, 383.55, ...],
-        "HS32N": ["TIME","AUX1", "PIN41", ]
-        "HSI0": ...,
-        "HSI1": ...,
-        "HSTime": ...,
-        
+        "instrument":"id02",
+        "c216":"id02/c216/0",
+        "HS32F": [1e-06, 1, 7763480, 8176290, 342239, 967341, 5541980, 1739160, 2753.61, 1351920, 140000000, 16719500, 1, 0.000995868, 0.000995868, 1],
+        "HS32Z": [0, 0, 383.55, 126.4, 6582.1, 6973.6, 162.95, 0, 221.2, 207.8, 315.26, 145.11, 323.76, 170, 170, 228.4],
+        "HS32N": ["TIME", "AUX1", "PIN41", "PIN42", "PIN5", "PIN6", "PIN7", "PIN8", "PIN1", "PIN2", "PIN3", "PIN4", "AUX2", "THC1", "THC2", "PRESS"],
+        "HSI0": 12,
+        "HSI1": 7,
+        "HSTime": 1,
+        "HMStartEpoch": 1405087717.12159,
+        "HMStartTime": "2014-07-11T16:08:37.121591+0200",
+        "info": {"DetectorInfo":"VxH:detbox=14952.235x0.000x1.000,dettab=-62.000x-245.000",
+                 "ExperimentInfo":"0",
+                 "MachineInfo": "Ie=183.27mA,u35u=100.000mm/0.001mm,u21m=100.000mm/0.000mm,u21d=100.000mm/-0.000mm",
+                 "MirrorInfo": "rz=-3.600mrad,ty=0.455mm,ty1=2.075mm,ty2=-1.165mm,tz1=-0.030mm,tz2=-0.090mm,mir2rz=2.000mrad",
+                 "OpticsInfo": "egy=12460.0eV,theta=9.132deg,hgt=11.7mm,tilt=4.440deg,tra=1.963mm",
+                 "ProposalInfo": 0,
+                 "StationInfo": "ID02"
+                 }
         }
-    
-   ID02META_GENERAL["DetectorInfo"] = "VxH:detbox=14952.235x0.000x1.000,dettab=-62.000x-245.000"
+
+"""
+
+
+
+
+
+
+    """       
+ID02META_GENERAL["DetectorInfo"] = "VxH:detbox=14952.235x0.000x1.000,dettab=-62.000x-245.000"
 ID02META_GENERAL["ExperimentInfo"] = 0
-ID02META_GENERAL["HMStartEpoch"] = 1405087717.12159
-ID02META_GENERAL["HMStartTime"] = "2014-07-11T16:08:37.121591+0200"
 ID02META_GENERAL["HS32Depth"] = 32
 ID02META_GENERAL["HS32F01"] = 1e-06
 ID02META_GENERAL["HS32F02"] = 1
@@ -188,7 +207,7 @@ ID02META_GENERAL["HS32F12"] = 16719500
 ID02META_GENERAL["HS32F13"] = 1
 ID02META_GENERAL["HS32F14"] = 0.000995868
 ID02META_GENERAL["HS32F15"] = 0.000995868
-ID02META_GENERAL["HS32F16"] = 1
+ID02META_GENERAL["HS32F16"] = 1          
 ID02META_GENERAL["HS32Len"] = 16
 ID02META_GENERAL["HS32N01"] = "TIME"
 ID02META_GENERAL["HS32N02"] = "AUX1"
@@ -233,55 +252,6 @@ ID02META_GENERAL["StationInfo"] = "ID02"
 ID02META_GENERAL_NAME = "ID02META_GENERAL"
 
 
-######
-###  meta-data to DahuDS for saving with C216 data to hdf5
-###
-###
-Pass to DahuDS server metat-data from ID02META_GENERAL:
-
-startJob cmd with argin[0]="id02.metadata" argin[1] = "{  ......}"
-
-  Plugin in charge of retrieving all metadata for ID02 and storing them into a HDF5 file
-
-    Structure of the input data:
-        {
-        "hdf5_filename":"/tmp/metadata.h5"
-        "entry": "entry",
-        "instrument":"id02"
-        "c216":"id02/c216/0"
-        "HS32F": [1e-06, 1, 7763480, 8176290, 342239, 967341, 5541980, ...],
-        "HS32Z": [0, 0, 383.55, ...],
-        "HS32N": ["TIME","AUX1", "PIN41", ]
-        "HSI0": ...,
-        "HSI1": ...,
-        "HSTime": ...,
-        
-        }
-
-
-
-
-18.FRELON> syms -v ID02*STATIC**
-
-ID02META_STATIC_NAME["frelon"] = "ID02META_STATIC_frelon"
-ID02META_STATIC_NAME["saxs"] = "ID02META_STATIC_saxs"
-ID02META_STATIC_frelon["BSize_1"] = 0
-ID02META_STATIC_frelon["BSize_2"] = 0
-ID02META_STATIC_frelon["Center_1"] = 0
-ID02META_STATIC_frelon["Center_2"] = 0
-ID02META_STATIC_frelon["DDummy"] = 0
-ID02META_STATIC_frelon["DetectorName"] = 0
-ID02META_STATIC_frelon["DetectorPosition"] = 14.9522
-ID02META_STATIC_frelon["Dummy"] = 0
-ID02META_STATIC_frelon["Offset_1"] = 0
-ID02META_STATIC_frelon["Offset_2"] = 0
-ID02META_STATIC_frelon["PSize_1"] = 0
-ID02META_STATIC_frelon["PSize_2"] = 0
-ID02META_STATIC_frelon["RasterOrientation"] = 0
-ID02META_STATIC_frelon["SampleDistance"] = 14.9522
-ID02META_STATIC_frelon["SaxsDataVersion"] = "saxs_data_version"
-ID02META_STATIC_frelon["Title"] = 0
-ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
 
 19.FRELON> syms -v ID02*STATIC**
 
@@ -304,12 +274,6 @@ ID02META_STATIC_frelon["SampleDistance"] = 14.9522
 ID02META_STATIC_frelon["SaxsDataVersion"] = "saxs_data_version"
 ID02META_STATIC_frelon["Title"] = 0
 ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
-
-####
-## meta-data to be saved with detector images in hdf5 files
-## use LIMA common header 
-###
-
  
     """
     def __init__(self):
@@ -370,6 +334,16 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
         self.mcs_grp.attrs["NX_class"] = "NXcollection"
         self.mcs_grp["device"] = numpy.string_(self.c216)
 
+        # Static metadata
+        self.info_grp = self.hdf5.require_group(posixpath.join(self.instrument, "Information"))
+        self.info_grp.attrs["NX_class"] = "NXcollection"
+#        fields = ("MachineInfo", "OpticsInfo", "ProposalInfo", "StationInfo", "DetectorInfo", "ExperimentInfo") + \
+#                 self.input.get("info", ())
+        for field, value in self.input.get("info", {}).iteritems():
+            self.info_grp[field] = numpy.string_(value)
+
+        start_time = self.input.get("HMStartTime", get_isotime())
+
         # Factor
         HS32F = self.input.get("HS32F")
         if HS32F is not None:
@@ -381,16 +355,17 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
         # Name
         HS32N = self.input.get("HS32N")
         if HS32N is not None:
-            self.mcs_grp["HS32N"] = HS32N
+            self.mcs_grp["HS32N"] = [str(i) for i in HS32N]
         # Mode
         HS32M = self.input.get("HS32M")
         if HS32M is not None:
             self.mcs_grp["HS32M"] = HS32M
-        if HS32N and HS32Z and HS32F and HS32M:
+
+        if HS32N and HS32Z and HS32F:
             self.mcs_grp.require_group("interpreted")
         self.group.parent["title"] = numpy.string_("id02.metadata")
         self.group.parent["program"] = numpy.string_("Dahu")
-        self.group.parent["start_time"] = numpy.string_(get_isotime())
+        self.group.parent["start_time"] = numpy.string_(start_time)
 
     def read_c216(self):
         """
@@ -434,11 +409,52 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
         raw_scalers.shape = frames, -1
         counters = raw_scalers.shape[1]
         self.mcs_grp["HS32C"] = raw_scalers
+        if "HSTime" in self.input:
+            pin = int(self.input["HSTime"])
+            if pin > counters:
+                self.log_error("invalid pin number %s" % pin)
+            self.mcs_grp["HSTime"] = pin
+            self.mcs_grp["HSTime"].attrs["interpretation"] = "scalar"
+            self.mcs_grp["HSTime"].attrs["counter"] = "1-based pin number"
+            pin -= 1  # 1 based pin number
+            time_counter = raw_scalers[:, pin]
+            if "HS32F" in self.mcs_grp:
+                factor = self.mcs_grp["HS32F"][pin]
+            else:
+                self.log_error("No factors provided for time measurement: defaulting to 1e-6", False)
+                factor = 1e-6
+            measured_time = time_counter * factor
+            self.mcs_grp["meas_time"] = measured_time
+            self.mcs_grp["meas_time"].attrs["interpretation"] = "scalar"
+        else:
+            self.log_error("No HSTime pin number, using TFG time")
+            measured_time = tfg[1::2]
+
+        if ("HS32F" in self.mcs_grp) and ("HS32Z" in self.mcs_grp):
+            for I in ("HSI0", "HSI1"):
+                if I in self.input:
+                    pin = int(self.input[I])
+                    if pin > counters:
+                        self.log_error("invalid pin number %s" % pin)
+                    self.mcs_grp[I] = pin
+                    self.mcs_grp[I].attrs["interpretation"] = "scalar"
+                    self.mcs_grp[I].attrs["counter"] = "1-based pin number"
+                    pin -= 1  # 1 based pin number
+                    counter = raw_scalers[:, pin]
+                    factor = self.mcs_grp["HS32F"][pin]
+                    zero = self.mcs_grp["HS32Z"][pin]
+                    measured = (counter - measured_time * zero) * factor
+                    self.mcs_grp[I[2:]] = measured
+                    self.mcs_grp[I[2:]].attrs["interpretation"] = "scalar"
+        else:
+            self.log_error("Not factor/zero to calculate I0/I1", True)
 
         if "interpreted" in self.mcs_grp:
             modes = numpy.zeros(counters, dtype=numpy.int32)
-            raw_modes = numpy.array(self.mcs_grp["HS32M"])
-            modes[:raw_modes.size] = raw_modes
+            if "HS32M" in self.mcs_grp:
+                raw_modes = numpy.array(self.mcs_grp["HS32M"])
+                modes[:raw_modes.size] = raw_modes
+            # else: mode=0
             values = numpy.zeros((frames, counters), dtype=numpy.float32)
             exptime = numpy.outer(tfg[1::2], numpy.ones(counters))
             zero = numpy.outer(numpy.ones(frames), numpy.array(self.mcs_grp["HS32Z"]))
@@ -463,6 +479,14 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
             self.hdf5.close()
         Plugin.teardown(self)
 
+@register
+class BlaBla(Plugin):
+    """
+    This plugin does all processing needed
+    input = { save = {"raw", "dark", "flat", "distortion", "normalization",  
+    """
+    def __init__(self):
+        Plugin.__init__(self)
 
 if __name__ == "__main__":
     p = Distortion()
