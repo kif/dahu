@@ -479,11 +479,79 @@ ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
             self.hdf5.close()
         Plugin.teardown(self)
 
+
+
 @register
-class BlaBla(Plugin):
+class SingleDetector(Plugin):
     """
-    This plugin does all processing needed
-    input = { save = {"raw", "dark", "flat", "distortion", "normalization",  
+    This plugin does all processing needed for a single camera
+    input = { "DetectorName": pilatus,
+              "filename": "/nobackup/lid02gpu11/....h5"
+              "hdf5": "/entry_0000/id02/data
+              "output_dir: "/nobackup/lid02gpu12",
+              "PSize_1": 60e-6,
+              "PSize_2"60e-6,
+              "BSize_1":1
+              "BSize_2":1
+              "Center_1":512
+              "Center_2":512
+              "DDummy":1
+              "SampleDistance":14.9522
+              ?"DetectorPosition"
+              "WaveLength": 9.95058e-11,
+              "Dummy":-10,
+              "output_dir: "/nobackup/lid02gpu12",
+              "save": ["raw", "dark", "flat", "dist", "norm", "azim", "ave"]
+              }  
+    """
+    def __init__(self):
+        Plugin.__init__(self)
+        self.ai = None
+        self.workers = []
+        self.writers
+
+    def setup(self, kwargs=None):
+        """
+        see class documentation
+        """
+        Plugin.setup(self, kwargs)
+        self.c216 = self.input.get("c216", "id02/c216/0")
+        self.cycle = self.input.get("cycle", 1)
+        if "hdf5_filename" not in self.input:
+            self.log_error("hdf5_filename not in input")
+        self.hdf5_filename = self.input.get("hdf5_filename")
+        self.entry = self.input.get("entry", "entry")
+        self.instrument = self.input.get("instrument", "id02")
+
+    def process(self):
+        self.create_hdf5()
+        self.read_c216()
+
+    def copy_metadata(self):
+        """
+        Copy all metadata from  
+        """
+
+    """
+ID02META_STATIC_NAME["frelon"] = "ID02META_STATIC_frelon"
+ID02META_STATIC_NAME["saxs"] = "ID02META_STATIC_saxs"
+ID02META_STATIC_frelon["BSize_1"] = 0
+ID02META_STATIC_frelon["BSize_2"] = 0
+ID02META_STATIC_frelon["Center_1"] = 0
+ID02META_STATIC_frelon["Center_2"] = 0
+ID02META_STATIC_frelon["DDummy"] = 0
+ID02META_STATIC_frelon["DetectorName"] = 0
+ID02META_STATIC_frelon["DetectorPosition"] = 14.9522
+ID02META_STATIC_frelon["Dummy"] = 0
+ID02META_STATIC_frelon["Offset_1"] = 0
+ID02META_STATIC_frelon["Offset_2"] = 0
+ID02META_STATIC_frelon["PSize_1"] = 0
+ID02META_STATIC_frelon["PSize_2"] = 0
+ID02META_STATIC_frelon["RasterOrientation"] = 0
+ID02META_STATIC_frelon["SampleDistance"] = 14.9522
+ID02META_STATIC_frelon["SaxsDataVersion"] = "saxs_data_version"
+ID02META_STATIC_frelon["Title"] = 0
+ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
     """
     def __init__(self):
         Plugin.__init__(self)
