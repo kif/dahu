@@ -3,13 +3,17 @@
 
 from __future__ import with_statement, print_function
 
-
 import PyTango
 import h5py
 import logging
 import numpy
+import os
+import posixpath
+import pyFAI
 import pyFAI.distortion
-import sys, os, time, posixpath
+import shutil
+import sys
+import time
 
 from dahu.factory import register
 from dahu.plugin import Plugin
@@ -486,52 +490,94 @@ class SingleDetector(Plugin):
     """
     This plugin does all processing needed for a single camera
     input = { "DetectorName": pilatus,
-              "filename": "/nobackup/lid02gpu11/....h5"
-              "hdf5": "/entry_0000/id02/data
+              "image_file": "/nobackup/lid02gpu11/FRELON/test_laurent_saxs_0000.h5"
+              #"entry": "entry_0000"
+              #"hdf5": "/entry_0000/id02/data
               "output_dir: "/nobackup/lid02gpu12",
-              "PSize_1": 60e-6,
-              "PSize_2"60e-6,
-              "BSize_1":1
-              "BSize_2":1
-              "Center_1":512
-              "Center_2":512
-              "DDummy":1
-              "SampleDistance":14.9522
-              ?"DetectorPosition"
+              "PSize_1": 2.4e-05,
+              "PSize_2" 2.4e-05,
+              "BSize_1":1,
+              "BSize_2":1,
+              "Center_1":512,
+              "Center_2":512,
+              "DDummy":1,
+              "SampleDistance":14.9522,
+              "c216_filename": "/nobackup/lid02gpu11/metadata/test.h5"
               "WaveLength": 9.95058e-11,
               "Dummy":-10,
-              "output_dir: "/nobackup/lid02gpu12",
-              "save": ["raw", "dark", "flat", "dist", "norm", "azim", "ave"]
+              "output_dir: "/nobackup/lid02gpu12/output",
+#              "do_dark":false,
+#              "do_flat":false,
+              "to_save": ["raw", "dark", "flat", "dist", "norm", "azim", "ave"]
               }  
     """
     def __init__(self):
         Plugin.__init__(self)
         self.ai = None
         self.workers = []
-        self.writers
+        self.input_datasets = None
+        self.dest = None    # output directory
+        self.I1 = None      # beam stop diode values
+        self.nframes = None
+        self.detector_name = None
+        self.to_save = ["raw", "ave"] #by default only raw image and averaged one is saved
+        self.input_nxs = None
 
     def setup(self, kwargs=None):
         """
         see class documentation
         """
         Plugin.setup(self, kwargs)
-        self.c216 = self.input.get("c216", "id02/c216/0")
-        self.cycle = self.input.get("cycle", 1)
-        if "hdf5_filename" not in self.input:
-            self.log_error("hdf5_filename not in input")
+        if "output_dir" not in self.input:
+            self.log_error("output_dir not in input")
+        self.dest = os.path.abspath(self.input["output_dir"])
+        if not os.path.isdir(self.dest):
+            os.makedirs(self.dest)
+        c216_filename = os.path.abspath(self.input.get("c216_filename", ""))
+        if os.path.dirname(c216_filename) != self.dest:
+            shutil.copy(c216_filename, self.dest)
+
+        if "save" in self.input:
+            self.to_save = self.input["to_save"]
+
+        if "image_file" not in self.input:
+            self.log_error("image_file not in input")
+        self.image_file = self.input["image_file"]
+        if not os.path.exists(self.image_file):
+            self.log_error("image_file %s does not exist" % self.image_file)
+        if "raw" in  self.to_save:
+            shutil.copy(self.image_file, self.dest)
+        if "DetectorName" in self.input:
+            self.detector_name = self.input["DetectorName"]
+
+
+
         self.hdf5_filename = self.input.get("hdf5_filename")
         self.entry = self.input.get("entry", "entry")
         self.instrument = self.input.get("instrument", "id02")
 
     def process(self):
+        self.parse_image_file()
         self.create_hdf5()
+
         self.read_c216()
+
+    def parse_image_file(self):
+
+        self.input_nxs = pyFAI.io.Nexus(self.image_file, "r")
+        if "entry" in self.input:
+            self.entry = self.input_nxs.get_entry(self.input["entry"])
+        else:
+            self.entry = self.input_nxs.get_entries[0] #take the last entry
+        instrument = self.input_nxs.get_class(self.entry, class_type="NXinstrument")
+        self.input_nxs.get_class(instrument, class_type="NXdetector")
+
 
     def copy_metadata(self):
         """
         Copy all metadata from  
         """
-
+        pass
     """
 ID02META_STATIC_NAME["frelon"] = "ID02META_STATIC_frelon"
 ID02META_STATIC_NAME["saxs"] = "ID02META_STATIC_saxs"
