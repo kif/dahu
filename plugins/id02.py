@@ -157,7 +157,8 @@ class Distortion(Plugin):
 class Metadata(Plugin):
     """
     Plugin in charge of retrieving all metadata for ID02 and storing them into a HDF5 file
-
+    
+    TODO: rewrite using Nexus class from pyFAI: shorter code
 
     NOTA: pin number are 1-based (I0, I1, time)
 
@@ -186,100 +187,6 @@ input = {
         }
 
 """
-
-
-
-
-
-
-    """       
-ID02META_GENERAL["DetectorInfo"] = "VxH:detbox=14952.235x0.000x1.000,dettab=-62.000x-245.000"
-ID02META_GENERAL["ExperimentInfo"] = 0
-ID02META_GENERAL["HS32Depth"] = 32
-ID02META_GENERAL["HS32F01"] = 1e-06
-ID02META_GENERAL["HS32F02"] = 1
-ID02META_GENERAL["HS32F03"] = 7763480
-ID02META_GENERAL["HS32F04"] = 8176290
-ID02META_GENERAL["HS32F05"] = 342239
-ID02META_GENERAL["HS32F06"] = 967341
-ID02META_GENERAL["HS32F07"] = 5541980
-ID02META_GENERAL["HS32F08"] = 1739160
-ID02META_GENERAL["HS32F09"] = 2753.61
-ID02META_GENERAL["HS32F10"] = 1351920
-ID02META_GENERAL["HS32F11"] = 140000000
-ID02META_GENERAL["HS32F12"] = 16719500
-ID02META_GENERAL["HS32F13"] = 1
-ID02META_GENERAL["HS32F14"] = 0.000995868
-ID02META_GENERAL["HS32F15"] = 0.000995868
-ID02META_GENERAL["HS32F16"] = 1          
-ID02META_GENERAL["HS32Len"] = 16
-ID02META_GENERAL["HS32N01"] = "TIME"
-ID02META_GENERAL["HS32N02"] = "AUX1"
-ID02META_GENERAL["HS32N03"] = "PIN41"
-ID02META_GENERAL["HS32N04"] = "PIN42"
-ID02META_GENERAL["HS32N05"] = "PIN5"
-ID02META_GENERAL["HS32N06"] = "PIN6"
-ID02META_GENERAL["HS32N07"] = "PIN7"
-ID02META_GENERAL["HS32N08"] = "PIN8"
-ID02META_GENERAL["HS32N09"] = "PIN1"
-ID02META_GENERAL["HS32N10"] = "PIN2"
-ID02META_GENERAL["HS32N11"] = "PIN3"
-ID02META_GENERAL["HS32N12"] = "PIN4"
-ID02META_GENERAL["HS32N13"] = "AUX2"
-ID02META_GENERAL["HS32N14"] = "THC1"
-ID02META_GENERAL["HS32N15"] = "THC2"
-ID02META_GENERAL["HS32N16"] = "PRESS"
-ID02META_GENERAL["HS32Z01"] = 0
-ID02META_GENERAL["HS32Z02"] = 0
-ID02META_GENERAL["HS32Z03"] = 383.55
-ID02META_GENERAL["HS32Z04"] = 126.4
-ID02META_GENERAL["HS32Z05"] = 6582.1
-ID02META_GENERAL["HS32Z06"] = 6973.6
-ID02META_GENERAL["HS32Z07"] = 162.95
-ID02META_GENERAL["HS32Z08"] = 0
-ID02META_GENERAL["HS32Z09"] = 221.2
-ID02META_GENERAL["HS32Z10"] = 207.8
-ID02META_GENERAL["HS32Z11"] = 315.26
-ID02META_GENERAL["HS32Z12"] = 145.11
-ID02META_GENERAL["HS32Z13"] = 323.76
-ID02META_GENERAL["HS32Z14"] = 170
-ID02META_GENERAL["HS32Z15"] = 170
-ID02META_GENERAL["HS32Z16"] = 228.4
-ID02META_GENERAL["HSI0"] = 12
-ID02META_GENERAL["HSI1"] = 7
-ID02META_GENERAL["HSTime"] = 1
-ID02META_GENERAL["MachineInfo"] = "Ie=183.27mA,u35u=100.000mm/0.001mm,u21m=100.000mm/0.000mm,u21d=100.000mm/-0.000mm"
-ID02META_GENERAL["MirrorInfo"] = "rz=-3.600mrad,ty=0.455mm,ty1=2.075mm,ty2=-1.165mm,tz1=-0.030mm,tz2=-0.090mm,mir2rz=2.000mrad"
-ID02META_GENERAL["OpticsInfo"] = "egy=12460.0eV,theta=9.132deg,hgt=11.7mm,tilt=4.440deg,tra=1.963mm"
-ID02META_GENERAL["ProposalInfo"] = 0
-ID02META_GENERAL["StationInfo"] = "ID02"
-ID02META_GENERAL_NAME = "ID02META_GENERAL"
-
-
-
-19.FRELON> syms -v ID02*STATIC**
-
-ID02META_STATIC_NAME["frelon"] = "ID02META_STATIC_frelon"
-ID02META_STATIC_NAME["saxs"] = "ID02META_STATIC_saxs"
-ID02META_STATIC_frelon["BSize_1"] = 0
-ID02META_STATIC_frelon["BSize_2"] = 0
-ID02META_STATIC_frelon["Center_1"] = 0
-ID02META_STATIC_frelon["Center_2"] = 0
-ID02META_STATIC_frelon["DDummy"] = 0
-ID02META_STATIC_frelon["DetectorName"] = 0
-ID02META_STATIC_frelon["DetectorPosition"] = 14.9522
-ID02META_STATIC_frelon["Dummy"] = 0
-ID02META_STATIC_frelon["Offset_1"] = 0
-ID02META_STATIC_frelon["Offset_2"] = 0
-ID02META_STATIC_frelon["PSize_1"] = 0
-ID02META_STATIC_frelon["PSize_2"] = 0
-ID02META_STATIC_frelon["RasterOrientation"] = 0
-ID02META_STATIC_frelon["SampleDistance"] = 14.9522
-ID02META_STATIC_frelon["SaxsDataVersion"] = "saxs_data_version"
-ID02META_STATIC_frelon["Title"] = 0
-ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
- 
-    """
     def __init__(self):
         Plugin.__init__(self)
         self.cycle = None
@@ -508,20 +415,41 @@ class SingleDetector(Plugin):
               "output_dir: "/nobackup/lid02gpu12/output",
 #              "do_dark":false,
 #              "do_flat":false,
+              "npt2_azim": 360,
+              "npt2_rad" : 500,
+              "npt1_rad" : 1000,
               "to_save": ["raw", "dark", "flat", "dist", "norm", "azim", "ave"]
               }  
     """
+    KEY_CONV = {"BSize": int,
+                "Offset": int,
+                "RasterOrientation": int,
+                "Center": float,
+                "DDummy": float,
+                "Dummy": float,
+                "PSize": float,
+                "SampleDistance": float,
+                "Wavelength": float,
+                "Rot": float
+                }
+
+    KEYS = ("BSize_1", "BSize_2", "Center_1", "Center_2", "DDummy", "DetectorName",
+            "Dummy", "Offset_1", "Offset_2", "PSize_1", "PSize_2",
+            "Rot_1", "Rot_2", "Rot_3",
+            "RasterOrientation", "SampleDistance", "SaxsDataVersion", "Title", "WaveLength")
+
     def __init__(self):
         Plugin.__init__(self)
         self.ai = None
         self.workers = []
-        self.input_datasets = None
+        self.output_ds = [] #output datasets
         self.dest = None    # output directory
         self.I1 = None      # beam stop diode values
         self.nframes = None
-        self.detector_name = None
-        self.to_save = ["raw", "ave"] #by default only raw image and averaged one is saved
+        self.to_save = ["raw", "ave"]  # by default only raw image and averaged one is saved
         self.input_nxs = None
+        self.images_ds = None
+        self.metadata = {}
 
     def setup(self, kwargs=None):
         """
@@ -545,24 +473,36 @@ class SingleDetector(Plugin):
         self.image_file = self.input["image_file"]
         if not os.path.exists(self.image_file):
             self.log_error("image_file %s does not exist" % self.image_file)
-        if "raw" in  self.to_save:
+        if "raw" in self.to_save:
             shutil.copy(self.image_file, self.dest)
-        if "DetectorName" in self.input:
-            self.detector_name = self.input["DetectorName"]
-
-
 
         self.hdf5_filename = self.input.get("hdf5_filename")
         self.entry = self.input.get("entry", "entry")
         self.instrument = self.input.get("instrument", "id02")
 
     def process(self):
-        self.parse_image_file()
+        self.metadata = self.parse_image_file()
+        #update all metadata with the one provided by input
+        for key, value in self.input.iteritems():
+            if key in self.KEYS:
+                self.metadata[key] = value
+        forai = {}
+        for key in ("BSize_1", "BSize_2", "Center_1", "Center_2",
+                    "PSize_1", "PSize_2", "Rot_1", "Rot_2", "Rot_3",
+                    "SampleDistance", "WaveLength"):
+            forai[key] = self.metadata.get(key)
+        self.ai = pyFAI.AzimuthalIntegrator()
+        self.ai.setSPD(**forai)
+        
         self.create_hdf5()
+        self.process_images()
 
-        self.read_c216()
 
     def parse_image_file(self):
+        """
+        @return: dict with interpreted metadata
+        """
+        metadata = {}
 
         self.input_nxs = pyFAI.io.Nexus(self.image_file, "r")
         if "entry" in self.input:
@@ -570,37 +510,94 @@ class SingleDetector(Plugin):
         else:
             self.entry = self.input_nxs.get_entries[0] #take the last entry
         instrument = self.input_nxs.get_class(self.entry, class_type="NXinstrument")
-        self.input_nxs.get_class(instrument, class_type="NXdetector")
+        detector_grp = self.input_nxs.get_class(instrument, class_type="NXdetector")
+        if detector_grp is None and "detector" in instrument:
+            detector_grp = instrument["detector"]
+        self.images_ds = detector_grp.get("data")
+        if "detector_information" in detector_grp:
+            detector_information = detector_grp["detector_information"]
+            if "name" in detector_information:
+                metadata["DetectorName"] = str(detector_information["name"])
+        #now read an interpret all static metadata.
+        #metadata are on the collection side not instrument
+        collection = self.input_nxs.get_class(self.entry, class_type="NXcollection")
+        detector_grp = self.input_nxs.get_class(collection, class_type="NXdetector")
+        if detector_grp is None and "detector" in collection:
+            detector_grp = collection["detector"]
+        if not detector_grp: 
+            return {}
+        if "parameters" in detector_grp:
+            parameters_grp = detector_grp["parameters"]
+        else:
+            return {}
 
+        for key, value in parameters_grp.iteritems():
+            base = key.split("_")[0] 
+            conv = self.KEY_CONV.get(base,str)
+            metadata[key] = conv(value)
+        return metadata
+            
+    def create_hdf5(self):
+        """
+        Create one HDF5 file per output
+        """
+        for ext in self.to_save:
+            outfile = os.path.join(self.dest, "%s_%s.h5" % (self.metadata["DetectorName"], ext))
+            nxs = pyFAI.io.Nexus(outfile, "a")
+            entry = nxs.new_entry("entry")
+            subentry = nxs.new_class(entry, "pyFAI", class_type="NXsubentry")
+            subentry["definition_local"] = numpy.string_("PyFAI")
+            coll = nxs.new_class(subentry, "process_" + ext, class_type="NXcollection")
+            metadata_grp = coll.require_group("metadata")
+            for key, val in self.metadata:
+                if type(val) in [str, unicode]:
+                    metadata_grp[key] = numpy.string_(val)
+                else:
+                    metadata_grp[key] = val
+            if ext in ("raw", "dark", "flat", "cor", "norm"):
+                shape = self.images_ds.shape
+            elif ext == "azim":
+                shape = (self.images_ds.shape[0], self.input.get("npt2_azim", 360), self.input.get("npt2_rad", 500))
+            elif ext == "ave":
+                shape = (self.images_ds.shape[0], self.input.get("npt1_rad", 1000))
+            output_ds = coll.create_dataset("data", shape, "float32",
+                                            chunks=(1,) + shape[1:],
+                                            maxshape=(None,) + shape[1:])
+            output_ds.attrs["NX_class"] = "NXdata"
+            if ext == "ave":
+                output_ds.attrs["interpretation"] = "spectrum"
+            else:
+                output_ds.attrs["interpretation"] = "image"
+            self.output_ds.append(output_ds)
 
-    def copy_metadata(self):
+    def process_images(self):
         """
-        Copy all metadata from  
+        Here we process images....
         """
-        pass
-    """
-ID02META_STATIC_NAME["frelon"] = "ID02META_STATIC_frelon"
-ID02META_STATIC_NAME["saxs"] = "ID02META_STATIC_saxs"
-ID02META_STATIC_frelon["BSize_1"] = 0
-ID02META_STATIC_frelon["BSize_2"] = 0
-ID02META_STATIC_frelon["Center_1"] = 0
-ID02META_STATIC_frelon["Center_2"] = 0
-ID02META_STATIC_frelon["DDummy"] = 0
-ID02META_STATIC_frelon["DetectorName"] = 0
-ID02META_STATIC_frelon["DetectorPosition"] = 14.9522
-ID02META_STATIC_frelon["Dummy"] = 0
-ID02META_STATIC_frelon["Offset_1"] = 0
-ID02META_STATIC_frelon["Offset_2"] = 0
-ID02META_STATIC_frelon["PSize_1"] = 0
-ID02META_STATIC_frelon["PSize_2"] = 0
-ID02META_STATIC_frelon["RasterOrientation"] = 0
-ID02META_STATIC_frelon["SampleDistance"] = 14.9522
-ID02META_STATIC_frelon["SaxsDataVersion"] = "saxs_data_version"
-ID02META_STATIC_frelon["Title"] = 0
-ID02META_STATIC_frelon["WaveLength"] = 9.95058e-11
-    """
-    def __init__(self):
-        Plugin.__init__(self)
+        for i in range(self.input_ds.shape[0]):
+            data = self.input_ds[i]
+            for meth, ds in zip(self.to_save, self.output_ds):
+                res = None
+                if meth == "dark":
+                    pass #TODO
+                if meth == "flat":
+                    pass #TODO
+                if meth == "cor":
+                    pass #TODO
+                if meth == "norm":
+                    pass #TODO
+                if meth == "azim":
+                    pass #TODO
+                if meth == "ave":
+                    pass #TODO
+                ds[i] = res
+
+    def teardown(self):
+        if self.input_ds:
+            self.input_ds.file.close()
+        for ds in self.output_ds: 
+            ds.file.close()
+        self.ai = None
 
 if __name__ == "__main__":
     p = Distortion()

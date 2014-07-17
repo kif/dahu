@@ -136,6 +136,7 @@ def plugin_from_function(function):
     class_name = function.__module__ + "." + function.__name__
     klass = type(class_name, (PluginFromFunction,),
                  {'function' : staticmethod(function)})
+    klass.__doc__ = function.__doc
     plugin_factory.register(klass, class_name)
     return class_name
 
