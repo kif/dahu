@@ -25,15 +25,15 @@ Plugins for ID02:
 
 * Distortion correction
 * Metadata saving (C216)
-* 
+* single detector prcessing
 """
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/072014"
+__date__ = "18/07/2014"
 __status__ = "development"
-version = "0.2"
+version = "0.3"
 
 logger = logging.getLogger("dahu.id02")
 
@@ -497,7 +497,6 @@ class SingleDetector(Plugin):
         self.create_hdf5()
         self.process_images()
 
-
     def parse_image_file(self):
         """
         @return: dict with interpreted metadata
@@ -598,6 +597,8 @@ class SingleDetector(Plugin):
         for ds in self.output_ds: 
             ds.file.close()
         self.ai = None
+
+
 
 if __name__ == "__main__":
     p = Distortion()
