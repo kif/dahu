@@ -537,7 +537,16 @@ class SingleDetector(Plugin):
                 metadata["DetectorName"] = str(detector_information["name"])
         #now read an interpret all static metadata.
         #metadata are on the collection side not instrument
-        collection = self.input_nxs.get_class(self.entry, class_type="NXcollection")
+        collections = self.input_nxs.get_class(self.entry, class_type="NXcollection")
+        if len(collections) == 1:
+            collection = collections[0]
+        else:
+            if len(collections) >= 1:
+                collection = collections[0]
+            else:
+                self.logg_error("exectly ONE collections is expected in entry, got %s in %s %s" %
+                            (len(collections), self.input_nxs, self.entry))
+
         detector_grp = self.input_nxs.get_class(collection, class_type="NXdetector")
         if detector_grp is None and "detector" in collection:
             detector_grp = collection["detector"]
