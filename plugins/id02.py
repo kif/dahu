@@ -398,11 +398,11 @@ input = {
 class SingleDetector(Plugin):
     """
     This plugin does all processing needed for a single camera
-    input = { "DetectorName": pilatus,
-              "image_file": "/nobackup/lid02gpu11/FRELON/test_laurent_saxs_0000.h5"
+    input = { "DetectorName": "rayonix",
+              "image_file": "/nobackup/lid02gpu11/FRELON/test_laurent_saxs_0000.h5",
               #"entry": "entry_0000"
-              #"hdf5": "/entry_0000/id02/data
-              "output_dir: "/nobackup/lid02gpu12",
+              #"hdf5": "/entry_0000/id02/data,
+              "output_dir": "/nobackup/lid02gpu12",
               "PSize_1": 2.4e-05,
               "PSize_2" 2.4e-05,
               "BSize_1":1,
