@@ -41,3 +41,6 @@ while dahu.getJobState(pid) not in ["success", "failure"]:
     time.sleep(1)
 print("output:")
 print(dahu.getJobOutput(pid))
+if dahu.getJobState(pid) == "failure":
+    print("Error:")
+    print(dahu.getJobError(pid))
