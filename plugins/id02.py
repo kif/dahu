@@ -517,9 +517,19 @@ class SingleDetector(Plugin):
         else:
             self.entry = self.input_nxs.get_entries()[0] #take the last entry
         instrument = self.input_nxs.get_class(self.entry, class_type="NXinstrument")
+        if len(instrument) == 1:
+            instrument = instrument[0]
+        else:
+            self.logg_error("exectly ONE instrument is expected in entry, got %s in %s %s" %
+                            (len(instrument), self.input_nxs, self.entry))
         detector_grp = self.input_nxs.get_class(instrument, class_type="NXdetector")
-        if detector_grp is None and "detector" in instrument:
+        if len(detector_grp) == 1:
+            detector_grp = detector_grp[0]
+        elif len(detector_grp) == 0 and "detector" in instrument:
             detector_grp = instrument["detector"]
+        else:
+            self.logg_error("exectly ONE deteector is expected in experiment, got %s in %s %s %s" %
+                            (len(detector_grp), self.input_nxs, self.entry, instrument))
         self.images_ds = detector_grp.get("data")
         if "detector_information" in detector_grp:
             detector_information = detector_grp["detector_information"]
