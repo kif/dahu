@@ -391,7 +391,9 @@ input = {
         Plugin.teardown(self)
 
 
-
+################################################################################
+# Single Detector plugin
+################################################################################
 @register
 class SingleDetector(Plugin):
     """
@@ -441,8 +443,8 @@ class SingleDetector(Plugin):
     def __init__(self):
         Plugin.__init__(self)
         self.ai = None
-        self.workers = []
-        self.output_ds = [] #output datasets
+        self.workers = {}
+        self.output_ds = {} #output datasets
         self.dest = None    # output directory
         self.I1 = None      # beam stop diode values
         self.nframes = None
@@ -453,6 +455,8 @@ class SingleDetector(Plugin):
         self.npt1_rad = None
         self.npt2_rad = None
         self.npt2_azim = None
+        self.dark = None
+        self.flat = None
 
     def setup(self, kwargs=None):
         """
@@ -543,6 +547,7 @@ class SingleDetector(Plugin):
     def create_hdf5(self):
         """
         Create one HDF5 file per output
+        Also initialize workers
         """
         in_shape = self.images_ds.shape
 
@@ -575,6 +580,9 @@ class SingleDetector(Plugin):
                     chi = self.ai.chiArray(in_shape[-2:])
                     self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
                 shape = (in_shape[0], self.npt2_azim, self.npt2_rad)
+                ai = pyFAI.AzimuthalIntegrator()
+                ai.setPyFAI(**ai.getPyFAI())
+                self.workers[ext] = ai
             elif ext == "ave":
                 if "npt1_rad" in self.input:
                     self.npt1_rad = int(self.input["npt1_rad"])
@@ -583,6 +591,11 @@ class SingleDetector(Plugin):
                     dqmin = self.ai.deltaQ(in_shape[-2:]).min() * 2.0
                     self.npt1_rad = int(qmax / dqmin)
                 shape = (in_shape[0], self.npt1_rad)
+                worker = pyFAI.worker.Worker(self.ai, in_shape[-2:], (1, self.npt1_rad), "q_nm-1")
+                worker.output = "numpy"
+                worker.setFlatfieldFile(self.flat)
+                worker.setlatfieldFile(self.dark)
+                self.workers[ext] = worker
             output_ds = coll.create_dataset("data", shape, "float32",
                                             chunks=(1,) + shape[1:],
                                             maxshape=(None,) + shape[1:])
@@ -591,7 +604,7 @@ class SingleDetector(Plugin):
                 output_ds.attrs["interpretation"] = "spectrum"
             else:
                 output_ds.attrs["interpretation"] = "image"
-            self.output_ds.append(output_ds)
+            self.output_ds[ext] = output_ds
 
     def process_images(self):
         """
@@ -599,8 +612,9 @@ class SingleDetector(Plugin):
         """
         for i in range(self.input_ds.shape[0]):
             data = self.input_ds[i]
-            for meth, ds in zip(self.to_save, self.output_ds):
+            for meth in self.to_save:
                 res = None
+                ds = self.output_ds[meth]
                 if meth == "dark":
                     pass  #  TODO
                 if meth == "flat":
@@ -610,9 +624,18 @@ class SingleDetector(Plugin):
                 if meth == "norm":
                     pass  #  TODO
                 if meth == "azim":
-                    pass  #TODO
+                    res = self.workers[meth].process(data)
+                    res = res[:, 1]
+                    if "q" not in ds.group:
+                        self.workers[meth].radial
+                    if "chi" not in ds.group:
+                        self.workers[meth].azimuthal
                 if meth == "ave":
-                    pass  #TODO
+                    res = self.workers[meth].process(data)
+                    if "q" not in ds.group:
+                        self.workers[meth].radial
+                    res = res[:, 1]
+#                    res/=NORMALIZATION_FACTOR
                 ds[i] = res
 
     def teardown(self):
