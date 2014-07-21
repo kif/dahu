@@ -515,7 +515,7 @@ class SingleDetector(Plugin):
         if "entry" in self.input:
             self.entry = self.input_nxs.get_entry(self.input["entry"])
         else:
-            self.entry = self.input_nxs.get_entries[0] #take the last entry
+            self.entry = self.input_nxs.get_entries()[0] #take the last entry
         instrument = self.input_nxs.get_class(self.entry, class_type="NXinstrument")
         detector_grp = self.input_nxs.get_class(instrument, class_type="NXdetector")
         if detector_grp is None and "detector" in instrument:
