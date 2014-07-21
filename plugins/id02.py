@@ -31,7 +31,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "18/07/2014"
+__date__ = "21/07/2014"
 __status__ = "development"
 version = "0.3"
 
@@ -450,6 +450,9 @@ class SingleDetector(Plugin):
         self.input_nxs = None
         self.images_ds = None
         self.metadata = {}
+        self.npt1_rad = None
+        self.npt2_rad = None
+        self.npt2_azim = None
 
     def setup(self, kwargs=None):
         """
@@ -494,6 +497,7 @@ class SingleDetector(Plugin):
         self.ai = pyFAI.AzimuthalIntegrator()
         self.ai.setSPD(**forai)
         
+
         self.create_hdf5()
         self.process_images()
 
@@ -540,6 +544,8 @@ class SingleDetector(Plugin):
         """
         Create one HDF5 file per output
         """
+        in_shape = self.images_ds.shape
+
         for ext in self.to_save:
             outfile = os.path.join(self.dest, "%s_%s.h5" % (self.metadata["DetectorName"], ext))
             nxs = pyFAI.io.Nexus(outfile, "a")
@@ -554,11 +560,29 @@ class SingleDetector(Plugin):
                 else:
                     metadata_grp[key] = val
             if ext in ("raw", "dark", "flat", "cor", "norm"):
-                shape = self.images_ds.shape
+                shape = in_shape
             elif ext == "azim":
-                shape = (self.images_ds.shape[0], self.input.get("npt2_azim", 360), self.input.get("npt2_rad", 500))
+                if "npt2_rad" in self.input:
+                    self.npt2_rad = int(self.input["npt2_rad"])
+                else:
+                    qmax = self.ai.qArray(in_shape[-2:]).max()
+                    dqmin = self.ai.deltaQ(in_shape[-2:]).min() * 2.0
+                    self.npt2_rad = int(qmax / dqmin)
+
+                if "npt2_azim" in self.input:
+                    self.npt2_azim = int(self.input["npt2_rad"])
+                else:
+                    chi = self.ai.chiArray(in_shape[-2:])
+                    self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
+                shape = (in_shape[0], self.npt2_azim, self.npt2_rad)
             elif ext == "ave":
-                shape = (self.images_ds.shape[0], self.input.get("npt1_rad", 1000))
+                if "npt1_rad" in self.input:
+                    self.npt1_rad = int(self.input["npt1_rad"])
+                else:
+                    qmax = self.ai.qArray(in_shape[-2:]).max()
+                    dqmin = self.ai.deltaQ(in_shape[-2:]).min() * 2.0
+                    self.npt1_rad = int(qmax / dqmin)
+                shape = (in_shape[0], self.npt1_rad)
             output_ds = coll.create_dataset("data", shape, "float32",
                                             chunks=(1,) + shape[1:],
                                             maxshape=(None,) + shape[1:])
@@ -578,17 +602,17 @@ class SingleDetector(Plugin):
             for meth, ds in zip(self.to_save, self.output_ds):
                 res = None
                 if meth == "dark":
-                    pass #TODO
+                    pass  #  TODO
                 if meth == "flat":
-                    pass #TODO
+                    pass  #  TODO
                 if meth == "cor":
-                    pass #TODO
+                    pass  #  TODO
                 if meth == "norm":
-                    pass #TODO
+                    pass  #  TODO
                 if meth == "azim":
-                    pass #TODO
+                    pass  #TODO
                 if meth == "ave":
-                    pass #TODO
+                    pass  #TODO
                 ds[i] = res
 
     def teardown(self):
@@ -597,7 +621,6 @@ class SingleDetector(Plugin):
         for ds in self.output_ds: 
             ds.file.close()
         self.ai = None
-
 
 
 if __name__ == "__main__":
