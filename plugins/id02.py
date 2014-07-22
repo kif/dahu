@@ -621,8 +621,10 @@ class SingleDetector(Plugin):
                 shape = (in_shape[0], self.npt1_rad)
                 worker = pyFAI.worker.Worker(self.ai, in_shape[-2:], (1, self.npt1_rad), "q_nm-1")
                 worker.output = "numpy"
-                worker.setFlatfieldFile(self.flat)
-                worker.setlatfieldFile(self.dark)
+                if self.flat:
+                    worker.setFlatfieldFile(self.flat)
+                if self.dark:
+                    worker.setDarkcurrentFile(self.dark)
                 self.workers[ext] = worker
             output_ds = coll.create_dataset("data", shape, "float32",
                                             chunks=(1,) + shape[1:],
