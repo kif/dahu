@@ -392,7 +392,79 @@ input = {
             self.hdf5.close()
         Plugin.teardown(self)
 
+################################################################################
+# Image filtering plugin
+################################################################################
+@register
+class Filter(Plugin):
+    """
+    This plugin does filtering of a set of images taken in HDF5 and outputs a single image file (in TIF or EDF)
 
+    @param image_file: HDF5 input file (mandatory)
+    @param entry: entry in HDF5 input file (optional, default: last entry)
+    @param output_file: name of the output file (mandatory)
+    @param output_format: any format FabIO can write (default: edf)
+    @param filter: "max", "min", "mean" or "median" (default: "mean")
+    
+    @param threshold: what is the upper limit? all pixel > max*(1-threshold) are discareded.
+    @param minimum: minimum valid value or True
+    @param maximum: maximum valid value
+    @param darks: list of dark current images for subtraction
+    @param flats: list of flat field images for division
+    @param filter_: can be maximum, mean or median (default=mean)
+    @param correct_flat_from_dark: shall the flat be re-corrected ?
+    @param cutoff: keep all data where (I-center)/std < cutoff
+    
+    input = { "image_file": "/nobackup/lid02gpu11/FRELON/test_laurent_saxs_0000.h5",
+              #"entry": "entry_0000"
+              "output_format": "edf",
+              "output_file": "/nobackup/lid02gpu12/dark.edf",
+              "filter": "median",
+              #"cutoff": 0
+              #threshold:0,
+              #"format": "edf",
+              #"dark_file": filename,
+              #"flat_file": filename,
+#              "do_dark":false,
+#              "do_flat":false,
+              }  
+    """
+    
+    def __init__(self):
+        
+        self.images = None
+        self.output_format = "edf"
+        self.output_file = "toto.edf"
+        self.filter = "mean" #Todo: average_percentil_20-80
+        
+    
+    def setup(self):
+        """
+        Read unput parameters
+        """
+        #self.images = 
+        if "output_format" in self.input:
+            self.output_format = str(self.input["output_format"]).strip().lower()
+        if "filter" in self.input:
+            self.filter = str(self.input["filter"]).strip().lower()
+        if "output_file" in self.input:
+            self.output_file = self.input["output_file"]
+        
+    
+    def process(self):
+        flats = []
+        darks = []
+        
+        dataout = pyFAI.utils.averageImages(images, filter_=self.filter, cutoff=options.cutoff,
+                                            threshold=0, format=self.output_format, output=self.output_file,
+                                            flats=flats, darks=darks)
+
+    def read_stack(self):
+        """
+        read input dataset and populates self.images
+        """
+        nxs = pyFAI.io.Nexus(self.input[image_file])
+        
 ################################################################################
 # Single Detector plugin
 ################################################################################
