@@ -431,7 +431,7 @@ class Filter(Plugin):
     """
     
     def __init__(self):
-        
+        Plugin.__init__(self)
         self.images = None
         self.output_format = "edf"
         self.output_file = "toto.edf"
