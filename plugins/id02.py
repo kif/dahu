@@ -685,7 +685,6 @@ class SingleDetector(Plugin):
     def teardown(self):
         if self.images_ds:
             self.images_ds.file.close()
-        output = {}
         for ds in self.output_ds.values():
             ds.file.close()
         self.ai = None
