@@ -641,7 +641,7 @@ class SingleDetector(Plugin):
         Here we process images....
         """
         for i in range(self.input_ds.shape[0]):
-            data = self.input_ds[i]
+            data = self.images_ds[i]
             for meth in self.to_save:
                 res = None
                 ds = self.output_ds[meth]
