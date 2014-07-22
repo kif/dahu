@@ -464,8 +464,8 @@ class Filter(Plugin):
         """
         nxs = pyFAI.io.Nexus(self.input["image_file"], "r")
         for entry in nxs.get_entries():
-            for instrument in self.input_nxs.get_class(entry, class_type="NXinstrument"):
-                for detector in self.input_nxs.get_class(instrument, class_type="NXdetector"):
+            for instrument in nxs.get_class(entry, class_type="NXinstrument"):
+                for detector in nxs.get_class(instrument, class_type="NXdetector"):
                     for ds in nxs.get_data(detector):
                         return numpy.array(ds)
                     
