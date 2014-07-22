@@ -656,13 +656,13 @@ class SingleDetector(Plugin):
                 if meth == "azim":
                     res = self.workers[meth].process(data)
                     res = res[:, 1]
-                    if "q" not in ds.group:
+                    if "q" not in ds.parent:
                         self.workers[meth].radial
-                    if "chi" not in ds.group:
+                    if "chi" not in ds.parent:
                         self.workers[meth].azimuthal
                 if meth == "ave":
                     res = self.workers[meth].process(data)
-                    if "q" not in ds.group:
+                    if "q" not in ds.parent:
                         self.workers[meth].radial
                     res = res[:, 1]
 #                    res/=NORMALIZATION_FACTOR
