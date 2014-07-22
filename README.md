@@ -4,6 +4,7 @@ UPBL09a
 Software chunks for ID02 upgrade program
 
 Dahu is a lightweight plugin based framework...
+   ... technically a JSON-RPC server over Tango
 * plugin can be class or can be generated from stateless function
 * a plugin is executed within a job, each job lives in its own thread.
 * plugins have empty constructors plus 4 methods (or more) 
