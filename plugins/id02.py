@@ -494,9 +494,16 @@ class SingleDetector(Plugin):
         self.hdf5_filename = self.input.get("hdf5_filename")
         self.entry = self.input.get("entry", "entry")
         self.instrument = self.input.get("instrument", "id02")
+        self.I1 = self.loadI1(c216_filename)
 
     def process(self):
         self.metadata = self.parse_image_file()
+        if self.I1 is None:
+            self.I1 = numpy.ones(self.image_ds.shape[0],dtype=float)
+        elif self.I1.size < self.image_ds.shape[0]:
+            ones = numpy.ones(self.image_ds.shape[0],dtype=float)
+            ones[:self.I1.size] = self.I1
+            self.I1 = ones
         # update all metadata with the one provided by input
         for key, value in self.input.iteritems():
             if key in self.KEYS:
@@ -513,6 +520,26 @@ class SingleDetector(Plugin):
         self.create_hdf5()
         self.process_images()
 
+    def load_I1(self, mfile):
+        """
+        load the I1 data from a metadata HDF5 file
+
+	/entry_0001/id02/MCS/I1
+
+	@param mfile: metadata HDF5 file
+	@return: array with I1
+        """
+	if "I1" in self.input:
+	    return numpy.array(self.input["I1"])
+        nxs = pyFAI.io.Nexus(mfile,"r")
+        entry = nxs.get_entries()[-1]
+        instrument = nxs.get_instrument(entry,"NXinstrument")
+        if len(instrument)>0:
+            if "MCS" in instrument[0]:
+                mcs = instrument[0]["MCS"]
+                if "I1" in mcs:
+                    return numpy.array(mcs["I1"])
+                
     def parse_image_file(self):
         """
         @return: dict with interpreted metadata
@@ -665,7 +692,7 @@ class SingleDetector(Plugin):
                     pass  #  TODO
                 elif meth == "azim":
                     res = self.workers[meth].process(data)
-                    res = res[:, 1]
+                    res /= self.I1[i]
                     if i == 0:
                         if "q" not in ds.parent:
                             ds.parent["q"] = self.workers[meth].radial
@@ -679,7 +706,7 @@ class SingleDetector(Plugin):
                         ds.parent["q"] = self.workers[meth].radial
                         ds.parent["q"].attrs["unit"] = "q_nm^-1"
                     res = res[:, 1]
-#                    res/=NORMALIZATION_FACTOR
+                    res/=self.I1[i]
                 ds[i] = res
 
     def teardown(self):
@@ -690,6 +717,7 @@ class SingleDetector(Plugin):
             ds.file.close()
         self.ai = None
         self.output["files"] = self.output_hdf5
+
 
 
 if __name__ == "__main__":
