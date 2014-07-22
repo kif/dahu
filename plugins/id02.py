@@ -576,7 +576,12 @@ class SingleDetector(Plugin):
         in_shape = self.images_ds.shape
         for ext in self.to_save:
             outfile = os.path.join(self.dest, "%s_%s.h5" % (self.metadata["DetectorName"], ext))
-            nxs = pyFAI.io.Nexus(outfile, "a")
+            try:
+                nxs = pyFAI.io.Nexus(outfile, "a")
+            except IOError as error:
+                self.log_error("invalid HDF5 file: remove and re-create! %s" % (outfile, error), False)
+                os.unlink(outfile)
+                nxs = pyFAI.io.Nexus(outfile)
             entry = nxs.new_entry("entry")
             subentry = nxs.new_class(entry, "pyFAI", class_type="NXsubentry")
             subentry["definition_local"] = numpy.string_("PyFAI")
