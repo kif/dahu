@@ -154,6 +154,7 @@ class Distortion(Plugin):
         if self.output_ds:
             self.output_ds.file.close()
         self.distortion = None
+        Plugin.teardown(self)
 
 @register
 class Metadata(Plugin):
@@ -792,6 +793,7 @@ class SingleDetector(Plugin):
             ds.file.close()
         self.ai = None
         self.output["files"] = self.output_hdf5
+        Plugin.teardown(self)
 
 
 if __name__ == "__main__":
