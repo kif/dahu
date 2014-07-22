@@ -482,7 +482,7 @@ class SingleDetector(Plugin):
             self.log_error("image_file %s does not exist" % self.image_file)
         if "raw" in self.to_save:
             shutil.copy(self.image_file, self.dest)
-
+            self.to_save.remove("raw")
         self.hdf5_filename = self.input.get("hdf5_filename")
         self.entry = self.input.get("entry", "entry")
         self.instrument = self.input.get("instrument", "id02")
@@ -571,7 +571,6 @@ class SingleDetector(Plugin):
         Also initialize workers
         """
         in_shape = self.images_ds.shape
-
         for ext in self.to_save:
             outfile = os.path.join(self.dest, "%s_%s.h5" % (self.metadata["DetectorName"], ext))
             nxs = pyFAI.io.Nexus(outfile, "a")
