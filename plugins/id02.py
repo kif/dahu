@@ -31,7 +31,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/07/2014"
+__date__ = "22/07/2014"
 __status__ = "development"
 version = "0.3"
 
@@ -520,16 +520,16 @@ class SingleDetector(Plugin):
         if len(instrument) == 1:
             instrument = instrument[0]
         else:
-            self.logg_error("exectly ONE instrument is expected in entry, got %s in %s %s" %
-                            (len(instrument), self.input_nxs, self.entry))
+            self.logg_error("Expected ONE instrument is expected in entry, got %s in %s %s" %
+                            (len(instrument), self.image_file, self.entry))
         detector_grp = self.input_nxs.get_class(instrument, class_type="NXdetector")
         if len(detector_grp) == 1:
             detector_grp = detector_grp[0]
         elif len(detector_grp) == 0 and "detector" in instrument:
             detector_grp = instrument["detector"]
         else:
-            self.logg_error("exectly ONE deteector is expected in experiment, got %s in %s %s %s" %
-                            (len(detector_grp), self.input_nxs, self.entry, instrument))
+            self.logg_error("Expected ONE deteector is expected in experiment, got %s in %s %s %s" %
+                            (len(detector_grp), self.input_nxs, self.image_file, instrument))
         self.images_ds = detector_grp.get("data")
         if "detector_information" in detector_grp:
             detector_information = detector_grp["detector_information"]
@@ -544,13 +544,15 @@ class SingleDetector(Plugin):
             if len(collections) >= 1:
                 collection = collections[0]
             else:
-                self.logg_error("exectly ONE collections is expected in entry, got %s in %s %s" %
-                            (len(collections), self.input_nxs, self.entry))
+                self.logg_error("Expected ONE collections is expected in entry, got %s in %s %s" %
+                            (len(collections), self.image_file, self.entry))
 
-        detector_grp = self.input_nxs.get_class(collection, class_type="NXdetector")
-        if detector_grp is None and "detector" in collection:
+        detector_grps = self.input_nxs.get_class(collection, class_type="NXdetector")
+        if len(detector_grps)==0 and "detector" in collection:
             detector_grp = collection["detector"]
-        if not detector_grp: 
+        elif len(detector_grps) > 0:
+            detector_grp = detector_grps[0]
+        else:
             return {}
         if "parameters" in detector_grp:
             parameters_grp = detector_grp["parameters"]
@@ -559,7 +561,7 @@ class SingleDetector(Plugin):
 
         for key, value in parameters_grp.iteritems():
             base = key.split("_")[0] 
-            conv = self.KEY_CONV.get(base,str)
+            conv = self.KEY_CONV.get(base, str)
             metadata[key] = conv(value)
         return metadata
             
