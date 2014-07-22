@@ -610,7 +610,7 @@ class SingleDetector(Plugin):
             return numpy.array(self.input["I1"])
         nxs = pyFAI.io.Nexus(mfile, "r")
         for entry in nxs.get_entries():
-            for instrument in nxs.get_instrument(entry, "NXinstrument"):
+            for instrument in nxs.get_class(entry, "NXinstrument"):
                 if "MCS" in instrument:
                     mcs = instrument["MCS"]
                     if "I1" in mcs:
