@@ -468,6 +468,7 @@ class Filter(Plugin):
             for instrument in nxs.get_class(entry, class_type="NXinstrument"):
                 for detector in nxs.get_class(instrument, class_type="NXdetector"):
                     for ds in nxs.get_data(detector):
+                        print(ds)
                         return numpy.array(ds)
                     
         
