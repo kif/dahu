@@ -610,6 +610,9 @@ class SingleDetector(Plugin):
                 shape = (in_shape[0], self.npt2_azim, self.npt2_rad)
                 ai = pyFAI.AzimuthalIntegrator()
                 ai.setPyFAI(**ai.getPyFAI())
+                worker = pyFAI.worker.Worker(self.ai, in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
+                worker.output = "numpy"
+                worker.method = "ocl_csr_gpu"
                 self.workers[ext] = ai
             elif ext == "ave":
                 if "npt1_rad" in self.input:
@@ -621,6 +624,7 @@ class SingleDetector(Plugin):
                 shape = (in_shape[0], self.npt1_rad)
                 worker = pyFAI.worker.Worker(self.ai, in_shape[-2:], (1, self.npt1_rad), "q_nm^-1")
                 worker.output = "numpy"
+                worker.method = "ocl_csr_gpu"
                 if self.flat:
                     worker.setFlatfieldFile(self.flat)
                 if self.dark:
@@ -669,10 +673,10 @@ class SingleDetector(Plugin):
                 ds[i] = res
 
     def teardown(self):
-        if self.input_ds:
+        if self.images_ds:
             self.input_ds.file.close()
         for ds in self.output_ds: 
-            ds.file.close()
+            self.output_ds[ds].file.close()
         self.ai = None
 
 
