@@ -14,6 +14,7 @@ import pyFAI.distortion
 import shutil
 import sys
 import time
+import threading
 
 from dahu.factory import register
 from dahu.plugin import Plugin
@@ -481,7 +482,8 @@ class SingleDetector(Plugin):
         if not os.path.exists(self.image_file):
             self.log_error("image_file %s does not exist" % self.image_file)
         if "raw" in self.to_save:
-            shutil.copy(self.image_file, self.dest)
+            t = threading.Thread(target=shutil.copy, name="copy raw", args=(self.image_file, self.dest))
+            t.start()
             self.to_save.remove("raw")
         self.hdf5_filename = self.input.get("hdf5_filename")
         self.entry = self.input.get("entry", "entry")
