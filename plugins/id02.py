@@ -616,10 +616,10 @@ class SingleDetector(Plugin):
                 shape = (in_shape[0], self.npt2_azim, self.npt2_rad)
                 ai = pyFAI.AzimuthalIntegrator()
                 ai.setPyFAI(**self.ai.getPyFAI())
-                worker = pyFAI.worker.Worker(self.ai, in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
+                worker = pyFAI.worker.Worker(ai, in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
-                self.workers[ext] = ai
+                self.workers[ext] = worker
             elif ext == "ave":
                 if "npt1_rad" in self.input:
                     self.npt1_rad = int(self.input["npt1_rad"])
