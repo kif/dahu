@@ -619,7 +619,7 @@ class SingleDetector(Plugin):
                     dqmin = self.ai.deltaQ(in_shape[-2:]).min() * 2.0
                     self.npt1_rad = int(qmax / dqmin)
                 shape = (in_shape[0], self.npt1_rad)
-                worker = pyFAI.worker.Worker(self.ai, in_shape[-2:], (1, self.npt1_rad), "q_nm-1")
+                worker = pyFAI.worker.Worker(self.ai, in_shape[-2:], (1, self.npt1_rad), "q_nm^-1")
                 worker.output = "numpy"
                 if self.flat:
                     worker.setFlatfieldFile(self.flat)
