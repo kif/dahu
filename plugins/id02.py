@@ -667,13 +667,16 @@ class SingleDetector(Plugin):
                     res = self.workers[meth].process(data)
                     res = res[:, 1]
                     if "q" not in ds.parent:
-                        self.workers[meth].radial
+                        ds.parent["q"] = self.workers[meth].radial
+                        ds.parent["q"].attrs["unit"] = "q_nm^-1"
                     if "chi" not in ds.parent:
-                        self.workers[meth].azimuthal
+                        ds.parent["chi"] = self.workers[meth].azimuthal
+                        ds.parent["chi"].attrs["unit"] = "deg"
                 elif meth == "ave":
                     res = self.workers[meth].process(data)
                     if "q" not in ds.parent:
-                        self.workers[meth].radial
+                        ds.parent["q"] = self.workers[meth].radial
+                        ds.parent["q"].attrs["unit"] = "q_nm^-1"
                     res = res[:, 1]
 #                    res/=NORMALIZATION_FACTOR
                 ds[i] = res
