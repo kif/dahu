@@ -437,6 +437,7 @@ class Filter(Plugin):
         self.output_format = "edf"
         self.output_file = "toto.edf"
         self.filter = "mean" #Todo: average_percentil_20-80
+        self.cutoff = None
         
     def setup(self):
         """
