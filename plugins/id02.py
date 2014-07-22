@@ -11,6 +11,7 @@ import os
 import posixpath
 import pyFAI
 import pyFAI.distortion
+import pyFAI.worker
 import shutil
 import sys
 import time
