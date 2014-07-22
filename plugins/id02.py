@@ -479,7 +479,7 @@ class SingleDetector(Plugin):
 #            shutil.copy(c216_filename, self.dest)
 
         if "to_save" in self.input:
-            self.to_save = self.input["to_save"]
+            self.to_save = self.input["to_save"][:]
 
         if "image_file" not in self.input:
             self.log_error("image_file not in input")
