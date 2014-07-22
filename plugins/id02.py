@@ -579,7 +579,7 @@ class SingleDetector(Plugin):
             try:
                 nxs = pyFAI.io.Nexus(outfile, "a")
             except IOError as error:
-                self.log_error("invalid HDF5 file: remove and re-create! %s" % (outfile, error), False)
+                self.log_error("invalid HDF5 file %s: remove and re-create!\n%s" % (outfile, error), False)
                 os.unlink(outfile)
                 nxs = pyFAI.io.Nexus(outfile)
             entry = nxs.new_entry("entry")
