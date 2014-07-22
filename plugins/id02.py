@@ -437,7 +437,6 @@ class Filter(Plugin):
         self.output_file = "toto.edf"
         self.filter = "mean" #Todo: average_percentil_20-80
         
-    
     def setup(self):
         """
         Read unput parameters
@@ -449,21 +448,26 @@ class Filter(Plugin):
             self.filter = str(self.input["filter"]).strip().lower()
         if "output_file" in self.input:
             self.output_file = self.input["output_file"]
-        
-    
+           
     def process(self):
         flats = []
-        darks = []
-        
-        dataout = pyFAI.utils.averageImages(images, filter_=self.filter, cutoff=options.cutoff,
-                                            threshold=0, format=self.output_format, output=self.output_file,
-                                            flats=flats, darks=darks)
+        darks = []    
+        pyFAI.utils.averageImages(self.read_stack(), filter_=self.filter, cutoff=self.cutoff,
+                                threshold=0, format=self.output_format, output=self.output_file,
+                                flats=flats, darks=darks)
 
     def read_stack(self):
         """
         read input dataset and populates self.images
+        @return numpy array with the stack
         """
-        nxs = pyFAI.io.Nexus(self.input[image_file])
+        nxs = pyFAI.io.Nexus(self.input["image_file"], "r")
+        for entry in nxs.get_entries():
+            for instrument in self.input_nxs.get_class(entry, class_type="NXinstrument"):
+                for detector in self.input_nxs.get_class(instrument, class_type="NXdetector"):
+                    for ds in nxs.get_data(detector):
+                        return numpy.array(ds)
+                    
         
 ################################################################################
 # Single Detector plugin
@@ -517,6 +521,8 @@ class SingleDetector(Plugin):
     def __init__(self):
         Plugin.__init__(self)
         self.ai = None
+        self.distotion_cor = None
+        self.distotion_norm = None
         self.workers = {}
         self.output_ds = {} #output datasets
         self.dest = None    # output directory
@@ -588,7 +594,6 @@ class SingleDetector(Plugin):
         self.ai = pyFAI.AzimuthalIntegrator()
         self.ai.setSPD(**forai)
         
-
         self.create_hdf5()
         self.process_images()
 
@@ -596,21 +601,20 @@ class SingleDetector(Plugin):
         """
         load the I1 data from a metadata HDF5 file
 
-	/entry_0001/id02/MCS/I1
+        /entry_0001/id02/MCS/I1
 
-	@param mfile: metadata HDF5 file
-	@return: array with I1
+        @param mfile: metadata HDF5 file
+        @return: array with I1
         """
-	if "I1" in self.input:
-	    return numpy.array(self.input["I1"])
-        nxs = pyFAI.io.Nexus(mfile,"r")
-        entry = nxs.get_entries()[-1]
-        instrument = nxs.get_instrument(entry,"NXinstrument")
-        if len(instrument)>0:
-            if "MCS" in instrument[0]:
-                mcs = instrument[0]["MCS"]
-                if "I1" in mcs:
-                    return numpy.array(mcs["I1"])
+        if "I1" in self.input:
+            return numpy.array(self.input["I1"])
+        nxs = pyFAI.io.Nexus(mfile, "r")
+        for entry in nxs.get_entries():
+            for instrument in nxs.get_instrument(entry, "NXinstrument"):
+                if "MCS" in instrument:
+                    mcs = instrument["MCS"]
+                    if "I1" in mcs:
+                        return numpy.array(mcs["I1"])
                 
     def parse_image_file(self):
         """
@@ -759,9 +763,9 @@ class SingleDetector(Plugin):
                 elif meth == "flat":
                     pass  #  TODO
                 elif meth == "cor":
-                    pass  #  TODO
+                    res = self.distortion.correct(ds)
                 elif meth == "norm":
-                    pass  #  TODO
+                    res = self.distortion.correct(ds) / self.I1[i]
                 elif meth == "azim":
                     res = self.workers[meth].process(data)
                     res /= self.I1[i]
@@ -778,7 +782,7 @@ class SingleDetector(Plugin):
                         ds.parent["q"] = self.workers[meth].radial
                         ds.parent["q"].attrs["unit"] = "q_nm^-1"
                     res = res[:, 1]
-                    res/=self.I1[i]
+                    res /= self.I1[i]
                 ds[i] = res
 
     def teardown(self):
