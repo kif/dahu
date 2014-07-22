@@ -459,6 +459,7 @@ class SingleDetector(Plugin):
         self.npt2_azim = None
         self.dark = None
         self.flat = None
+        self.output_hdf5 = {}
 
     def setup(self, kwargs=None):
         """
@@ -472,9 +473,12 @@ class SingleDetector(Plugin):
             os.makedirs(self.dest)
         c216_filename = os.path.abspath(self.input.get("c216_filename", ""))
         if os.path.dirname(c216_filename) != self.dest:
-            shutil.copy(c216_filename, self.dest)
+            self.output_hdf5["metadata"] = os.path.join(self.dest, os.path.basename(c216_filename))
+            t = threading.Thread(target=shutil.copy, name="copy metadata", args=(c216_filename, self.dest))
+            t.start()
+#            shutil.copy(c216_filename, self.dest)
 
-        if "save" in self.input:
+        if "to_save" in self.input:
             self.to_save = self.input["to_save"]
 
         if "image_file" not in self.input:
@@ -486,13 +490,14 @@ class SingleDetector(Plugin):
             t = threading.Thread(target=shutil.copy, name="copy raw", args=(self.image_file, self.dest))
             t.start()
             self.to_save.remove("raw")
+            self.output_hdf5["raw"] = os.path.join(self.dest, os.path.basename(self.image_file))
         self.hdf5_filename = self.input.get("hdf5_filename")
         self.entry = self.input.get("entry", "entry")
         self.instrument = self.input.get("instrument", "id02")
 
     def process(self):
         self.metadata = self.parse_image_file()
-        #update all metadata with the one provided by input
+        # update all metadata with the one provided by input
         for key, value in self.input.iteritems():
             if key in self.KEYS:
                 self.metadata[key] = value
@@ -576,6 +581,7 @@ class SingleDetector(Plugin):
         in_shape = self.images_ds.shape
         for ext in self.to_save:
             outfile = os.path.join(self.dest, "%s_%s.h5" % (self.metadata["DetectorName"], ext))
+            self.output_hdf5[ext] = outfile
             try:
                 nxs = pyFAI.io.Nexus(outfile, "a")
             except IOError as error:
@@ -651,20 +657,20 @@ class SingleDetector(Plugin):
                 ds = self.output_ds[meth]
                 if meth == "dark":
                     pass  #  TODO
-                if meth == "flat":
+                elif meth == "flat":
                     pass  #  TODO
-                if meth == "cor":
+                elif meth == "cor":
                     pass  #  TODO
-                if meth == "norm":
+                elif meth == "norm":
                     pass  #  TODO
-                if meth == "azim":
+                elif meth == "azim":
                     res = self.workers[meth].process(data)
                     res = res[:, 1]
                     if "q" not in ds.parent:
                         self.workers[meth].radial
                     if "chi" not in ds.parent:
                         self.workers[meth].azimuthal
-                if meth == "ave":
+                elif meth == "ave":
                     res = self.workers[meth].process(data)
                     if "q" not in ds.parent:
                         self.workers[meth].radial
@@ -675,9 +681,11 @@ class SingleDetector(Plugin):
     def teardown(self):
         if self.images_ds:
             self.images_ds.file.close()
+        output = {}
         for ds in self.output_ds.values():
             ds.file.close()
         self.ai = None
+        self.output["files"] = self.output_hdf5
 
 
 if __name__ == "__main__":
