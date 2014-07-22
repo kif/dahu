@@ -454,7 +454,10 @@ class Filter(Plugin):
     def process(self):
         flats = []
         darks = []    
-        pyFAI.utils.averageImages(self.read_stack(), filter_=self.filter, cutoff=self.cutoff,
+        data = self.read_stack()
+        if data is None:
+            self.log_error("No dataset to average")
+        pyFAI.utils.averageImages(data, filter_=self.filter, cutoff=self.cutoff,
                                 threshold=0, format=self.output_format, output=self.output_file,
                                 flats=flats, darks=darks)
 
