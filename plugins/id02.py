@@ -615,7 +615,7 @@ class SingleDetector(Plugin):
                     self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
                 shape = (in_shape[0], self.npt2_azim, self.npt2_rad)
                 ai = pyFAI.AzimuthalIntegrator()
-                ai.setPyFAI(**ai.getPyFAI())
+                ai.setPyFAI(**self.ai.getPyFAI())
                 worker = pyFAI.worker.Worker(self.ai, in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
