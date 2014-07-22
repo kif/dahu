@@ -572,7 +572,7 @@ class SingleDetector(Plugin):
         self.hdf5_filename = self.input.get("hdf5_filename")
         self.entry = self.input.get("entry", "entry")
         self.instrument = self.input.get("instrument", "id02")
-        self.I1 = self.loadI1(c216_filename)
+        self.I1 = self.load_I1(c216_filename)
 
     def process(self):
         self.metadata = self.parse_image_file()
@@ -792,7 +792,6 @@ class SingleDetector(Plugin):
             ds.file.close()
         self.ai = None
         self.output["files"] = self.output_hdf5
-
 
 
 if __name__ == "__main__":
