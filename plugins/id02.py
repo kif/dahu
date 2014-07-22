@@ -580,7 +580,7 @@ class SingleDetector(Plugin):
             subentry["definition_local"] = numpy.string_("PyFAI")
             coll = nxs.new_class(subentry, "process_" + ext, class_type="NXcollection")
             metadata_grp = coll.require_group("metadata")
-            for key, val in self.metadata:
+            for key, val in self.metadata.iteritems():
                 if type(val) in [str, unicode]:
                     metadata_grp[key] = numpy.string_(val)
                 else:
