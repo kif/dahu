@@ -577,9 +577,9 @@ class SingleDetector(Plugin):
     def process(self):
         self.metadata = self.parse_image_file()
         if self.I1 is None:
-            self.I1 = numpy.ones(self.image_ds.shape[0],dtype=float)
+            self.I1 = numpy.ones(self.images_ds.shape[0], dtype=float)
         elif self.I1.size < self.image_ds.shape[0]:
-            ones = numpy.ones(self.image_ds.shape[0],dtype=float)
+            ones = numpy.ones(self.images_ds.shape[0], dtype=float)
             ones[:self.I1.size] = self.I1
             self.I1 = ones
         # update all metadata with the one provided by input
