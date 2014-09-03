@@ -34,7 +34,7 @@ __author__ = u"Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "GPLv3+"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "11/07/2014"
+__date__ = "03/09/2014"
 __status__ = "development"
 
 from PyQt4.QtGui import  QSizePolicy
@@ -49,6 +49,7 @@ import os
 import pyFAI
 from pyFAI.gui_utils import pylab, QtGui, QtCore, uic, matplotlib
 import sys
+from math import ceil
 
 
 SIGNAL = pyFAI.gui_utils.QtCore.SIGNAL
@@ -213,18 +214,29 @@ class CalibrationWindow(QtGui.QMainWindow):
             res[:, :, 3] = numpy.uint8(255) * mask
             return res
         elif target == "data":
+            npt_hist = 1000      # Number of data point in histogramming
+            eps = 1e-3  # fraction to keep out
+
             if self.mask is not None:
                 mask = numpy.ascontiguousarray(self.mask, dtype=bool)
                 valid = data[numpy.logical_not(mask)]
+                valid_min = valid.min()
+                log_data = numpy.log1p(data - valid_min)
+                valid = numpy.log1p(valid - valid_min)
             else:
-                valid = data.ravel()
-            sorted_v = numpy.sort(valid)
-            # remove first ans last per thousand
+                log_data = numpy.log1p(data - data.min())
+                valid = log_data.ravel()
+
             size = valid.size
-            show_min = sorted_v[int(0.001 * size)]
-            show_max = sorted_v[min(int(0.999 * size), size - 1)]
-            show_data = numpy.log1p((data - show_min).astype(numpy.float32) / (show_max - show_min) * (numpy.e - 1))
-            return matplotlib.cm.jet(show_data, bytes=True)
+            sorted_v = numpy.sort(valid)
+            start_idx = int(size * eps)
+            end_idx = int(ceil(size * (1.0 - eps)))
+            # remove first and last per thousand
+            sorted_v = sorted_v[start_idx:end_idx]
+            hist = numpy.histogram(sorted_v, npt_hist)[0].cumsum(dtype="float")
+            x_range = numpy.linspace(sorted_v[0], sorted_v[-1], npt_hist, endpoint=False)
+            eq_data = numpy.interp(log_data, x_range , hist / hist[-1], left=0, right=1)
+            return matplotlib.cm.jet(eq_data, bytes=True)
         elif target == "solidangle":
             # should always be between 0 and 1 ...
             dmin = data.min()
