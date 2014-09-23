@@ -179,7 +179,7 @@ input = {
         "HSTime": 1,
         "HMStartEpoch": 1405087717.12159,
         "HMStartTime": "2014-07-11T16:08:37.121591+0200",
-        "info": {"DetectorInfo":"VxH:detbox=14952.235x0.000x1.000,dettab=-62.000x-245.000",
+        "Info": {"DetectorInfo":"VxH:detbox=14952.235x0.000x1.000,dettab=-62.000x-245.000",
                  "ExperimentInfo":"0",
                  "MachineInfo": "Ie=183.27mA,u35u=100.000mm/0.001mm,u21m=100.000mm/0.000mm,u21d=100.000mm/-0.000mm",
                  "MirrorInfo": "rz=-3.600mrad,ty=0.455mm,ty1=2.075mm,ty2=-1.165mm,tz1=-0.030mm,tz2=-0.090mm,mir2rz=2.000mrad",
@@ -253,7 +253,7 @@ input = {
         self.info_grp.attrs["NX_class"] = "NXcollection"
 #        fields = ("MachineInfo", "OpticsInfo", "ProposalInfo", "StationInfo", "DetectorInfo", "ExperimentInfo") + \
 #                 self.input.get("info", ())
-        for field, value in self.input.get("info", {}).iteritems():
+        for field, value in self.input.get("Info", {}).iteritems():
             self.info_grp[field] = numpy.string_(value)
 
         start_time = self.input.get("HMStartTime", get_isotime())
