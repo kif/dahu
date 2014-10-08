@@ -489,17 +489,17 @@ class SingleDetector(Plugin):
               #"hdf5": "/entry_0000/id02/data,
               "output_dir": "/nobackup/lid02gpu12",
               "PSize_1": 2.4e-05,
-              "PSize_2" 2.4e-05,
+              "PSize_2": 2.4e-05,
               "BSize_1":1,
               "BSize_2":1,
               "Center_1":512,
               "Center_2":512,
               "DDummy":1,
               "SampleDistance":14.9522,
-              "c216_filename": "/nobackup/lid02gpu11/metadata/test.h5"
+              "c216_filename": "/nobackup/lid02gpu11/metadata/test.h5",
               "WaveLength": 9.95058e-11,
               "Dummy":-10,
-              "output_dir: "/nobackup/lid02gpu12/output",
+              "output_dir": "/nobackup/lid02gpu12/output",
 #              "do_dark":false,
 #              "do_flat":false,
               "npt2_azim": 360,
@@ -507,6 +507,22 @@ class SingleDetector(Plugin):
               "npt1_rad" : 1000,
               "to_save": ["raw", "dark", "flat", "dist", "norm", "azim", "ave"]
               }  
+              
+    {
+ "npt1_rad": 1000, 
+ "c216_filename": "/nobackup/lid02gpu11/metadata/test.h5", 
+ "npt2_rad": 500, 
+ "DetectorName": "rayonix", 
+ "npt2_azim": 360, 
+ "to_save": [
+  "azim", 
+  "ave"
+ ], 
+ "output_dir": "/nobackup/lid02gpu12/output", 
+ "WaveLength": 9.95058e-11, 
+ "image_file": "/nobackup/lid02gpu11/FRELON/test_laurent_saxs_0000.h5", 
+}
+
     """
     KEY_CONV = {"BSize": int,
                 "Offset": int,
@@ -708,9 +724,8 @@ class SingleDetector(Plugin):
                     metadata_grp[key] = numpy.string_(val)
                 else:
                     metadata_grp[key] = val
-            if ext in ("raw", "dark", "flat", "cor", "norm"):
-                shape = in_shape
-            elif ext == "azim":
+            shape = in_shape
+            if ext == "azim":
                 if "npt2_rad" in self.input:
                     self.npt2_rad = int(self.input["npt2_rad"])
                 else:
@@ -766,9 +781,11 @@ class SingleDetector(Plugin):
                 res = None
                 ds = self.output_ds[meth]
                 if meth == "dark":
-                    pass  #  TODO
+                    raise NotImplementedError("Dark not implemented")
                 elif meth == "flat":
-                    pass  #  TODO
+                    raise NotImplementedError("Flat not implemented")                
+                elif meth == "dist":
+                    raise NotImplementedError("Flat not implemented")
                 elif meth == "cor":
                     res = self.distortion.correct(ds)
                 elif meth == "norm":
@@ -790,6 +807,7 @@ class SingleDetector(Plugin):
                         ds.parent["q"].attrs["unit"] = "q_nm^-1"
                     res = res[:, 1]
                     res /= self.I1[i]
+                self.log_error("ds.shape=%s res.shape=%s"%(ds.shape,res.shape), do_raise=False)
                 ds[i] = res
 
     def teardown(self):
