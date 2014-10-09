@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+# vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
 
 from __future__ import with_statement, print_function
 
@@ -33,7 +34,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22/07/2014"
+__date__ = "09/10/2014"
 __status__ = "development"
 version = "0.3"
 
@@ -734,7 +735,7 @@ class SingleDetector(Plugin):
                     self.npt2_rad = int(qmax / dqmin)
 
                 if "npt2_azim" in self.input:
-                    self.npt2_azim = int(self.input["npt2_rad"])
+                    self.npt2_azim = int(self.input["npt2_azim"])
                 else:
                     chi = self.ai.chiArray(in_shape[-2:])
                     self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
@@ -761,6 +762,16 @@ class SingleDetector(Plugin):
                 if self.dark:
                     worker.setDarkcurrentFile(self.dark)
                 self.workers[ext] = worker
+            elif ext == "dark":
+                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark)
+                self.workers[ext] = worker
+            elif ext == "flat":
+                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark, flat=self.flat)
+                self.workers[ext] = worker
+            elif ext == "dist":
+                raise NotImplementedError("dist is not yet implemented")
+            elif ext == "norm":
+
             output_ds = coll.create_dataset("data", shape, "float32",
                                             chunks=(1,) + shape[1:],
                                             maxshape=(None,) + shape[1:])
@@ -781,9 +792,9 @@ class SingleDetector(Plugin):
                 res = None
                 ds = self.output_ds[meth]
                 if meth == "dark":
-                    raise NotImplementedError("Dark not implemented")
+                    res = self.workers[meth].process(data)
                 elif meth == "flat":
-                    raise NotImplementedError("Flat not implemented")                
+                    res = self.workers[meth].process(data)
                 elif meth == "dist":
                     raise NotImplementedError("Flat not implemented")
                 elif meth == "cor":
