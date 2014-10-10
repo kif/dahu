@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20140611"
+__date__ = "20141010"
 __status__ = "development"
 version = "0.2.0"
 from .factory import plugin_factory, register
@@ -135,8 +135,8 @@ def plugin_from_function(function):
     logger.debug("creating plugin from function %s" % function.__name__)
     class_name = function.__module__ + "." + function.__name__
     klass = type(class_name, (PluginFromFunction,),
-                 {'function' : staticmethod(function)})
-    klass.__doc__ = function.__doc
+                 {'function': staticmethod(function),
+                 "__doc__": function.__doc__})
     plugin_factory.register(klass, class_name)
     return class_name
 
