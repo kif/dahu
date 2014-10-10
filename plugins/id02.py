@@ -18,7 +18,7 @@ import time
 import threading
 
 from dahu.factory import register
-from dahu.plugin import Plugin
+from dahu.plugin import Plugin, plugin_from_function
 from dahu.utils import get_isotime
 
 
@@ -155,6 +155,50 @@ class Distortion(Plugin):
             self.output_ds.file.close()
         self.distortion = None
         Plugin.teardown(self)
+
+def preproc(**d):
+    """
+    Take a dict as input and forms a metadata structure as output
+    @param: any dict
+    """ 
+    dd = d.copy()
+    if "job_id" in dd:
+         dd.pop("job_id")
+    list_f = []
+    list_n = []
+    list_z = []
+    for ind in map(lambda x:'HS32F'+'{0:02d}'.format(x),range(1,17)):
+            list_f.append(float(dd[ind]))
+    for ind in map(lambda x:'HS32N'+'{0:02d}'.format(x),range(1,17)):
+            list_n.append(dd[ind])
+    for ind in map(lambda x:'HS32Z'+'{0:02d}'.format(x),range(1,17)):
+            list_z.append(float(dd[ind]))
+
+    info_dir={}
+    for info_ind in dd:
+        if  info_ind[0:2].find('HS') == 0:
+            continue
+        elif info_ind[0:2].find('HM') == 0:
+            continue
+        else:	
+            info_dir[info_ind] = dd[info_ind]
+            
+    final_dir ={#'hdf5_filename': argin[2],
+                #'entry': argin[3],
+                'instrument': 'id02',
+                'c216': 'id02/c216/0',
+                'HS32F': list_f,
+                'HS32Z': list_z,
+                'HS32N': list_n,
+                'HSI0': dd['HSI0'],
+                'HSI1': dd['HSI1'],
+                'HSTime': dd['HSTime'],
+                'Info': info_dir }
+    for key in ['HMStartEpoch','HMStartTime','HS32Len', 'HS32Depth', 'HSI0Factor', 'HSI1Factor', "hdf5_filename", "entry"]:
+        if key in dd: 
+            final_dir[key]=dd[key]
+    return final_dir
+plugin_from_function(preproc)
 
 @register
 class Metadata(Plugin):
