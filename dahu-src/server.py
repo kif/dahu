@@ -102,11 +102,11 @@ class DahuDS(PyTango.Device_4Impl):
         """
         List all plugin currently loaded .... with a brief description
         """
-        logger.debug("In %.listPlugins(%s)" % (self.get_name(), name))
-        res = ["List of all plugin currently loaded (use initPlugin to loaded additional plugins:"]
+        logger.debug("In %s.listPlugins" % (self.get_name()))
+        res = ["List of all plugin currently loaded (use initPlugin to loaded additional plugins):"]
         plugins = list(plugin_factory.registry.keys())
         plugins.sort()
-        return os.linesep.join(res+["%s: %s"(i,plugin_factory.registry[i].__doc__.split("\n")[0]) for i in plugins])
+        return os.linesep.join(res+[" %s : %s"%(i,plugin_factory.registry[i].__doc__.split("\n")[0]) for i in plugins])
 
     def initPlugin(self, name):
         """

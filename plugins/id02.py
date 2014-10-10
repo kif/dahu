@@ -56,8 +56,7 @@ if "TANGO_HOST" not in os.environ:
 
 @register
 class Distortion(Plugin):
-    """
-    This class performs the distortion correction
+    """This class performs the distortion correction
 
     later will be added:
     dark subtraction
@@ -158,8 +157,7 @@ class Distortion(Plugin):
         Plugin.teardown(self)
 
 def preproc(**d):
-    """
-    Take a dict as input and forms a metadata structure as output
+    """Take a dict as input and forms a metadata structure as output
     @param: any dict
     """ 
     dd = d.copy()
@@ -181,7 +179,7 @@ def preproc(**d):
             continue
         elif info_ind[0:2].find('HM') == 0:
             continue
-        else:	
+        else:    
             info_dir[info_ind] = dd[info_ind]
             
     final_dir ={#'hdf5_filename': argin[2],
@@ -203,8 +201,7 @@ plugin_from_function(preproc)
 
 @register
 class Metadata(Plugin):
-    """
-    Plugin in charge of retrieving all metadata for ID02 and storing them into a HDF5 file
+    """Plugin in charge of retrieving all metadata for ID02 and storing them into a HDF5 file
     
     TODO: rewrite using Nexus class from pyFAI: shorter code
 
@@ -446,8 +443,7 @@ input = {
 ################################################################################
 @register
 class Filter(Plugin):
-    """
-    This plugin does filtering of a set of images taken in HDF5 and outputs a single image file (in TIF or EDF)
+    """This plugin does filtering of a set of images taken in HDF5 and outputs a single image file (in TIF or EDF)
 
     @param image_file: HDF5 input file (mandatory)
     @param entry: entry in HDF5 input file (optional, default: last entry)
@@ -528,8 +524,7 @@ class Filter(Plugin):
 ################################################################################
 @register
 class SingleDetector(Plugin):
-    """
-    This plugin does all processing needed for a single camera
+    """This plugin does all processing needed for a single camera
     input = { "DetectorName": "rayonix",
               "image_file": "/nobackup/lid02gpu11/FRELON/test_laurent_saxs_0000.h5",
               #"entry": "entry_0000"
@@ -817,7 +812,7 @@ class SingleDetector(Plugin):
             elif ext == "dist":
                 raise NotImplementedError("dist is not yet implemented")
             elif ext == "norm":
-
+                raise NotImplementedError("norm is not yet implemented")
             output_ds = coll.create_dataset("data", shape, "float32",
                                             chunks=(1,) + shape[1:],
                                             maxshape=(None,) + shape[1:])
@@ -883,27 +878,32 @@ class Peter(Plugin):
     - preprocess to generate the metadata entry
     - metadata retrieval using the C216 time frame generator
     - perform all transformation for all camera
-    
+
     input = { TO be defined ....
             }
-                """
+    """
     def __init__(self):
-        Plugin.__init__(self):
+        Plugin.__init__(self)
         self.input_metadata = None
         self.plugins = {"metadata":Metadata()}
 
     def setup(self, kwargs=None):
         """
-            see class documentation
-            """
+        see class documentation
+        """
         Plugin.setup(self, kwargs)
+
     def process(self):
-        self.input_metadata = preprocess(**self.input)
+        """
+        work a bit
+        """
+        self.input_metadata = preproc(**self.input)
         self.plugins["metadata"].input = self.input_metadata
         self.plugins["metadata"].setup()
         self.plugins["metadata"].process()
         self.plugins["metadata"].teardown()
         self.output_metadata =self.plugins["metadata"].o
+
     def teardown(self):
         Plugin.teardown(self)
 
