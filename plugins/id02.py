@@ -34,7 +34,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/10/2014"
+__date__ = "10/10/2014"
 __status__ = "development"
 version = "0.3"
 
@@ -433,6 +433,8 @@ input = {
                 self.mcs_grp[fullname].attrs["interpretation"] = "scalar"
 
     def teardown(self):
+        self.output["c216_filename"] = self.hdf5_filename
+        self.output["c216_path"] = self.group.name
         if self.group:
             self.group.parent["end_time"] = numpy.string_(get_isotime())
         if self.hdf5:
@@ -874,6 +876,36 @@ class SingleDetector(Plugin):
         self.output["files"] = self.output_hdf5
         Plugin.teardown(self)
 
+@register
+class Peter(Plugin):
+    """
+    This plugin does all processing needed:
+    - preprocess to generate the metadata entry
+    - metadata retrieval using the C216 time frame generator
+    - perform all transformation for all camera
+    
+    input = { TO be defined ....
+            }
+                """
+    def __init__(self):
+        Plugin.__init__(self):
+        self.input_metadata = None
+        self.plugins = {"metadata":Metadata()}
+
+    def setup(self, kwargs=None):
+        """
+            see class documentation
+            """
+        Plugin.setup(self, kwargs)
+    def process(self):
+        self.input_metadata = preprocess(**self.input)
+        self.plugins["metadata"].input = self.input_metadata
+        self.plugins["metadata"].setup()
+        self.plugins["metadata"].process()
+        self.plugins["metadata"].teardown()
+        self.output_metadata =self.plugins["metadata"].o
+    def teardown(self):
+        Plugin.teardown(self)
 
 if __name__ == "__main__":
     p = Distortion()

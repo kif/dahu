@@ -10,9 +10,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "2014-06-11"
+__date__ = "2014-10-10"
 __status__ = "development"
-version = "0.2.0"
+version = "0.3.0"
 
 import os
 import numpy

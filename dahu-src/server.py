@@ -98,6 +98,16 @@ class DahuDS(PyTango.Device_4Impl):
     def cleanJob(self, jobId):
         return Job.cleanJobFromID(jobId)
 
+    def listPlugins(self):
+        """
+        List all plugin currently loaded .... with a brief description
+        """
+        logger.debug("In %.listPlugins(%s)" % (self.get_name(), name))
+        res = ["List of all plugin currently loaded (use initPlugin to loaded additional plugins:"]
+        plugins = list(plugin_factory.registry.keys())
+        plugins.sort()
+        return os.linesep.join(res+["%s: %s"(i,plugin_factory.registry[i].__doc__.split("\n")[0]) for i in plugins])
+
     def initPlugin(self, name):
         """
         Creates a job with the given plugin
@@ -270,13 +280,14 @@ class DahuDSClass(PyTango.DeviceClass):
         'startJob': [[PyTango.DevVarStringArray, "[<Dahu plugin to execute>, <JSON serialized dict>]"], [PyTango.DevLong, "job id"]],
         'abort': [[PyTango.DevLong, "job id"], [PyTango.DevBoolean, ""]],
         'getJobState': [[PyTango.DevLong, "job id"], [PyTango.DevString, "job state"]],
-        "initPlugin": [[PyTango.DevString, "plugin name"], [PyTango.DevString, "Message"]],
-        "cleanJob":[[PyTango.DevLong, "job id"], [PyTango.DevString, "Message"]],
-        "collectStatistics":[[PyTango.DevVoid, "nothing needed"], [PyTango.DevVoid, "Collect some statistics about jobs within Dahu"]],
-        "getStatistics":[[PyTango.DevVoid, "nothing needed"], [PyTango.DevString, "Retrieve statistics about Dahu-jobs"]],
+        'initPlugin': [[PyTango.DevString, "plugin name"], [PyTango.DevString, "Message"]],
+        'cleanJob':[[PyTango.DevLong, "job id"], [PyTango.DevString, "Message"]],
+        'collectStatistics':[[PyTango.DevVoid, "nothing needed"], [PyTango.DevVoid, "Collect some statistics about jobs within Dahu"]],
+        'getStatistics':[[PyTango.DevVoid, "nothing needed"], [PyTango.DevString, "Retrieve statistics about Dahu-jobs"]],
         'getJobOutput': [[PyTango.DevLong, "job id"], [PyTango.DevString, "<JSON serialized dict>"]],
         'getJobInput': [[PyTango.DevLong, "job id"], [PyTango.DevString, "<JSON serialized dict>"]],
         'getJobError': [[PyTango.DevLong, "job id"], [PyTango.DevString, "Error message"]],
+        'listPlugins': [[PyTango.DevVoid, "nothing needed"], [PyTango.DevString, "prints the list of all plugin classes currently loaded"]],
         }
 
 
@@ -290,7 +301,7 @@ class DahuDSClass(PyTango.DeviceClass):
             [[PyTango.DevLong,
             PyTango.SCALAR,
             PyTango.READ]],
-        "statisticsCollected":
+        'statisticsCollected':
             [[PyTango.DevString,
             PyTango.SCALAR,
             PyTango.READ]],
