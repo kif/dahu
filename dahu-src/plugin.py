@@ -64,6 +64,8 @@ class Plugin(object):
     def teardown(self):
         """
         method used to tear-down the plugin (close connection, files)
+        
+        This is always run, even if process fails
         """
         self.output["logging"] = self._logging
 

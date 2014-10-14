@@ -158,26 +158,19 @@ class Job(Thread):
         2) sets the input data to the plugin
         3) run the set-up
         4) run the process
-        4) run the tear-down
+        4) run the tear-down: always runs tear-down !
         5) run the call-backs
         """
         self._status = self.STATE_RUNNING
         self._plugin.input.update(self._input_data)
         self._run_("setup")
-        if self._status == self.STATE_FAILURE:
-            self._run_callbacks()
-            return
-        self._run_("process")
-        if self._status == self.STATE_FAILURE:
-            self._run_callbacks()
-            return
+        if self._status != self.STATE_FAILURE:
+            self._run_("process")
         self._run_("teardown")
-        if self._status == self.STATE_FAILURE:
-            self._run_callbacks()
-            return
-        self._output_data.update(self._plugin.output)
-        if self._status == self.STATE_RUNNING:
-            self._status = self.STATE_SUCCESS
+        if self._status != self.STATE_FAILURE:
+            self._output_data.update(self._plugin.output)
+            if self._status == self.STATE_RUNNING:
+                self._status = self.STATE_SUCCESS
         self._run_callbacks()
 
 
