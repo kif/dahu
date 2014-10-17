@@ -21,6 +21,7 @@ import threading
 from dahu.factory import register
 from dahu.plugin import Plugin, plugin_from_function
 from dahu.utils import get_isotime
+from dahu.job import Job
 
 
 __doc__ = """
@@ -64,11 +65,19 @@ def preproc(**d):
     list_f = []
     list_n = []
     list_z = []
-    for ind in map(lambda x:'HS32F'+'{0:02d}'.format(x),range(1,17)):
+    HS32Len = dd.get("HS32Len", 16) 
+    HS32Depth = dd.get("HS32Depth", 32)
+    HSI0Factor = dd.get("HSI0Factor",1)
+    HSI1Factor = dd.get("HSI1Factor",1)
+    # "0.005 s"
+    ShutterOpeningTime = float(dd.get("ShutterOpeningTime","0").split()[0])
+    ShutterClosingTime = float(dd.get("ShutterClosingTime","0").split()[0])
+    
+    for ind in map(lambda x:'HS32F'+'{0:02d}'.format(x),range(1,HS32Len+1)):
             list_f.append(float(dd[ind]))
-    for ind in map(lambda x:'HS32N'+'{0:02d}'.format(x),range(1,17)):
+    for ind in map(lambda x:'HS32N'+'{0:02d}'.format(x),range(1,HS32Len+1)):
             list_n.append(dd[ind])
-    for ind in map(lambda x:'HS32Z'+'{0:02d}'.format(x),range(1,17)):
+    for ind in map(lambda x:'HS32Z'+'{0:02d}'.format(x),range(1,HS32Len+1)):
             list_z.append(float(dd[ind]))
 
     info_dir={}
@@ -80,18 +89,19 @@ def preproc(**d):
         else:    
             info_dir[info_ind] = dd[info_ind]
             
-    final_dir ={#'hdf5_filename': argin[2],
-                #'entry': argin[3],
+    final_dir ={"HS32Len": HS32Len,
+                "HS32Depth": HS32Depth,
+                "HSI0Factor": HSI0Factor,
+                "HSI1Factor": HSI1Factor,
+                "ShutterOpeningTime":ShutterOpeningTime,
+                "ShutterClosingTime":ShutterClosingTime,
                 'instrument': 'id02',
                 'c216': 'id02/c216/0',
                 'HS32F': list_f,
                 'HS32Z': list_z,
                 'HS32N': list_n,
-                'HSI0': dd['HSI0'],
-                'HSI1': dd['HSI1'],
-                'HSTime': dd['HSTime'],
                 'Info': info_dir }
-    for key in ['HMStartEpoch','HMStartTime','HS32Len', 'HS32Depth', 'HSI0Factor', 'HSI1Factor', "hdf5_filename", "entry"]:
+    for key in ['HMStartEpoch','HMStartTime', "hdf5_filename", "entry", "HSTime"]:
         if key in dd: 
             final_dir[key]=dd[key]
     return final_dir
@@ -147,6 +157,8 @@ input = {
         see class documentation
         """
         Plugin.setup(self, kwargs)
+        if "HS32F10" in self.input:
+            self.input.update(preproc(**self.input))
         self.c216 = self.input.get("c216", "id02/c216/0")
         self.cycle = self.input.get("cycle", 1)
         if "hdf5_filename" not in self.input:
@@ -285,26 +297,10 @@ input = {
             self.log_error("No HSTime pin number, using TFG time")
             measured_time = tfg[1::2]
 
+        
         if ("HS32F" in self.mcs_grp) and ("HS32Z" in self.mcs_grp):
-            for I in ("HSI0", "HSI1"):
-                if I in self.input:
-                    pin = int(self.input[I])
-                    if pin > counters:
-                        self.log_error("invalid pin number %s" % pin)
-                    self.mcs_grp[I] = pin
-                    self.mcs_grp[I].attrs["interpretation"] = "scalar"
-                    self.mcs_grp[I].attrs["counter"] = "1-based pin number"
-                    pin -= 1  # 1 based pin number
-                    counter = raw_scalers[:, pin]
-                    factor = self.mcs_grp["HS32F"][pin]
-                    zero = self.mcs_grp["HS32Z"][pin]
-                    measured = (counter - measured_time * zero) * factor
-                    self.mcs_grp[I[2:]] = measured
-                    self.mcs_grp[I[2:]].attrs["interpretation"] = "scalar"
-        else:
-            self.log_error("Not factor/zero to calculate I0/I1", True)
 
-        if "interpreted" in self.mcs_grp:
+#             if "interpreted" in self.mcs_grp:
             modes = numpy.zeros(counters, dtype=numpy.int32)
             if "HS32M" in self.mcs_grp:
                 raw_modes = numpy.array(self.mcs_grp["HS32M"])
@@ -326,6 +322,39 @@ input = {
                 fullname = "interpreted/%s" % name
                 self.mcs_grp[fullname] = values[:, i]
                 self.mcs_grp[fullname].attrs["interpretation"] = "scalar"
+                
+            sot = self.input.get("ShutterOpeningTime",0.0)
+            sct = self.input.get("ShutterClosingTime",0.0)
+            for name,value in (("ShutterOpeningTime",sot),
+                               ("ShutterClosingTime",sct)):
+                        self.mcs_grp[name] = value
+                        self.mcs_grp[name].attrs["interpretation"] = "scalar"
+            correction_time = (measured_time-sot+sct)/(measured_time-sot)
+            for I in ("HSI0", "HSI1"):
+                if I in self.input:
+                    dest = "Intensity"+I[-1]
+                    pin = int(self.input[I])
+                    if pin > counters:
+                        self.log_error("invalid pin number %s" % pin)
+                    self.mcs_grp[I] = pin
+                    self.mcs_grp[I].attrs["interpretation"] = "scalar"
+                    self.mcs_grp[I].attrs["counter"] = "1-based pin number"
+                    pin -= 1  # 1 based pin number got 0 based.
+                    counter = values[:, pin]
+#                     factor = self.mcs_grp["HS32F"][pin]
+#                     zero = self.mcs_grp["HS32Z"][pin]
+#                     measured = (counter - measured_time * zero) * factor
+                    I_factor = float(self.input.get(I+"Factor", 1.0))
+                    self.mcs_grp[I+"Factor"] = I_factor                        
+                    self.mcs_grp[I+"Factor"].attrs["interpretation"] = "scalar"
+                    measured = counter * I_factor
+                    self.mcs_grp[dest] = measured
+                    self.mcs_grp[dest].attrs["interpretation"] = "scalar"
+                    self.mcs_grp[dest+"ShutCor"] = measured * correction_time
+                    self.mcs_grp[dest+"ShutCor"].attrs["interpretation"] = "scalar"
+        else:
+            self.log_error("Not factor/zero to calculate I0/I1", True)
+
 
     def teardown(self):
         self.output["c216_filename"] = self.hdf5_filename
@@ -367,6 +396,7 @@ class SingleDetector(Plugin):
               "npt2_rad" : 500,
               "npt1_rad" : 1000,
               "to_save": ["raw", "dark", "flat", "dist", "norm", "azim", "ave"]
+              "metadata_job": 1
               }  
               
     {
@@ -401,7 +431,7 @@ class SingleDetector(Plugin):
             "Dummy", "Offset_1", "Offset_2", "PSize_1", "PSize_2",
             "Rot_1", "Rot_2", "Rot_3",
             "RasterOrientation", "SampleDistance", "SaxsDataVersion", "Title", "WaveLength")
-
+    TIMEOUT = 10
     def __init__(self):
         Plugin.__init__(self)
         self.ai = None
@@ -415,6 +445,7 @@ class SingleDetector(Plugin):
         self.to_save = ["raw", "ave"]  # by default only raw image and averaged one is saved
         self.input_nxs = None
         self.images_ds = None
+        self.metadata_plugin = None
         self.metadata = {}
         self.npt1_rad = None
         self.npt2_rad = None
@@ -431,6 +462,22 @@ class SingleDetector(Plugin):
         if "output_dir" not in self.input:
             self.log_error("output_dir not in input")
         self.dest = os.path.abspath(self.input["output_dir"])
+
+        if "metadata_job" in self.input:
+            job_id = int(self.input.get("metadata_job"))
+            status = Job.getStatusFromId(job_id)
+            abort_time = time.time() + self.TIMEOUT
+            finished = [Job.STATE_SUCCESS, Job.STATE_FAILURE, Job.STATE_ABORTED]
+            while status not in finished:
+                time.sleep(1)
+                status = Job.getStatusFromId(job_id)
+                if time.time() > abort_time:
+                    self.log_error("Timeout while waiting metadata plugin to finish", do_raise=True)
+                    break
+            if status == Job.STATE_SUCCESS:
+                self.metadata_plugin = Job.getJobFromId(job_id)
+            else:
+                self.log_error("Metadata plugin ended in %s: aborting myself"%self.status, do_raise=True)
         if not os.path.isdir(self.dest):
             os.makedirs(self.dest)
         c216_filename = os.path.abspath(self.input.get("c216_filename", ""))
