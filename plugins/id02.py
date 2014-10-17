@@ -271,6 +271,12 @@ input = {
         self.tfg_grp["dead_time"] = tmp[0::2]
         self.tfg_grp["dead_time"].attrs["interpretation"] = "scalar"
         self.tfg_grp["delta_time"] = tmp.cumsum()[0::2]
+        self.tfg_grp["delta_time"].attrs["interpretation"] = "scalar"
+        for key in ["HMStartTime", "HMStartEpoch"]:
+            if key in self.input:
+                self.tfg_grp[key] = self.input[key]
+                self.tfg_grp[key].attrs["interpretation"] = "scalar"
+                
         # raw scalers:
         raw_scalers = c216ds.ReadScalersForNLiveFrames([0, frames - 1])
         raw_scalers.shape = frames, -1
@@ -291,8 +297,8 @@ input = {
                 self.log_error("No factors provided for time measurement: defaulting to 1e-6", False)
                 factor = 1e-6
             measured_time = time_counter * factor
-            self.mcs_grp["meas_time"] = measured_time
-            self.mcs_grp["meas_time"].attrs["interpretation"] = "scalar"
+            self.mcs_grp["ExposureTime"] = measured_time
+            self.mcs_grp["ExposureTime"].attrs["interpretation"] = "scalar"
         else:
             self.log_error("No HSTime pin number, using TFG time")
             measured_time = tfg[1::2]
