@@ -68,12 +68,25 @@ def preproc(**d):
     list_z = []
     HS32Len = dd.get("HS32Len", 16) 
     HS32Depth = dd.get("HS32Depth", 32)
-    HSI0Factor = dd.get("HSI0Factor",1)
-    HSI1Factor = dd.get("HSI1Factor",1)
+    HSI0Factor = dd.get("HSI0Factor", 1)
+    HSI1Factor = dd.get("HSI1Factor", 1)
     # "0.005 s"
-    ShutterOpeningTime = float(dd.get("ShutterOpeningTime","0").split()[0])
-    ShutterClosingTime = float(dd.get("ShutterClosingTime","0").split()[0])
-    
+    if "ShutterOpeningTime" in dd:
+        value = dd["ShutterOpeningTime"]
+        if type(value) in StringTypes:
+            ShutterOpeningTime = float(value.split()[0])
+        else:
+            ShutterOpeningTime = float(value)
+    else:
+        ShutterOpeningTime = 0
+    if "ShutterClosingTime" in dd:
+        value = dd["ShutterClosingTime"]
+        if type(value) in StringTypes:
+            ShutterClosingTime = float(value.split()[0])
+        else:
+            ShutterClosingTime = float(value)
+    else:
+        ShutterClosingTime = 0
     for ind in map(lambda x:'HS32F'+'{0:02d}'.format(x),range(1,HS32Len+1)):
             list_f.append(float(dd[ind]))
     for ind in map(lambda x:'HS32N'+'{0:02d}'.format(x),range(1,HS32Len+1)):
@@ -81,9 +94,9 @@ def preproc(**d):
     for ind in map(lambda x:'HS32Z'+'{0:02d}'.format(x),range(1,HS32Len+1)):
             list_z.append(float(dd[ind]))
 
-    info_dir={}
+    info_dir = {}
     for info_ind in dd:
-        if  info_ind[0:2].find('HS') == 0:
+        if info_ind[0:2].find('HS') == 0:
             continue
         elif info_ind[0:2].find('HM') == 0:
             continue
@@ -152,6 +165,7 @@ input = {
         self.group = None
         self.tfg_grp = None
         self.mcs_grp = None
+        self.input2 = {}
 
     def setup(self, kwargs=None):
         """
@@ -159,14 +173,16 @@ input = {
         """
         Plugin.setup(self, kwargs)
         if "HS32F10" in self.input:
-            self.input.update(preproc(**self.input))
-        self.c216 = self.input.get("c216", "id02/c216/0")
-        self.cycle = self.input.get("cycle", 1)
-        if "hdf5_filename" not in self.input:
+            self.input2.update(preproc(**self.input))
+        else:
+            self.input2.update(self.input)
+        self.c216 = self.input2.get("c216", "id02/c216/0")
+        self.cycle = self.input2.get("cycle", 1)
+        if "hdf5_filename" not in self.input2:
             self.log_error("hdf5_filename not in input")
-        self.hdf5_filename = self.input.get("hdf5_filename")
-        self.entry = self.input.get("entry", "entry")
-        self.instrument = self.input.get("instrument", "id02")
+        self.hdf5_filename = self.input2.get("hdf5_filename")
+        self.entry = self.input2.get("entry", "entry")
+        self.instrument = self.input2.get("instrument", "id02")
 
     def process(self):
         self.create_hdf5()
@@ -205,27 +221,27 @@ input = {
         self.info_grp = self.hdf5.require_group(posixpath.join(self.instrument, "Information"))
         self.info_grp.attrs["NX_class"] = "NXcollection"
 #        fields = ("MachineInfo", "OpticsInfo", "ProposalInfo", "StationInfo", "DetectorInfo", "ExperimentInfo") + \
-#                 self.input.get("info", ())
-        for field, value in self.input.get("Info", {}).iteritems():
+#                 self.input2.get("info", ())
+        for field, value in self.input2.get("Info", {}).iteritems():
             self.info_grp[field] = numpy.string_(value)
 
-        start_time = self.input.get("HMStartTime", get_isotime())
+        start_time = self.input2.get("HMStartTime", get_isotime())
 
         # Factor
-        HS32F = self.input.get("HS32F")
+        HS32F = self.input2.get("HS32F")
         if HS32F is not None:
             self.mcs_grp["HS32F"] = HS32F
         # Zero
-        HS32Z = self.input.get("HS32Z")
+        HS32Z = self.input2.get("HS32Z")
         if HS32Z is not None:
             self.mcs_grp["HS32Z"] = HS32Z
         # Name
-        HS32N = self.input.get("HS32N")
+        HS32N = self.input2.get("HS32N")
         if HS32N is not None:
             print(HS32N)
             self.mcs_grp["HS32N"] = numpy.array([str(i) for i in HS32N])
         # Mode
-        HS32M = self.input.get("HS32M")
+        HS32M = self.input2.get("HS32M")
         if HS32M is not None:
             self.mcs_grp["HS32M"] = HS32M
 
@@ -274,11 +290,11 @@ input = {
         self.tfg_grp["delta_time"] = tmp.cumsum()[0::2]
         self.tfg_grp["delta_time"].attrs["interpretation"] = "scalar"
         for key in ["HMStartTime", "HMStartEpoch"]:
-            if key in self.input:
-                if type(self.input[key]) in StringTypes:
-                    self.tfg_grp[key] = numpy.string_(self.input[key])
+            if key in self.input2:
+                if type(self.input2[key]) in StringTypes:
+                    self.tfg_grp[key] = numpy.string_(self.input2[key])
                 else:
-                    self.tfg_grp[key] = self.input[key]
+                    self.tfg_grp[key] = self.input2[key]
                 self.tfg_grp[key].attrs["interpretation"] = "scalar"
                 
         # raw scalers:
@@ -286,8 +302,8 @@ input = {
         raw_scalers.shape = frames, -1
         counters = raw_scalers.shape[1]
         self.mcs_grp["HS32C"] = raw_scalers
-        if "HSTime" in self.input:
-            pin = int(self.input["HSTime"])
+        if "HSTime" in self.input2:
+            pin = int(self.input2["HSTime"])
             if pin > counters:
                 self.log_error("invalid pin number %s" % pin)
             self.mcs_grp["HSTime"] = pin
@@ -331,17 +347,17 @@ input = {
                 self.mcs_grp[fullname] = values[:, i]
                 self.mcs_grp[fullname].attrs["interpretation"] = "scalar"
                 
-            sot = self.input.get("ShutterOpeningTime", 0.0)
-            sct = self.input.get("ShutterClosingTime", 0.0)
+            sot = self.input2.get("ShutterOpeningTime", 0.0)
+            sct = self.input2.get("ShutterClosingTime", 0.0)
             for name, value in (("ShutterOpeningTime", sot),
-                               ("ShutterClosingTime", sct)):
+                                ("ShutterClosingTime", sct)):
                         self.mcs_grp[name] = value
                         self.mcs_grp[name].attrs["interpretation"] = "scalar"
             correction_time = (measured_time - sot + sct) / (measured_time - sot)
             for I in ("HSI0", "HSI1"):
-                if I in self.input:
+                if I in self.input2:
                     dest = "Intensity" + I[-1]
-                    pin = int(self.input[I])
+                    pin = int(self.input2[I])
                     if pin > counters:
                         self.log_error("invalid pin number %s" % pin)
                     self.mcs_grp[I] = pin
@@ -352,7 +368,7 @@ input = {
 #                     factor = self.mcs_grp["HS32F"][pin]
 #                     zero = self.mcs_grp["HS32Z"][pin]
 #                     measured = (counter - measured_time * zero) * factor
-                    I_factor = float(self.input.get(I + "Factor", 1.0))
+                    I_factor = float(self.input2.get(I + "Factor", 1.0))
                     self.mcs_grp[I + "Factor"] = I_factor
                     self.mcs_grp[I + "Factor"].attrs["interpretation"] = "scalar"
                     measured = counter * I_factor
@@ -365,8 +381,8 @@ input = {
 
     def teardown(self):
         self.output["c216_filename"] = self.hdf5_filename
-        self.output["c216_path"] = self.group.name
         if self.group:
+            self.output["c216_path"] = self.group.name
             self.group.parent["end_time"] = numpy.string_(get_isotime())
         if self.hdf5:
             self.hdf5.close()
