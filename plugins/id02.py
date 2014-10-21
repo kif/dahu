@@ -354,6 +354,9 @@ input = {
                         self.mcs_grp[name] = value
                         self.mcs_grp[name].attrs["interpretation"] = "scalar"
             correction_time = (measured_time - sot + sct) / (measured_time - sot)
+
+            #for debugging
+            self.input["input2"] = self.input2
             for I in ("HSI0", "HSI1"):
                 if I in self.input2:
                     dest = "Intensity" + I[-1]
