@@ -115,7 +115,7 @@ def preproc(**d):
                  'HS32Z': list_z,
                  'HS32N': list_n,
                  'Info': info_dir}
-    for key in ['HMStartEpoch', 'HMStartTime', "hdf5_filename", "entry", "HSTime"]:
+    for key in ['HMStartEpoch', 'HMStartTime', "hdf5_filename", "entry", "HSTime", "HSI0", "HSI1"]:
         if key in dd: 
             final_dir[key] = dd[key]
     return final_dir
