@@ -176,6 +176,9 @@ input = {
             self.input2.update(preproc(**self.input))
         else:
             self.input2.update(self.input)
+        # for debugging
+        self.input["input2"] = self.input2
+
         self.c216 = self.input2.get("c216", "id02/c216/0")
         self.cycle = self.input2.get("cycle", 1)
         if "hdf5_filename" not in self.input2:
@@ -355,8 +358,6 @@ input = {
                         self.mcs_grp[name].attrs["interpretation"] = "scalar"
             correction_time = (measured_time - sot + sct) / (measured_time - sot)
 
-            #for debugging
-            self.input["input2"] = self.input2
             for I in ("HSI0", "HSI1"):
                 if I in self.input2:
                     dest = "Intensity" + I[-1]
