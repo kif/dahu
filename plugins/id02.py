@@ -17,13 +17,14 @@ import shutil
 import sys
 import time
 import threading
-
 from dahu.factory import register
 from dahu.plugin import Plugin, plugin_from_function
 from dahu.utils import get_isotime
 from dahu.job import Job
-
-
+if sys.version_info < (3,0):
+    StringTypes = (str, unicode)
+else:
+    StringTypes = (str, bytes)
 __doc__ = """
 Plugins for ID02:
 
@@ -35,7 +36,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/10/2014"
+__date__ = "21/10/2014"
 __status__ = "development"
 version = "0.3"
 
@@ -89,21 +90,21 @@ def preproc(**d):
         else:    
             info_dir[info_ind] = dd[info_ind]
             
-    final_dir ={"HS32Len": HS32Len,
-                "HS32Depth": HS32Depth,
-                "HSI0Factor": HSI0Factor,
-                "HSI1Factor": HSI1Factor,
-                "ShutterOpeningTime":ShutterOpeningTime,
-                "ShutterClosingTime":ShutterClosingTime,
-                'instrument': 'id02',
-                'c216': 'id02/c216/0',
-                'HS32F': list_f,
-                'HS32Z': list_z,
-                'HS32N': list_n,
-                'Info': info_dir }
-    for key in ['HMStartEpoch','HMStartTime', "hdf5_filename", "entry", "HSTime"]:
+    final_dir = {"HS32Len": HS32Len,
+                 "HS32Depth": HS32Depth,
+                 "HSI0Factor": HSI0Factor,
+                 "HSI1Factor": HSI1Factor,
+                 "ShutterOpeningTime": ShutterOpeningTime,
+                 "ShutterClosingTime": ShutterClosingTime,
+                 'instrument': 'id02',
+                 'c216': 'id02/c216/0',
+                 'HS32F': list_f,
+                 'HS32Z': list_z,
+                 'HS32N': list_n,
+                 'Info': info_dir}
+    for key in ['HMStartEpoch', 'HMStartTime', "hdf5_filename", "entry", "HSTime"]:
         if key in dd: 
-            final_dir[key]=dd[key]
+            final_dir[key] = dd[key]
     return final_dir
 plugin_from_function(preproc)
 
@@ -274,7 +275,10 @@ input = {
         self.tfg_grp["delta_time"].attrs["interpretation"] = "scalar"
         for key in ["HMStartTime", "HMStartEpoch"]:
             if key in self.input:
-                self.tfg_grp[key] = self.input[key]
+                if type(self.input[key]) in StringTypes:
+                    self.tfg_grp[key] = numpy.string_(self.input[key])
+                else:
+                    self.tfg_grp[key] = self.input[key]
                 self.tfg_grp[key].attrs["interpretation"] = "scalar"
                 
         # raw scalers:
@@ -302,11 +306,9 @@ input = {
         else:
             self.log_error("No HSTime pin number, using TFG time")
             measured_time = tfg[1::2]
-
         
         if ("HS32F" in self.mcs_grp) and ("HS32Z" in self.mcs_grp):
-
-#             if "interpreted" in self.mcs_grp:
+            #             if "interpreted" in self.mcs_grp:
             modes = numpy.zeros(counters, dtype=numpy.int32)
             if "HS32M" in self.mcs_grp:
                 raw_modes = numpy.array(self.mcs_grp["HS32M"])
@@ -329,16 +331,16 @@ input = {
                 self.mcs_grp[fullname] = values[:, i]
                 self.mcs_grp[fullname].attrs["interpretation"] = "scalar"
                 
-            sot = self.input.get("ShutterOpeningTime",0.0)
-            sct = self.input.get("ShutterClosingTime",0.0)
-            for name,value in (("ShutterOpeningTime",sot),
-                               ("ShutterClosingTime",sct)):
+            sot = self.input.get("ShutterOpeningTime", 0.0)
+            sct = self.input.get("ShutterClosingTime", 0.0)
+            for name, value in (("ShutterOpeningTime", sot),
+                               ("ShutterClosingTime", sct)):
                         self.mcs_grp[name] = value
                         self.mcs_grp[name].attrs["interpretation"] = "scalar"
-            correction_time = (measured_time-sot+sct)/(measured_time-sot)
+            correction_time = (measured_time - sot + sct) / (measured_time - sot)
             for I in ("HSI0", "HSI1"):
                 if I in self.input:
-                    dest = "Intensity"+I[-1]
+                    dest = "Intensity" + I[-1]
                     pin = int(self.input[I])
                     if pin > counters:
                         self.log_error("invalid pin number %s" % pin)
@@ -350,17 +352,16 @@ input = {
 #                     factor = self.mcs_grp["HS32F"][pin]
 #                     zero = self.mcs_grp["HS32Z"][pin]
 #                     measured = (counter - measured_time * zero) * factor
-                    I_factor = float(self.input.get(I+"Factor", 1.0))
-                    self.mcs_grp[I+"Factor"] = I_factor                        
-                    self.mcs_grp[I+"Factor"].attrs["interpretation"] = "scalar"
+                    I_factor = float(self.input.get(I + "Factor", 1.0))
+                    self.mcs_grp[I + "Factor"] = I_factor
+                    self.mcs_grp[I + "Factor"].attrs["interpretation"] = "scalar"
                     measured = counter * I_factor
                     self.mcs_grp[dest] = measured
                     self.mcs_grp[dest].attrs["interpretation"] = "scalar"
-                    self.mcs_grp[dest+"ShutCor"] = measured * correction_time
-                    self.mcs_grp[dest+"ShutCor"].attrs["interpretation"] = "scalar"
+                    self.mcs_grp[dest + "ShutCor"] = measured * correction_time
+                    self.mcs_grp[dest + "ShutCor"].attrs["interpretation"] = "scalar"
         else:
             self.log_error("Not factor/zero to calculate I0/I1", True)
-
 
     def teardown(self):
         self.output["c216_filename"] = self.hdf5_filename
@@ -438,6 +439,7 @@ class SingleDetector(Plugin):
             "Rot_1", "Rot_2", "Rot_3",
             "RasterOrientation", "SampleDistance", "SaxsDataVersion", "Title", "WaveLength")
     TIMEOUT = 10
+
     def __init__(self):
         Plugin.__init__(self)
         self.ai = None
