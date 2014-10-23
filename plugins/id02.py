@@ -759,7 +759,11 @@ class SingleDetector(Plugin):
                         ds.parent["q"].attrs["unit"] = "q_nm^-1"
                     res = res[:, 1]
                     res /= self.I1[i]
-                self.log_error("ds.shape=%s res.shape=%s"%(ds.shape,res.shape), do_raise=False)
+                else:
+                    self.log_error("Unknown/supported method ... %s"%(meth), do_raise=False)
+                self.log_error("method ... %s"%(meth), do_raise=False)
+                self.log_error("ds.shape=%s "%(ds.shape,), do_raise=False)
+                self.log_error("res.shape=%s"%(res.shape,), do_raise=False)
                 ds[i] = res
 
     def teardown(self):
