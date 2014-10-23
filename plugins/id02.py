@@ -522,7 +522,13 @@ class SingleDetector(Plugin):
             self.log_error("image_file not in input")
         self.image_file = self.input["image_file"]
         if not os.path.exists(self.image_file):
-            self.log_error("image_file %s does not exist" % self.image_file)
+            if not self.image_file.startswith("/"):
+                # prepend the dirname of the c216
+                image_file = os.path.join(os.path.dirname(c216_filename), self.image_file)
+                if os.path.exists(image_file):
+                    self.image_file = image_file
+                else:
+                    self.log_error("image_file %s does not exist" % self.image_file)
         if "raw" in self.to_save:
             t = threading.Thread(target=shutil.copy, name="copy raw", args=(self.image_file, self.dest))
             t.start()
