@@ -651,8 +651,9 @@ class SingleDetector(Plugin):
         Also initialize workers
         """
         in_shape = self.images_ds.shape
+        basename = os.path.splitext(os.path.basename(self.image_file))[0]
         for ext in self.to_save:
-            outfile = os.path.join(self.dest, "%s_%s.h5" % (self.metadata["DetectorName"], ext))
+            outfile = os.path.join(self.dest, "%s_%s_%s.h5" % (basename, self.metadata["DetectorName"], ext))
             self.output_hdf5[ext] = outfile
             try:
                 nxs = pyFAI.io.Nexus(outfile, "a")
@@ -765,9 +766,6 @@ class SingleDetector(Plugin):
                     res /= self.I1[i]
                 else:
                     self.log_error("Unknown/supported method ... %s"%(meth), do_raise=False)
-                self.log_error("method ... %s"%(meth), do_raise=False)
-                self.log_error("ds.shape=%s "%(ds.shape,), do_raise=False)
-                self.log_error("res.shape=%s"%(res.shape,), do_raise=False)
                 ds[i] = res
 
     def teardown(self):
