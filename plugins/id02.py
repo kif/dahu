@@ -638,7 +638,7 @@ class SingleDetector(Plugin):
         for key, value in parameters_grp.iteritems():
             base = key.split("_")[0] 
             conv = self.KEY_CONV.get(base, str)
-            metadata[key] = conv(str(value))
+            metadata[key] = conv(value.value)
         return metadata
             
     def create_hdf5(self):
