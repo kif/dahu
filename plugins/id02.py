@@ -516,8 +516,12 @@ class SingleDetector(Plugin):
 #            shutil.copy(c216_filename, self.dest)
 
         if "to_save" in self.input:
-            self.to_save = self.input["to_save"][:]
-
+            to_save = self.input["to_save"][:]
+            if type(to_save) in StringTypes:
+                # fix a bug from spec ...
+                self.to_save = [ i for i in to_save.split('"') if i.isalpha()]
+            else:
+                self.to_save = to_save
         if "image_file" not in self.input:
             self.log_error("image_file not in input")
         self.image_file = self.input["image_file"]
