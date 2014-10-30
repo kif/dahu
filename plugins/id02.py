@@ -392,8 +392,7 @@ input = {
             self.hdf5.close()
         Plugin.teardown(self)
 
-                    
-        
+
 ################################################################################
 # Single Detector plugin
 ################################################################################
@@ -466,9 +465,9 @@ class SingleDetector(Plugin):
         self.distotion_cor = None
         self.distotion_norm = None
         self.workers = {}
-        self.output_ds = {} #output datasets
-        self.dest = None    # output directory
-        self.I1 = None      # beam stop diode values
+        self.output_ds = {}  # output datasets
+        self.dest = None     # output directory
+        self.I1 = None       # beam stop diode values
         self.nframes = None
         self.to_save = ["raw", "ave"]  # by default only raw image and averaged one is saved
         self.input_nxs = None
