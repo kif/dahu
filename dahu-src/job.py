@@ -257,7 +257,7 @@ class Job(Thread):
         @param wait: wait for job to be finished
         
         """
-        logger.debug("In clean %s"%(self._plugin))
+        logger.debug("In clean %s" % (self._plugin))
         if wait and self.is_alive():
             self.join()
         if self._plugin is not None:
@@ -267,12 +267,12 @@ class Job(Thread):
                     if self._plugin.input:
                         self._input_data.update(self._plugin.input)
                     if self._plugin.output:
-                        self._output_data.update(self._plugin.output)                        
+                        self._output_data.update(self._plugin.output)
                     self._output_data["job_runtime"] = self._runtime
-                    base_path = os.path.join(utils.get_workdir(), "%05i_%s"%(self._jobId, self._name))
-                    with open(base_path+".inp","w") as infile:
+                    base_path = os.path.join(utils.get_workdir(), "%05i_%s" % (self._jobId, self._name))
+                    with open(base_path + ".inp", "w") as infile:
                         json.dump(self._input_data, infile, indent=4)
-                    with open(base_path+".out","w") as infile:
+                    with open(base_path + ".out", "w") as infile:
                         json.dump(self._output_data, infile, indent=4)
                     self._plugin = None
                     self.data_on_disk = base_path
@@ -280,7 +280,7 @@ class Job(Thread):
             gc.collect()
 
     synchronize = join
-    
+
 ################################################################################
 # Properties
 ################################################################################
@@ -327,7 +327,7 @@ class Job(Thread):
         @type _bWait: boolean
         """
         with self._sem:
-            if self._status in [self.STATE_SUCCESS, self.STATE_FAILURE,  self.STATE_ABORTED]:
+            if self._status in [self.STATE_SUCCESS, self.STATE_FAILURE, self.STATE_ABORTED]:
                 if self.data_on_disk:
                     return json.load(open(self.data_on_disk + ".out"))
                 else:
@@ -335,7 +335,7 @@ class Job(Thread):
             else:
                 logger.warning("Getting output_data for job id %d in state %s." % (self._jobId, self._status))
                 return self._output_data
-        
+
     def getName(self):
         return self._name
     def setName(self, name):
@@ -361,6 +361,24 @@ class Job(Thread):
             job.join()
         if len(cls._dictJobs) != len(listJob):
             logger.warning("Job.synchronize_all: New jobs have been launched while synchronizing")
+
+    @classmethod
+    def synchronize_job(cls, jobId, timeout=None):
+        """
+        Wait for all a specific jobs to finish.
+        
+        @param jobId:
+        @param timeout: timeout in second to wait
+        @return: status of the job
+        """
+        logger.debug("Job.synchronize_job class method for id=%s (timeout=%s)" % (id, timeout))
+        job = cls.getJobFromID(jobId)
+
+        if job is None:
+            res = "No Job"
+        else:
+            job.join(timeout)
+            res = job.status
 
     @classmethod
     def getStatusFromID(cls, jobId):
@@ -441,7 +459,7 @@ class Job(Thread):
             if job is not None:
                 with job._sem:
                     if job.data_on_disk:
-                        data = open(job.data_on_disk+".out").read() 
+                        data = open(job.data_on_disk + ".out").read()
                         if as_JSON:
                             output = data
                         else:
@@ -473,7 +491,7 @@ class Job(Thread):
             if job is not None:
                 with job._sem:
                     if job.data_on_disk:
-                        data = open(job.data_on_disk+".inp").read()
+                        data = open(job.data_on_disk + ".inp").read()
                         if as_JSON:
                             output = data
                         else:
@@ -499,7 +517,7 @@ class Job(Thread):
         """
         out = cls.getDataOutputFromId(jobId)
         return os.linesep.join(out.get("error", [])).encode("UTF-8")
-            
+
 
     getErrorFromID = getErrorFromId
     @classmethod

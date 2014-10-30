@@ -492,19 +492,19 @@ class SingleDetector(Plugin):
 
         if "metadata_job" in self.input:
             job_id = int(self.input.get("metadata_job"))
-            status = Job.getStatusFromId(job_id)
+            status = Job.synchronize_job(job_id, self.TIMEOUT)
             abort_time = time.time() + self.TIMEOUT
-            finished = [Job.STATE_SUCCESS, Job.STATE_FAILURE, Job.STATE_ABORTED]
-            while status not in finished:
+            while status == Job.STATE_UNITIALIZED:
+                #Wait for job to start
                 time.sleep(1)
-                status = Job.getStatusFromId(job_id)
+                status = Job.synchronize_job(job_id, self.TIMEOUT)
                 if time.time() > abort_time:
                     self.log_error("Timeout while waiting metadata plugin to finish", do_raise=True)
                     break
             if status == Job.STATE_SUCCESS:
                 self.metadata_plugin = Job.getJobFromId(job_id)
             else:
-                self.log_error("Metadata plugin ended in %s: aborting myself"%self.status, do_raise=True)
+                self.log_error("Metadata plugin ended in %s: aborting myself" % status, do_raise=True)
         if not os.path.isdir(self.dest):
             os.makedirs(self.dest)
         c216_filename = os.path.abspath(self.input.get("c216_filename", ""))
@@ -518,7 +518,7 @@ class SingleDetector(Plugin):
             to_save = self.input["to_save"][:]
             if type(to_save) in StringTypes:
                 # fix a bug from spec ...
-                self.to_save = [ i for i in to_save.split('"') if i.isalpha()]
+                self.to_save = [i for i in to_save.split('"') if i.isalpha()]
             else:
                 self.to_save = to_save
         if "image_file" not in self.input:
