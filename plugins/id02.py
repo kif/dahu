@@ -515,13 +515,23 @@ class SingleDetector(Plugin):
 #            shutil.copy(c216_filename, self.dest)
 
         if "to_save" in self.input:
-            self.to_save = self.input["to_save"][:]
-
+            to_save = self.input["to_save"][:]
+            if type(to_save) in StringTypes:
+                # fix a bug from spec ...
+                self.to_save = [ i for i in to_save.split('"') if i.isalpha()]
+            else:
+                self.to_save = to_save
         if "image_file" not in self.input:
             self.log_error("image_file not in input")
         self.image_file = self.input["image_file"]
         if not os.path.exists(self.image_file):
-            self.log_error("image_file %s does not exist" % self.image_file)
+            if not self.image_file.startswith("/"):
+                # prepend the dirname of the c216
+                image_file = os.path.join(os.path.dirname(c216_filename), self.image_file)
+                if os.path.exists(image_file):
+                    self.image_file = image_file
+                else:
+                    self.log_error("image_file %s does not exist" % self.image_file)
         if "raw" in self.to_save:
             t = threading.Thread(target=shutil.copy, name="copy raw", args=(self.image_file, self.dest))
             t.start()
@@ -631,7 +641,7 @@ class SingleDetector(Plugin):
         for key, value in parameters_grp.iteritems():
             base = key.split("_")[0] 
             conv = self.KEY_CONV.get(base, str)
-            metadata[key] = conv(value)
+            metadata[key] = conv(value.value)
         return metadata
             
     def create_hdf5(self):
@@ -640,8 +650,9 @@ class SingleDetector(Plugin):
         Also initialize workers
         """
         in_shape = self.images_ds.shape
+        basename = os.path.splitext(os.path.basename(self.image_file))[0]
         for ext in self.to_save:
-            outfile = os.path.join(self.dest, "%s_%s.h5" % (self.metadata["DetectorName"], ext))
+            outfile = os.path.join(self.dest, "%s_%s_%s.h5" % (basename, self.metadata["DetectorName"], ext))
             self.output_hdf5[ext] = outfile
             try:
                 nxs = pyFAI.io.Nexus(outfile, "a")
@@ -752,7 +763,8 @@ class SingleDetector(Plugin):
                         ds.parent["q"].attrs["unit"] = "q_nm^-1"
                     res = res[:, 1]
                     res /= self.I1[i]
-                self.log_error("ds.shape=%s res.shape=%s"%(ds.shape,res.shape), do_raise=False)
+                else:
+                    self.log_error("Unknown/supported method ... %s"%(meth), do_raise=False)
                 ds[i] = res
 
     def teardown(self):
