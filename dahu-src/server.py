@@ -57,7 +57,7 @@ class DahuDS(PyTango.Device_4Impl):
         self.last_stats = "No statistics collected yet, please use the 'collectStatistics' method first"
         self.last_failure = -1
         self.last_success = -1
-        self.statistics_threads = None 
+        self.statistics_threads = None
 #         self._ncpu_sem = threading.Semaphore(multiprocessing.cpu_count())
 
     def get_name(self):
@@ -127,8 +127,8 @@ class DahuDS(PyTango.Device_4Impl):
     def abort(self, jobId):
         """
         Aborts a job
-        
-        @param  jobId: ID of the job to stop 
+
+        @param  jobId: ID of the job to stop
         """
         pass
 
@@ -140,9 +140,9 @@ class DahuDS(PyTango.Device_4Impl):
     def startJob(self, argin):
         """
         Starts a job
-        
+
         @param argin: 2-list [<Dahu plugin to execute>, <JSON serialized dict>]
-        @return: jobID which is an int (-1 for error) 
+        @return: jobID which is an int (-1 for error)
         """
         logger.debug("In %s.startJob()" % self.get_name())
         name, data_input = argin[:2]
@@ -175,7 +175,7 @@ class DahuDS(PyTango.Device_4Impl):
     def finished_processing(self, job):
         """
         callback: when processing is done
-        
+
         @param job: instance of dahu.job.Job
         """
         logger.debug("In %s.finished_processing id:%s (%s)" % (self.get_name(), job.id, job.status))
@@ -189,6 +189,7 @@ class DahuDS(PyTango.Device_4Impl):
             sys.stderr.flush()
             self.last_failure = job.id
             self.push_change_event("jobFailure", job.id)
+        self.queue.task_done()
         gc.collect()
 
 #TODO one day
