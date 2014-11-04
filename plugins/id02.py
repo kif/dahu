@@ -594,7 +594,7 @@ class SingleDetector(Plugin):
         self.flat_filename = self.input.get("flat_filename")
         if type(self.flat_filename) in StringTypes and os.path.exists(self.flat_filename):
             try:
-                flat = open(self.flat_filename).data
+                flat = fabio.open(self.flat_filename).data
             except:
                 flat = self.read_data(self.flat_filename)
             if flat.ndim == 3:
@@ -606,7 +606,7 @@ class SingleDetector(Plugin):
         self.mask_filename = self.input.get("regrouping_mask_filename")
         if type(self.mask_filename) in StringTypes and os.path.exists(self.mask_filename):
             try:
-                mask = open(self.mask_filename).data
+                mask = fabio.open(self.mask_filename).data
             except:
                 mask = self.read_data(self.mask_filename)
             if mask.ndim == 3:
