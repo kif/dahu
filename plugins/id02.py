@@ -13,6 +13,8 @@ import posixpath
 import pyFAI
 import pyFAI.distortion
 import pyFAI.worker
+import pyFAI.io
+import fabio
 import shutil
 import sys
 import time
@@ -422,7 +424,8 @@ class SingleDetector(Plugin):
               "npt2_rad" : 500,
               "npt1_rad" : 1000,
               "to_save": ["raw", "dark", "flat", "dist", "norm", "azim", "ave"]
-              "metadata_job": 1
+              "metadata_job": 1,
+              
               }  
               
     {
@@ -438,6 +441,7 @@ class SingleDetector(Plugin):
  "output_dir": "/nobackup/lid02gpu12/output", 
  "WaveLength": 9.95058e-11, 
  "image_file": "/nobackup/lid02gpu11/FRELON/test_laurent_saxs_0000.h5", 
+  "dark_filename": "/nobackup/lid02gpu11/FRELON/test_laurent_dark_0000.h5",
 }
 
     """
@@ -478,8 +482,13 @@ class SingleDetector(Plugin):
         self.npt2_rad = None
         self.npt2_azim = None
         self.dark = None
+        self.dark_filename = None
+        self.flat_filename = None
         self.flat = None
+        self.mask_filename = None
+        self.distortion_filename = None
         self.output_hdf5 = {}
+        self.dist = 1.0
 
     def setup(self, kwargs=None):
         """
@@ -558,10 +567,52 @@ class SingleDetector(Plugin):
         for key in ("BSize_1", "BSize_2", "Center_1", "Center_2",
                     "PSize_1", "PSize_2", "Rot_1", "Rot_2", "Rot_3",
                     "SampleDistance", "WaveLength"):
-            forai[key] = self.metadata.get(key)
-        self.ai = pyFAI.AzimuthalIntegrator()
+            forai[key] = self.metadata.get('SampleDistance')
+        self.dist = self.metadata.get("")
+        #read detector distortion
+        self.distortion_filename = self.input.get("distortion_filename")
+        if type(self.distortion_filename) in StringTypes:
+            detector = pyFAI.detectors.Detector(spline=self.distortion_filename)
+        else:
+            detector = None
+            
+        self.ai = pyFAI.AzimuthalIntegrator(detector=detector)
         self.ai.setSPD(**forai)
         
+        # Read and Process dark
+        self.dark_filename = self.input.get("dark_filename")
+        if type(self.dark_filename) in StringTypes and os.path.exists(self.dark_filename):
+            dark = self.read_data(self.dark_filename)
+            if dark.ndim == 3:
+                self.dark = pyFAI.utils.averageDark(dark, center_method="median")
+            else:
+                self.dark = dark
+        elif type(self.dark_filename) in (int, float):
+            self.dark = float(self.dark_filename)    
+
+        # Read and Process Flat
+        self.flat_filename = self.input.get("flat_filename")
+        if type(self.flat_filename) in StringTypes and os.path.exists(self.flat_filename):
+            try:
+                flat = open(self.flat_filename).data
+            except:
+                flat = self.read_data(self.flat_filename)
+            if flat.ndim == 3:
+                self.flat = pyFAI.utils.averageDark(flat, center_method="median")
+            else:
+                self.flat = flat
+                
+        # Read and Process mask
+        self.mask_filename = self.input.get("regrouping_mask_filename")
+        if type(self.mask_filename) in StringTypes and os.path.exists(self.mask_filename):
+            try:
+                mask = open(self.mask_filename).data
+            except:
+                mask = self.read_data(self.mask_filename)
+            if mask.ndim == 3:
+                mask = pyFAI.utils.averageDark(mask, center_method="median")
+            self.ai.mask = mask #nota: this is assigned to the detector !
+            
         self.create_hdf5()
         self.process_images()
 
@@ -647,7 +698,7 @@ class SingleDetector(Plugin):
     def create_hdf5(self):
         """
         Create one HDF5 file per output
-        Also initialize workers
+        Also initialize all workers
         """
         in_shape = self.images_ds.shape
         basename = os.path.splitext(os.path.basename(self.image_file))[0]
@@ -687,6 +738,7 @@ class SingleDetector(Plugin):
                 shape = (in_shape[0], self.npt2_azim, self.npt2_rad)
                 ai = pyFAI.AzimuthalIntegrator()
                 ai.setPyFAI(**self.ai.getPyFAI())
+                ai.mask = self.ai.mask
                 worker = pyFAI.worker.Worker(ai, in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
@@ -713,10 +765,19 @@ class SingleDetector(Plugin):
             elif ext == "flat":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark, flat=self.flat)
                 self.workers[ext] = worker
+            elif ext == "solid":
+                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark, flat=self.flat, solidangle=self.ai.get_dssa()/self.dist**2)
+                self.workers[ext] = worker
             elif ext == "dist":
-                raise NotImplementedError("dist is not yet implemented")
+                worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.ai.get_dssa()/self.dist**2,
+                                                       detector=self.ai.detector)
+                self.workers[ext] = worker
             elif ext == "norm":
-                raise NotImplementedError("norm is not yet implemented")
+                worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.ai.get_dssa()/self.dist**2,
+                                                       detector = self.ai.detector)
+                self.workers[ext] = worker
+            else:
+                self.log_error("unknown treatment %s"%ext, do_raise=False)
             output_ds = coll.create_dataset("data", shape, "float32",
                                             chunks=(1,) + shape[1:],
                                             maxshape=(None,) + shape[1:])
@@ -767,6 +828,20 @@ class SingleDetector(Plugin):
                     self.log_error("Unknown/supported method ... %s"%(meth), do_raise=False)
                 ds[i] = res
 
+    def read_data(self, filename):
+        """read dark data from a file
+        
+        @param filename: HDF5 file containing dark frames
+        @return: numpy array with dark 
+        """
+        with pyFAI.io.Nexus(filename, "r") as nxs:
+            for entry in nxs.get_entries():
+                for instrument in nxs.get_class(entry, "NXinstrument"):
+                    for detector in nxs.get_class(instrument, "NXdetector"):
+                        if "data" in detector:
+                            return numpy.array(detector["data"])
+        
+        
     def teardown(self):
         if self.images_ds:
             self.images_ds.file.close()
