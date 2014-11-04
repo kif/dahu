@@ -621,6 +621,7 @@ class SingleDetector(Plugin):
         load the I1 data from a metadata HDF5 file
 
         /entry_0001/id02/MCS/I1
+        TODO: handle correction or not for shutter opening/closing time
 
         @param mfile: metadata HDF5 file
         @return: array with I1
