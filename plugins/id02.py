@@ -156,6 +156,8 @@ input = {
         }
 
 """
+    TO_SKIP = ("entry", "hdf5_filename", "plugin_name")
+
     def __init__(self):
         Plugin.__init__(self)
         self.cycle = None
@@ -225,10 +227,10 @@ input = {
         # Static metadata
         self.info_grp = self.hdf5.require_group(posixpath.join(self.instrument, "parameters"))
         self.info_grp.attrs["NX_class"] = "NXcollection"
-#        fields = ("MachineInfo", "OpticsInfo", "ProposalInfo", "StationInfo", "DetectorInfo", "ExperimentInfo") + \
-#                 self.input2.get("info", ())
-        for field, value in self.input2.get("Info", {}).iteritems():
-            self.info_grp[field] = numpy.string_(value)
+
+        for field, value in self.input2.get("Info", {}).items():
+            if field not in self.TO_SKIP:
+                self.info_grp[field] = numpy.string_(value)
 
         start_time = self.input2.get("HMStartTime", get_isotime())
 
@@ -611,7 +613,7 @@ class SingleDetector(Plugin):
                 mask = self.read_data(self.mask_filename)
             if mask.ndim == 3:
                 mask = pyFAI.utils.averageDark(mask, center_method="median")
-            self.ai.mask = mask #nota: this is assigned to the detector !
+            self.ai.mask = mask  # nota: this is assigned to the detector !
             
         self.create_hdf5()
         self.process_images()
