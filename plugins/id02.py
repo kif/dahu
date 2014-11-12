@@ -135,7 +135,7 @@ class Metadata(Plugin):
 input = {
         "hdf5_filename":"/nobackup/lid02gpu11/metadata/test.h5",
         "entry": "entry",
-        "instrument":"id02",
+        "instrument":"ESRF-ID02",
         "c216":"id02/c216/0",
         "HS32F": [1e-06, 1, 7763480, 8176290, 342239, 967341, 5541980, 1739160, 2753.61, 1351920, 140000000, 16719500, 1, 0.000995868, 0.000995868, 1],
         "HS32Z": [0, 0, 383.55, 126.4, 6582.1, 6973.6, 162.95, 0, 221.2, 207.8, 315.26, 145.11, 323.76, 170, 170, 228.4],
@@ -187,7 +187,7 @@ input = {
             self.log_error("hdf5_filename not in input")
         self.hdf5_filename = self.input2.get("hdf5_filename")
         self.entry = self.input2.get("entry", "entry")
-        self.instrument = self.input2.get("instrument", "id02")
+        self.instrument = self.input2.get("instrument", "ESRF-ID02")
 
     def process(self):
         self.create_hdf5()
@@ -223,7 +223,7 @@ input = {
         self.mcs_grp["device"] = numpy.string_(self.c216)
 
         # Static metadata
-        self.info_grp = self.hdf5.require_group(posixpath.join(self.instrument, "Information"))
+        self.info_grp = self.hdf5.require_group(posixpath.join(self.instrument, "parameters"))
         self.info_grp.attrs["NX_class"] = "NXcollection"
 #        fields = ("MachineInfo", "OpticsInfo", "ProposalInfo", "StationInfo", "DetectorInfo", "ExperimentInfo") + \
 #                 self.input2.get("info", ())
@@ -544,7 +544,7 @@ class SingleDetector(Plugin):
         if "raw" in self.to_save:
             t = threading.Thread(target=shutil.copy, name="copy raw", args=(self.image_file, self.dest))
             t.start()
-            self.to_save.remove("raw")
+#            self.to_save.remove("raw")
             self.output_hdf5["raw"] = os.path.join(self.dest, os.path.basename(self.image_file))
         self.hdf5_filename = self.input.get("hdf5_filename")
         self.entry = self.input.get("entry", "entry")
@@ -704,6 +704,8 @@ class SingleDetector(Plugin):
         in_shape = self.images_ds.shape
         basename = os.path.splitext(os.path.basename(self.image_file))[0]
         for ext in self.to_save:
+            if ext == "raw":
+                continue
             outfile = os.path.join(self.dest, "%s_%s_%s.h5" % (basename, self.metadata["DetectorName"], ext))
             self.output_hdf5[ext] = outfile
             try:
@@ -716,7 +718,7 @@ class SingleDetector(Plugin):
             subentry = nxs.new_class(entry, "pyFAI", class_type="NXsubentry")
             subentry["definition_local"] = numpy.string_("PyFAI")
             coll = nxs.new_class(subentry, "process_" + ext, class_type="NXcollection")
-            metadata_grp = coll.require_group("metadata")
+            metadata_grp = coll.require_group("parameters")
             for key, val in self.metadata.iteritems():
                 if type(val) in [str, unicode]:
                     metadata_grp[key] = numpy.string_(val)
@@ -796,6 +798,8 @@ class SingleDetector(Plugin):
         for i in range(self.images_ds.shape[0]):
             data = self.images_ds[i]
             for meth in self.to_save:
+                if meth == "raw":
+                    continue
                 res = None
                 ds = self.output_ds[meth]
                 if meth == "dark":
