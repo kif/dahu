@@ -529,7 +529,8 @@ class SingleDetector(Plugin):
             to_save = self.input["to_save"][:]
             if type(to_save) in StringTypes:
                 # fix a bug from spec ...
-                self.to_save = [i for i in to_save.split('"') if i.isalpha()]
+                self.to_save = [i.strip('[\\] ",') for i in to_save.split()]
+                self.log_error("processing planned: " + " ".join(self.to_save), do_raise=False)
             else:
                 self.to_save = to_save
         if "image_file" not in self.input:
