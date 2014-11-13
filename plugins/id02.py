@@ -569,7 +569,7 @@ class SingleDetector(Plugin):
         for key in ("BSize_1", "BSize_2", "Center_1", "Center_2",
                     "PSize_1", "PSize_2", "Rot_1", "Rot_2", "Rot_3",
                     "SampleDistance", "WaveLength"):
-            forai[key] = self.metadata.get('SampleDistance')
+            forai[key] = self.metadata.get(key)
         self.dist = self.metadata.get("")
         #read detector distortion
         self.distortion_filename = self.input.get("distortion_filename")
@@ -586,7 +586,15 @@ class SingleDetector(Plugin):
         if type(self.dark_filename) in StringTypes and os.path.exists(self.dark_filename):
             dark = self.read_data(self.dark_filename)
             if dark.ndim == 3:
-                self.dark = pyFAI.utils.averageDark(dark, center_method="median")
+                method = self.input.get("dark_filter")
+                if method.startswith("quantil"):
+                    lower = self.input.get("dark_filter_quantil_lower", 0)
+                    upper = self.input.get("dark_filter_quantil_upper", 1)
+                    self.dark = pyFAI.utils.averageDark(dark, center_method=method, quantiles=(lower, upper))
+                else:
+                    if method == None:
+                        method = "median"
+                    self.dark = pyFAI.utils.averageDark(dark, center_method=method)
             else:
                 self.dark = dark
         elif type(self.dark_filename) in (int, float):
@@ -681,7 +689,7 @@ class SingleDetector(Plugin):
                             (len(collections), self.image_file, self.entry))
 
         detector_grps = self.input_nxs.get_class(collection, class_type="NXdetector")
-        if len(detector_grps)==0 and "detector" in collection:
+        if (len(detector_grps) == 0) and ("detector" in collection):
             detector_grp = collection["detector"]
         elif len(detector_grps) > 0:
             detector_grp = detector_grps[0]
@@ -692,7 +700,7 @@ class SingleDetector(Plugin):
         else:
             return {}
 
-        for key, value in parameters_grp.iteritems():
+        for key, value in parameters_grp.items():
             base = key.split("_")[0] 
             conv = self.KEY_CONV.get(base, str)
             metadata[key] = conv(value.value)
