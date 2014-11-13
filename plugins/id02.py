@@ -603,10 +603,10 @@ class SingleDetector(Plugin):
         # Read and Process Flat
         self.flat_filename = self.input.get("flat_filename")
         if type(self.flat_filename) in StringTypes and os.path.exists(self.flat_filename):
-            try:
-                flat = fabio.open(self.flat_filename).data
-            except:
+            if self.flat_filename.endswith(".h5") or self.flat_filename.endswith(".nxs") or self.flat_filename.endswith(".hdf5"):
                 flat = self.read_data(self.flat_filename)
+            else:
+                flat = fabio.open(self.flat_filename).data
             if flat.ndim == 3:
                 self.flat = pyFAI.utils.averageDark(flat, center_method="median")
             else:
@@ -808,6 +808,7 @@ class SingleDetector(Plugin):
         for i in range(self.images_ds.shape[0]):
             data = self.images_ds[i]
             for meth in self.to_save:
+                print(meth)
                 if meth == "raw":
                     continue
                 res = None
@@ -855,7 +856,6 @@ class SingleDetector(Plugin):
                     for detector in nxs.get_class(instrument, "NXdetector"):
                         if "data" in detector:
                             return numpy.array(detector["data"])
-        
         
     def teardown(self):
         if self.images_ds:
