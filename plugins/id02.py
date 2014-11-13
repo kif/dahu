@@ -574,7 +574,7 @@ class SingleDetector(Plugin):
         #read detector distortion
         self.distortion_filename = self.input.get("distortion_filename")
         if type(self.distortion_filename) in StringTypes:
-            detector = pyFAI.detectors.Detector(spline=self.distortion_filename)
+            detector = pyFAI.detectors.Detector(splineFile=self.distortion_filename)
         else:
             detector = None
             
