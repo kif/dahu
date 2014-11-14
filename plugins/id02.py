@@ -23,7 +23,7 @@ from dahu.factory import register
 from dahu.plugin import Plugin, plugin_from_function
 from dahu.utils import get_isotime
 from dahu.job import Job
-if sys.version_info < (3,0):
+if sys.version_info < (3, 0):
     StringTypes = (str, unicode)
 else:
     StringTypes = (str, bytes)
@@ -61,14 +61,14 @@ if "TANGO_HOST" not in os.environ:
 def preproc(**d):
     """Take a dict as input and forms a metadata structure as output
     @param: any dict
-    """ 
+    """
     dd = d.copy()
     if "job_id" in dd:
         dd.pop("job_id")
     list_f = []
     list_n = []
     list_z = []
-    HS32Len = dd.get("HS32Len", 16) 
+    HS32Len = dd.get("HS32Len", 16)
     HS32Depth = dd.get("HS32Depth", 32)
     HSI0Factor = dd.get("HSI0Factor", 1)
     HSI1Factor = dd.get("HSI1Factor", 1)
@@ -89,11 +89,11 @@ def preproc(**d):
             ShutterClosingTime = float(value)
     else:
         ShutterClosingTime = 0
-    for ind in map(lambda x:'HS32F'+'{0:02d}'.format(x),range(1,HS32Len+1)):
+    for ind in map(lambda x:'HS32F' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
             list_f.append(float(dd[ind]))
-    for ind in map(lambda x:'HS32N'+'{0:02d}'.format(x),range(1,HS32Len+1)):
+    for ind in map(lambda x:'HS32N' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
             list_n.append(dd[ind])
-    for ind in map(lambda x:'HS32Z'+'{0:02d}'.format(x),range(1,HS32Len+1)):
+    for ind in map(lambda x:'HS32Z' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
             list_z.append(float(dd[ind]))
 
     info_dir = {}
@@ -102,9 +102,9 @@ def preproc(**d):
             continue
         elif info_ind[0:2].find('HM') == 0:
             continue
-        else:    
+        else:
             info_dir[info_ind] = dd[info_ind]
-            
+
     final_dir = {"HS32Len": HS32Len,
                  "HS32Depth": HS32Depth,
                  "HSI0Factor": HSI0Factor,
@@ -118,7 +118,7 @@ def preproc(**d):
                  'HS32N': list_n,
                  'Info': info_dir}
     for key in ['HMStartEpoch', 'HMStartTime', "hdf5_filename", "entry", "HSTime", "HSI0", "HSI1"]:
-        if key in dd: 
+        if key in dd:
             final_dir[key] = dd[key]
     return final_dir
 plugin_from_function(preproc)
@@ -303,7 +303,7 @@ input = {
                 else:
                     self.tfg_grp[key] = self.input2[key]
                 self.tfg_grp[key].attrs["interpretation"] = "scalar"
-                
+
         # raw scalers:
         raw_scalers = c216ds.ReadScalersForNLiveFrames([0, frames - 1])
         raw_scalers.shape = frames, -1
@@ -329,7 +329,7 @@ input = {
         else:
             self.log_error("No HSTime pin number, using TFG time")
             measured_time = tfg[1::2]
-        
+
         if ("HS32F" in self.mcs_grp) and ("HS32Z" in self.mcs_grp):
             #             if "interpreted" in self.mcs_grp:
             modes = numpy.zeros(counters, dtype=numpy.int32)
@@ -353,7 +353,7 @@ input = {
                 fullname = "interpreted/%s" % name
                 self.mcs_grp[fullname] = values[:, i]
                 self.mcs_grp[fullname].attrs["interpretation"] = "scalar"
-                
+
             sot = self.input2.get("ShutterOpeningTime", 0.0)
             sct = self.input2.get("ShutterClosingTime", 0.0)
             for name, value in (("ShutterOpeningTime", sot),
@@ -580,10 +580,10 @@ class SingleDetector(Plugin):
             detector = pyFAI.detectors.Detector(splineFile=self.distortion_filename)
         else:
             detector = None
-            
+
         self.ai = pyFAI.AzimuthalIntegrator(detector=detector)
         self.ai.setSPD(**forai)
-        
+
         # Read and Process dark
         self.dark_filename = self.input.get("dark_filename")
         if type(self.dark_filename) in StringTypes and os.path.exists(self.dark_filename):
@@ -601,7 +601,7 @@ class SingleDetector(Plugin):
             else:
                 self.dark = dark
         elif type(self.dark_filename) in (int, float):
-            self.dark = float(self.dark_filename)    
+            self.dark = float(self.dark_filename)
 
         # Read and Process Flat
         self.flat_filename = self.input.get("flat_filename")
@@ -614,7 +614,7 @@ class SingleDetector(Plugin):
                 self.flat = pyFAI.utils.averageDark(flat, center_method="median")
             else:
                 self.flat = flat
-                
+
         # Read and Process mask
         self.mask_filename = self.input.get("regrouping_mask_filename")
         if type(self.mask_filename) in StringTypes and os.path.exists(self.mask_filename):
@@ -625,7 +625,7 @@ class SingleDetector(Plugin):
             if mask.ndim == 3:
                 mask = pyFAI.utils.averageDark(mask, center_method="median")
             self.ai.mask = mask  # nota: this is assigned to the detector !
-            
+
         self.create_hdf5()
         self.process_images()
 
@@ -648,7 +648,7 @@ class SingleDetector(Plugin):
                     mcs = instrument["MCS"]
                     if "I1" in mcs:
                         return numpy.array(mcs["I1"])
-                
+
     def parse_image_file(self):
         """
         @return: dict with interpreted metadata
@@ -705,11 +705,11 @@ class SingleDetector(Plugin):
             return {}
 
         for key, value in parameters_grp.items():
-            base = key.split("_")[0] 
+            base = key.split("_")[0]
             conv = self.KEY_CONV.get(base, str)
             metadata[key] = conv(value.value)
         return metadata
-            
+
     def create_hdf5(self):
         """
         Create one HDF5 file per output
@@ -717,8 +717,6 @@ class SingleDetector(Plugin):
         """
 #        in_shape = self.images_ds.shape
         basename = os.path.splitext(os.path.basename(self.image_file))[0]
-        if ("solid" in self.to_save) or 
-        
         for ext in self.to_save:
             if ext == "raw":
                 continue
@@ -741,7 +739,7 @@ class SingleDetector(Plugin):
                 else:
                     metadata_grp[key] = val
             shape = self.in_shape[:]
-            
+
             if ext == "azim":
                 if "npt2_rad" in self.input:
                     self.npt2_rad = int(self.input["npt2_rad"])
@@ -797,7 +795,7 @@ class SingleDetector(Plugin):
                                                        detector=self.ai.detector)
                 self.workers[ext] = worker
             else:
-                self.log_error("unknown treatment %s"%ext, do_raise=False)
+                self.log_error("unknown treatment %s" % ext, do_raise=False)
             output_ds = coll.create_dataset("data", shape, "float32",
                                             chunks=(1,) + shape[1:],
                                             maxshape=(None,) + shape[1:])
@@ -863,14 +861,14 @@ class SingleDetector(Plugin):
                     for detector in nxs.get_class(instrument, "NXdetector"):
                         if "data" in detector:
                             return numpy.array(detector["data"])
-        
+
     def get_solid_angle(self):
         """ calculate the solid angle if needed and return it
         """
         if self.absolute_solid_angle is None:
             self.absolute_solid_angle = self.ai.solidAngleArray(self.in_shape[-2:], absolute=True)
         return self.absolute_solid_angle
-    
+
     def teardown(self):
         if self.images_ds:
             self.images_ds.file.close()
