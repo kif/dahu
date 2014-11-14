@@ -754,9 +754,7 @@ class SingleDetector(Plugin):
                     chi = self.ai.chiArray(self.in_shape[-2:])
                     self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
                 shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
-                ai = pyFAI.AzimuthalIntegrator()
-                ai.setPyFAI(**self.ai.getPyFAI())
-                ai.mask = self.ai.mask
+                ai = self.ai.__deepcopy__()
                 worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
@@ -772,9 +770,9 @@ class SingleDetector(Plugin):
                 worker = pyFAI.worker.Worker(self.ai, self.in_shape[-2:], (1, self.npt1_rad), "q_nm^-1")
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
-                if self.flat:
+                if self.flat is not None:
                     worker.setFlatfieldFile(self.flat)
-                if self.dark:
+                if self.dark is not None:
                     worker.setDarkcurrentFile(self.dark)
                 self.workers[ext] = worker
             elif ext == "dark":
