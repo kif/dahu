@@ -602,6 +602,7 @@ class SingleDetector(Plugin):
                 self.dark = dark
         elif type(self.dark_filename) in (int, float):
             self.dark = float(self.dark_filename)
+        self.ai.set_darkcurrent(self.dark)
 
         # Read and Process Flat
         self.flat_filename = self.input.get("flat_filename")
@@ -614,6 +615,7 @@ class SingleDetector(Plugin):
                 self.flat = pyFAI.utils.averageDark(flat, center_method="median")
             else:
                 self.flat = flat
+            self.ai.set_flatfield(self.flat)
 
         # Read and Process mask
         self.mask_filename = self.input.get("regrouping_mask_filename")
@@ -756,6 +758,11 @@ class SingleDetector(Plugin):
                 shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
                 ai = self.ai.__deepcopy__()
                 worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
+                if self.flat is not None:
+                    worker.ai.set_flatfield(self.flat)
+                if self.dark is not None:
+                    worker.ai.set_darkcurrent(self.dark)
+                self.workers[ext] = worker
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
                 self.workers[ext] = worker
@@ -770,11 +777,6 @@ class SingleDetector(Plugin):
                 worker = pyFAI.worker.Worker(self.ai, self.in_shape[-2:], (1, self.npt1_rad), "q_nm^-1")
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
-                if self.flat is not None:
-                    worker.setFlatfieldFile(self.flat)
-                if self.dark is not None:
-                    worker.setDarkcurrentFile(self.dark)
-                self.workers[ext] = worker
             elif ext == "dark":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark)
                 self.workers[ext] = worker
