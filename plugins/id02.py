@@ -823,7 +823,7 @@ class SingleDetector(Plugin):
                 elif meth == "flat":
                     res = self.workers[meth].process(data)
                 elif meth == "dist":
-                    raise NotImplementedError("Flat not implemented")
+                    res = self.workers[meth].process(data)
                 elif meth == "cor":
                     res = self.distortion.correct(ds)
                 elif meth == "norm":
