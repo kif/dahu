@@ -751,7 +751,7 @@ class SingleDetector(Plugin):
                 if "npt2_azim" in self.input:
                     self.npt2_azim = int(self.input["npt2_azim"])
                 else:
-                    chi = self.ai.chiArray(in_shape[-2:])
+                    chi = self.ai.chiArray(self.in_shape[-2:])
                     self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
                 shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
                 ai = pyFAI.AzimuthalIntegrator()
