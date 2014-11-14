@@ -491,6 +491,8 @@ class SingleDetector(Plugin):
         self.distortion_filename = None
         self.output_hdf5 = {}
         self.dist = 1.0
+        self.absolute_solid_angle = None
+        self.in_shape = None
 
     def setup(self, kwargs=None):
         """
@@ -571,7 +573,7 @@ class SingleDetector(Plugin):
                     "PSize_1", "PSize_2", "Rot_1", "Rot_2", "Rot_3",
                     "SampleDistance", "WaveLength"):
             forai[key] = self.metadata.get(key)
-        self.dist = self.metadata.get("")
+        self.dist = self.metadata.get("SampleDistance")
         #read detector distortion
         self.distortion_filename = self.input.get("distortion_filename")
         if type(self.distortion_filename) in StringTypes:
@@ -673,6 +675,7 @@ class SingleDetector(Plugin):
             self.logg_error("Expected ONE deteector is expected in experiment, got %s in %s %s %s" %
                             (len(detector_grp), self.input_nxs, self.image_file, instrument))
         self.images_ds = detector_grp.get("data")
+        self.in_shape = self.images_ds.shape
         if "detector_information" in detector_grp:
             detector_information = detector_grp["detector_information"]
             if "name" in detector_information:
@@ -712,8 +715,10 @@ class SingleDetector(Plugin):
         Create one HDF5 file per output
         Also initialize all workers
         """
-        in_shape = self.images_ds.shape
+#        in_shape = self.images_ds.shape
         basename = os.path.splitext(os.path.basename(self.image_file))[0]
+        if ("solid" in self.to_save) or 
+        
         for ext in self.to_save:
             if ext == "raw":
                 continue
@@ -735,13 +740,14 @@ class SingleDetector(Plugin):
                     metadata_grp[key] = numpy.string_(val)
                 else:
                     metadata_grp[key] = val
-            shape = in_shape
+            shape = self.in_shape[:]
+            
             if ext == "azim":
                 if "npt2_rad" in self.input:
                     self.npt2_rad = int(self.input["npt2_rad"])
                 else:
-                    qmax = self.ai.qArray(in_shape[-2:]).max()
-                    dqmin = self.ai.deltaQ(in_shape[-2:]).min() * 2.0
+                    qmax = self.ai.qArray(self.in_shape[-2:]).max()
+                    dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
                     self.npt2_rad = int(qmax / dqmin)
 
                 if "npt2_azim" in self.input:
@@ -749,11 +755,11 @@ class SingleDetector(Plugin):
                 else:
                     chi = self.ai.chiArray(in_shape[-2:])
                     self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
-                shape = (in_shape[0], self.npt2_azim, self.npt2_rad)
+                shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
                 ai = pyFAI.AzimuthalIntegrator()
                 ai.setPyFAI(**self.ai.getPyFAI())
                 ai.mask = self.ai.mask
-                worker = pyFAI.worker.Worker(ai, in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
+                worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
                 self.workers[ext] = worker
@@ -761,11 +767,11 @@ class SingleDetector(Plugin):
                 if "npt1_rad" in self.input:
                     self.npt1_rad = int(self.input["npt1_rad"])
                 else:
-                    qmax = self.ai.qArray(in_shape[-2:]).max()
-                    dqmin = self.ai.deltaQ(in_shape[-2:]).min() * 2.0
+                    qmax = self.ai.qArray(self.in_shape[-2:]).max()
+                    dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
                     self.npt1_rad = int(qmax / dqmin)
-                shape = (in_shape[0], self.npt1_rad)
-                worker = pyFAI.worker.Worker(self.ai, in_shape[-2:], (1, self.npt1_rad), "q_nm^-1")
+                shape = (self.in_shape[0], self.npt1_rad)
+                worker = pyFAI.worker.Worker(self.ai, self.in_shape[-2:], (1, self.npt1_rad), "q_nm^-1")
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
                 if self.flat:
@@ -780,15 +786,15 @@ class SingleDetector(Plugin):
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark, flat=self.flat)
                 self.workers[ext] = worker
             elif ext == "solid":
-                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark, flat=self.flat, solidangle=self.ai.get_dssa()/self.dist**2)
+                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle())
                 self.workers[ext] = worker
             elif ext == "dist":
-                worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.ai.get_dssa()/self.dist**2,
+                worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle(),
                                                        detector=self.ai.detector)
                 self.workers[ext] = worker
             elif ext == "norm":
-                worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.ai.get_dssa()/self.dist**2,
-                                                       detector = self.ai.detector)
+                worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle(),
+                                                       detector=self.ai.detector)
                 self.workers[ext] = worker
             else:
                 self.log_error("unknown treatment %s"%ext, do_raise=False)
@@ -806,7 +812,7 @@ class SingleDetector(Plugin):
         """
         Here we process images....
         """
-        for i in range(self.images_ds.shape[0]):
+        for i in range(self.in_shape[0]):
             data = self.images_ds[i]
             for meth in self.to_save:
                 print(meth)
@@ -842,7 +848,7 @@ class SingleDetector(Plugin):
                     res = res[:, 1]
                     res /= self.I1[i]
                 else:
-                    self.log_error("Unknown/supported method ... %s"%(meth), do_raise=False)
+                    self.log_error("Unknown/supported method ... %s" % (meth), do_raise=False)
                 ds[i] = res
 
     def read_data(self, filename):
@@ -858,6 +864,13 @@ class SingleDetector(Plugin):
                         if "data" in detector:
                             return numpy.array(detector["data"])
         
+    def get_solid_angle(self):
+        """ calculate the solid angle if needed and return it
+        """
+        if self.absolute_solid_angle is None:
+            self.absolute_solid_angle = self.ai.solidAngleArray(self.in_shape[-2:], absolute=True)
+        return self.absolute_solid_angle
+    
     def teardown(self):
         if self.images_ds:
             self.images_ds.file.close()
