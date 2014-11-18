@@ -24,6 +24,7 @@ from dahu.factory import register
 from dahu.plugin import Plugin, plugin_from_function
 from dahu.utils import get_isotime
 from dahu.job import Job
+import dummy_threading
 if sys.version_info < (3, 0):
     StringTypes = (str, unicode)
 else:
@@ -636,14 +637,22 @@ class SingleDetector(Plugin):
                 mask_fabio = fabio.open(self.mask_filename)
             except:
                 mask = self.read_data(self.mask_filename) != 0
-            else:
+            else: # this is very ID02 specific !!!! 
                 dummy = mask_fabio.header.get("Dummy")
+                try:
+                    dummy = float(dummy)
+                except:
+                    self.log_error("Dummy value in mask is unconsitent %s"%dummy)
+                    dummy = 0
                 ddummy = mask_fabio.header.get("DDummy")
-                if (ddummy is not None)  and (dummy is not None):
-                    mask = abs(mask_fabio.data-dummy)<ddummy
-                else: # this is very ID02 specific !!!!
-                    if dummy is None:
-                        dummy = 0
+                try:
+                    ddummy = float(ddummy)
+                except:
+                    self.log_error("DDummy value in mask is unconsitent %s"%ddummy)
+                    ddummy = 0                
+                if ddummy:
+                    mask = abs(mask_fabio.data - dummy) < ddummy
+                else:
                     mask = (mask_fabio.data==dummy)
             if mask.ndim == 3:
                 mask = pyFAI.utils.averageDark(mask, center_method="median")
