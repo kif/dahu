@@ -617,13 +617,13 @@ class SingleDetector(Plugin):
             else:
                 self.flat = flat
             if (self.flat is not None) and (self.flat.shape != self.in_shape):
-                binning = [j/i for i,j in zip(self.in_shape,self.flat)]
+                binning = [j/i for i,j in zip(self.in_shape,self.flat.shape)]
                 if tuple(binning) != (1,1):
                     self.log_error("Binning for flat is %s"%binning, False)
                 if max(binning)>1:
                     self.flat = pyFAI.utils.binning(self.flat, binsize=binning, norm=False)
                 elif min(binning)<1:
-                    binning = [i/j for i,j in zip(self.in_shape,self.flat)]
+                    binning = [i/j for i,j in zip(self.in_shape,self.flat.shape)]
                     self.flat = pyFAI.utils.unBinning(self.flat, binsize=binning, norm=False)
             self.ai.set_flatfield(self.flat)
 
@@ -639,12 +639,12 @@ class SingleDetector(Plugin):
             if (mask is not None) and (mask.shape != self.in_shape):
                 if tuple(binning) != (1,1):
                     self.log_error("Binning for mask is %s"%binning, False)
-                binning = [j/i for i,j in zip(self.in_shape,mask)]
+                binning = [j/i for i,j in zip(self.in_shape,mask.shape)]
                 self.log_
                 if max(binning)>1:
                     mask = pyFAI.utils.binning(mask, binsize=binning, norm=True)>0
                 elif min(binning)<1:
-                    binning = [i/j for i,j in zip(self.in_shape,mask)]
+                    binning = [i/j for i,j in zip(self.in_shape,mask.shape)]
                     mask = pyFAI.utils.unBinning(mask, binsize=binning, norm=False)>0
             
             self.ai.mask = mask  # nota: this is assigned to the detector !
