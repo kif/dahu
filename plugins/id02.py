@@ -11,7 +11,6 @@ import numpy
 import os
 import posixpath
 import pyFAI
-import pyFAI.distortion
 import pyFAI.worker
 import pyFAI.io
 import pyFAI.utils
@@ -24,7 +23,6 @@ from dahu.factory import register
 from dahu.plugin import Plugin, plugin_from_function
 from dahu.utils import get_isotime
 from dahu.job import Job
-import dummy_threading
 if sys.version_info < (3, 0):
     StringTypes = (str, unicode)
 else:
@@ -867,7 +865,6 @@ class SingleDetector(Plugin):
                 elif meth == "norm":
                     res = self.workers[meth].process(data) / self.I1[i]
                 elif meth == "azim":
-                    print(self.workers[meth].ai.mask)
                     res = self.workers[meth].process(data) / self.I1[i]
                     if i == 0:
                         if "q" not in ds.parent:
@@ -877,7 +874,6 @@ class SingleDetector(Plugin):
                             ds.parent["chi"] = self.workers[meth].azimuthal
                             ds.parent["chi"].attrs["unit"] = "deg"
                 elif meth == "ave":
-                    print(self.workers[meth].ai.mask)
                     res = self.workers[meth].process(data) / self.I1[i]
                     if i == 0 and "q" not in ds.parent:
                         ds.parent["q"] = self.workers[meth].radial
