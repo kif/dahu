@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
 
-from __future__ import with_statement, print_function
+from __future__ import with_statement, print_function, division
 
 import PyTango
 import h5py
@@ -14,6 +14,7 @@ import pyFAI
 import pyFAI.distortion
 import pyFAI.worker
 import pyFAI.io
+import pyFAI.utils
 import fabio
 import shutil
 import sys
@@ -615,6 +616,13 @@ class SingleDetector(Plugin):
                 self.flat = pyFAI.utils.averageDark(flat, center_method="median")
             else:
                 self.flat = flat
+            if (self.flat is not None) and (self.flat.shape != self.in_shape):
+                binning = [j/i for i,j in zip(self.in_shape,self.flat)]
+                if max(binning)>1:
+                    self.flat = pyFAI.utils.binning(self.flat, binsize=binning, norm=False)
+                elif min(binning)<1:
+                    binning = [i/j for i,j in zip(self.in_shape,self.flat)]
+                    self.flat = pyFAI.utils.unBinning(self.flat, binsize=binning, norm=False)
             self.ai.set_flatfield(self.flat)
 
         # Read and Process mask
@@ -626,8 +634,13 @@ class SingleDetector(Plugin):
                 mask = self.read_data(self.mask_filename)
             if mask.ndim == 3:
                 mask = pyFAI.utils.averageDark(mask, center_method="median")
-            if mask == 0:
-                mask=None
+            if (mask is not None) and (mask.shape != self.in_shape):
+                binning = [j/i for i,j in zip(self.in_shape,mask)]
+                if max(binning)>1:
+                    mask = pyFAI.utils.binning(mask, binsize=binning, norm=True)>0
+                elif min(binning)<1:
+                    binning = [i/j for i,j in zip(self.in_shape,mask)]
+                    mask = pyFAI.utils.unBinning(mask, binsize=binning, norm=False)>0
             
             self.ai.mask = mask  # nota: this is assigned to the detector !
 
