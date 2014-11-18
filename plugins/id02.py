@@ -618,6 +618,8 @@ class SingleDetector(Plugin):
                 self.flat = flat
             if (self.flat is not None) and (self.flat.shape != self.in_shape):
                 binning = [j/i for i,j in zip(self.in_shape,self.flat)]
+                if tuple(binning) != (1,1):
+                    self.log_error("Binning for flat is %s"%binning, False)
                 if max(binning)>1:
                     self.flat = pyFAI.utils.binning(self.flat, binsize=binning, norm=False)
                 elif min(binning)<1:
@@ -635,7 +637,10 @@ class SingleDetector(Plugin):
             if mask.ndim == 3:
                 mask = pyFAI.utils.averageDark(mask, center_method="median")
             if (mask is not None) and (mask.shape != self.in_shape):
+                if tuple(binning) != (1,1):
+                    self.log_error("Binning for mask is %s"%binning, False)
                 binning = [j/i for i,j in zip(self.in_shape,mask)]
+                self.log_
                 if max(binning)>1:
                     mask = pyFAI.utils.binning(mask, binsize=binning, norm=True)>0
                 elif min(binning)<1:
@@ -682,7 +687,7 @@ class SingleDetector(Plugin):
         if len(instrument) == 1:
             instrument = instrument[0]
         else:
-            self.logg_error("Expected ONE instrument is expected in entry, got %s in %s %s" %
+            self.log_error("Expected ONE instrument is expected in entry, got %s in %s %s" %
                             (len(instrument), self.image_file, self.entry))
         detector_grp = self.input_nxs.get_class(instrument, class_type="NXdetector")
         if len(detector_grp) == 1:
@@ -690,7 +695,7 @@ class SingleDetector(Plugin):
         elif len(detector_grp) == 0 and "detector" in instrument:
             detector_grp = instrument["detector"]
         else:
-            self.logg_error("Expected ONE deteector is expected in experiment, got %s in %s %s %s" %
+            self.log_error("Expected ONE deteector is expected in experiment, got %s in %s %s %s" %
                             (len(detector_grp), self.input_nxs, self.image_file, instrument))
         self.images_ds = detector_grp.get("data")
         self.in_shape = self.images_ds.shape
@@ -707,7 +712,7 @@ class SingleDetector(Plugin):
             if len(collections) >= 1:
                 collection = collections[0]
             else:
-                self.logg_error("Expected ONE collections is expected in entry, got %s in %s %s" %
+                self.log_error("Expected ONE collections is expected in entry, got %s in %s %s" %
                             (len(collections), self.image_file, self.entry))
 
         detector_grps = self.input_nxs.get_class(collection, class_type="NXdetector")
