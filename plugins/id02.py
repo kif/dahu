@@ -626,6 +626,9 @@ class SingleDetector(Plugin):
                 mask = self.read_data(self.mask_filename)
             if mask.ndim == 3:
                 mask = pyFAI.utils.averageDark(mask, center_method="median")
+            if mask == 0:
+                mask=None
+            
             self.ai.mask = mask  # nota: this is assigned to the detector !
 
         self.create_hdf5()
@@ -756,6 +759,7 @@ class SingleDetector(Plugin):
                     chi = self.ai.chiArray(self.in_shape[-2:])
                     self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
                 shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
+                
                 ai = self.ai.__deepcopy__()
                 worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
                 if self.flat is not None:
@@ -777,6 +781,7 @@ class SingleDetector(Plugin):
                 worker = pyFAI.worker.Worker(self.ai, self.in_shape[-2:], (1, self.npt1_rad), "q_nm^-1")
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
+                self.workers[ext] = worker
             elif ext == "dark":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark)
                 self.workers[ext] = worker
@@ -818,19 +823,13 @@ class SingleDetector(Plugin):
                     continue
                 res = None
                 ds = self.output_ds[meth]
-                if meth == "dark":
+                if meth in ("dark", "flat","dist", "cor") :
                     res = self.workers[meth].process(data)
-                elif meth == "flat":
-                    res = self.workers[meth].process(data)
-                elif meth == "dist":
-                    res = self.workers[meth].process(data)
-                elif meth == "cor":
-                    res = self.distortion.correct(ds)
                 elif meth == "norm":
-                    res = self.distortion.correct(ds) / self.I1[i]
+                    res = self.workers[meth].process(data) / self.I1[i]
                 elif meth == "azim":
-                    res = self.workers[meth].process(data)
-                    res /= self.I1[i]
+                    print(self.workers[meth].ai.mask)
+                    res = self.workers[meth].process(data) / self.I1[i]
                     if i == 0:
                         if "q" not in ds.parent:
                             ds.parent["q"] = self.workers[meth].radial
@@ -839,12 +838,12 @@ class SingleDetector(Plugin):
                             ds.parent["chi"] = self.workers[meth].azimuthal
                             ds.parent["chi"].attrs["unit"] = "deg"
                 elif meth == "ave":
-                    res = self.workers[meth].process(data)
+                    print(self.workers[meth].ai.mask)
+                    res = self.workers[meth].process(data) / self.I1[i]
                     if i == 0 and "q" not in ds.parent:
                         ds.parent["q"] = self.workers[meth].radial
                         ds.parent["q"].attrs["unit"] = "q_nm^-1"
                     res = res[:, 1]
-                    res /= self.I1[i]
                 else:
                     self.log_error("Unknown/supported method ... %s" % (meth), do_raise=False)
                 ds[i] = res
