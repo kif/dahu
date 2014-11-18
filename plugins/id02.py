@@ -633,9 +633,17 @@ class SingleDetector(Plugin):
         self.mask_filename = self.input.get("regrouping_mask_filename")
         if type(self.mask_filename) in StringTypes and os.path.exists(self.mask_filename):
             try:
-                mask = fabio.open(self.mask_filename).data
+                mask = fabio.open(self.mask_filename)
+                dummy = mask.header.get("Dummy")
+                ddummy = mask.header.get("DDummy")
+                if ddummy is not None  and dummy is not None:
+                    mask = abs(mask.data-dummy)<ddummy
+                elif ddummy is None:
+                    if dummy is None:
+                        dummy = 0
+                    mask = (mask.data==dummy)
             except:
-                mask = self.read_data(self.mask_filename)
+                mask = self.read_data(self.mask_filename) != 0
             if mask.ndim == 3:
                 mask = pyFAI.utils.averageDark(mask, center_method="median")
             if (mask is not None) and (mask.shape != shape):
