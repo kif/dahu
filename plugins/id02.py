@@ -606,6 +606,7 @@ class SingleDetector(Plugin):
         self.ai.set_darkcurrent(self.dark)
 
         # Read and Process Flat
+        shape = self.in_shape[-2:]
         self.flat_filename = self.input.get("flat_filename")
         if type(self.flat_filename) in StringTypes and os.path.exists(self.flat_filename):
             if self.flat_filename.endswith(".h5") or self.flat_filename.endswith(".nxs") or self.flat_filename.endswith(".hdf5"):
@@ -616,14 +617,14 @@ class SingleDetector(Plugin):
                 self.flat = pyFAI.utils.averageDark(flat, center_method="median")
             else:
                 self.flat = flat
-            if (self.flat is not None) and (self.flat.shape != self.in_shape):
-                binning = [j/i for i,j in zip(self.in_shape,self.flat.shape)]
+            if (self.flat is not None) and (self.flat.shape != shape):
+                binning = [j/i for i,j in zip(shape, self.flat.shape)]
                 if tuple(binning) != (1,1):
                     self.log_error("Binning for flat is %s"%binning, False)
                 if max(binning)>1:
                     self.flat = pyFAI.utils.binning(self.flat, binsize=binning, norm=False)
                 elif min(binning)<1:
-                    binning = [i/j for i,j in zip(self.in_shape,self.flat.shape)]
+                    binning = [i/j for i,j in zip(shape, self.flat.shape)]
                     self.flat = pyFAI.utils.unBinning(self.flat, binsize=binning, norm=False)
             self.ai.set_flatfield(self.flat)
 
@@ -636,15 +637,15 @@ class SingleDetector(Plugin):
                 mask = self.read_data(self.mask_filename)
             if mask.ndim == 3:
                 mask = pyFAI.utils.averageDark(mask, center_method="median")
-            if (mask is not None) and (mask.shape != self.in_shape):
+            if (mask is not None) and (mask.shape != shape):
                 if tuple(binning) != (1,1):
                     self.log_error("Binning for mask is %s"%binning, False)
-                binning = [j/i for i,j in zip(self.in_shape,mask.shape)]
+                binning = [j/i for i,j in zip(shape, mask.shape)]
                 self.log_
                 if max(binning)>1:
                     mask = pyFAI.utils.binning(mask, binsize=binning, norm=True)>0
                 elif min(binning)<1:
-                    binning = [i/j for i,j in zip(self.in_shape,mask.shape)]
+                    binning = [i/j for i,j in zip(shape, mask.shape)]
                     mask = pyFAI.utils.unBinning(mask, binsize=binning, norm=False)>0
             
             self.ai.mask = mask  # nota: this is assigned to the detector !
