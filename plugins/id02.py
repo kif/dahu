@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
 
-from __future__ import with_statement, print_function
+from __future__ import with_statement, print_function, division
 
 import PyTango
 import h5py
@@ -11,8 +11,10 @@ import numpy
 import os
 import posixpath
 import pyFAI
-import pyFAI.distortion
 import pyFAI.worker
+import pyFAI.io
+import pyFAI.utils
+import fabio
 import shutil
 import sys
 import time
@@ -21,7 +23,7 @@ from dahu.factory import register
 from dahu.plugin import Plugin, plugin_from_function
 from dahu.utils import get_isotime
 from dahu.job import Job
-if sys.version_info < (3,0):
+if sys.version_info < (3, 0):
     StringTypes = (str, unicode)
 else:
     StringTypes = (str, bytes)
@@ -59,14 +61,14 @@ if "TANGO_HOST" not in os.environ:
 def preproc(**d):
     """Take a dict as input and forms a metadata structure as output
     @param: any dict
-    """ 
+    """
     dd = d.copy()
     if "job_id" in dd:
         dd.pop("job_id")
     list_f = []
     list_n = []
     list_z = []
-    HS32Len = dd.get("HS32Len", 16) 
+    HS32Len = dd.get("HS32Len", 16)
     HS32Depth = dd.get("HS32Depth", 32)
     HSI0Factor = dd.get("HSI0Factor", 1)
     HSI1Factor = dd.get("HSI1Factor", 1)
@@ -87,11 +89,11 @@ def preproc(**d):
             ShutterClosingTime = float(value)
     else:
         ShutterClosingTime = 0
-    for ind in map(lambda x:'HS32F'+'{0:02d}'.format(x),range(1,HS32Len+1)):
+    for ind in map(lambda x:'HS32F' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
             list_f.append(float(dd[ind]))
-    for ind in map(lambda x:'HS32N'+'{0:02d}'.format(x),range(1,HS32Len+1)):
+    for ind in map(lambda x:'HS32N' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
             list_n.append(dd[ind])
-    for ind in map(lambda x:'HS32Z'+'{0:02d}'.format(x),range(1,HS32Len+1)):
+    for ind in map(lambda x:'HS32Z' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
             list_z.append(float(dd[ind]))
 
     info_dir = {}
@@ -100,9 +102,9 @@ def preproc(**d):
             continue
         elif info_ind[0:2].find('HM') == 0:
             continue
-        else:    
+        else:
             info_dir[info_ind] = dd[info_ind]
-            
+
     final_dir = {"HS32Len": HS32Len,
                  "HS32Depth": HS32Depth,
                  "HSI0Factor": HSI0Factor,
@@ -116,7 +118,7 @@ def preproc(**d):
                  'HS32N': list_n,
                  'Info': info_dir}
     for key in ['HMStartEpoch', 'HMStartTime', "hdf5_filename", "entry", "HSTime", "HSI0", "HSI1"]:
-        if key in dd: 
+        if key in dd:
             final_dir[key] = dd[key]
     return final_dir
 plugin_from_function(preproc)
@@ -133,7 +135,7 @@ class Metadata(Plugin):
 input = {
         "hdf5_filename":"/nobackup/lid02gpu11/metadata/test.h5",
         "entry": "entry",
-        "instrument":"id02",
+        "instrument":"ESRF-ID02",
         "c216":"id02/c216/0",
         "HS32F": [1e-06, 1, 7763480, 8176290, 342239, 967341, 5541980, 1739160, 2753.61, 1351920, 140000000, 16719500, 1, 0.000995868, 0.000995868, 1],
         "HS32Z": [0, 0, 383.55, 126.4, 6582.1, 6973.6, 162.95, 0, 221.2, 207.8, 315.26, 145.11, 323.76, 170, 170, 228.4],
@@ -154,6 +156,8 @@ input = {
         }
 
 """
+    TO_SKIP = ("entry", "hdf5_filename", "plugin_name")
+
     def __init__(self):
         Plugin.__init__(self)
         self.cycle = None
@@ -185,7 +189,7 @@ input = {
             self.log_error("hdf5_filename not in input")
         self.hdf5_filename = self.input2.get("hdf5_filename")
         self.entry = self.input2.get("entry", "entry")
-        self.instrument = self.input2.get("instrument", "id02")
+        self.instrument = self.input2.get("instrument", "ESRF-ID02")
 
     def process(self):
         self.create_hdf5()
@@ -221,12 +225,12 @@ input = {
         self.mcs_grp["device"] = numpy.string_(self.c216)
 
         # Static metadata
-        self.info_grp = self.hdf5.require_group(posixpath.join(self.instrument, "Information"))
+        self.info_grp = self.hdf5.require_group(posixpath.join(self.instrument, "parameters"))
         self.info_grp.attrs["NX_class"] = "NXcollection"
-#        fields = ("MachineInfo", "OpticsInfo", "ProposalInfo", "StationInfo", "DetectorInfo", "ExperimentInfo") + \
-#                 self.input2.get("info", ())
-        for field, value in self.input2.get("Info", {}).iteritems():
-            self.info_grp[field] = numpy.string_(value)
+
+        for field, value in self.input2.get("Info", {}).items():
+            if field not in self.TO_SKIP:
+                self.info_grp[field] = numpy.string_(value)
 
         start_time = self.input2.get("HMStartTime", get_isotime())
 
@@ -299,7 +303,7 @@ input = {
                 else:
                     self.tfg_grp[key] = self.input2[key]
                 self.tfg_grp[key].attrs["interpretation"] = "scalar"
-                
+
         # raw scalers:
         raw_scalers = c216ds.ReadScalersForNLiveFrames([0, frames - 1])
         raw_scalers.shape = frames, -1
@@ -325,7 +329,7 @@ input = {
         else:
             self.log_error("No HSTime pin number, using TFG time")
             measured_time = tfg[1::2]
-        
+
         if ("HS32F" in self.mcs_grp) and ("HS32Z" in self.mcs_grp):
             #             if "interpreted" in self.mcs_grp:
             modes = numpy.zeros(counters, dtype=numpy.int32)
@@ -349,7 +353,7 @@ input = {
                 fullname = "interpreted/%s" % name
                 self.mcs_grp[fullname] = values[:, i]
                 self.mcs_grp[fullname].attrs["interpretation"] = "scalar"
-                
+
             sot = self.input2.get("ShutterOpeningTime", 0.0)
             sct = self.input2.get("ShutterClosingTime", 0.0)
             for name, value in (("ShutterOpeningTime", sot),
@@ -422,7 +426,8 @@ class SingleDetector(Plugin):
               "npt2_rad" : 500,
               "npt1_rad" : 1000,
               "to_save": ["raw", "dark", "flat", "dist", "norm", "azim", "ave"]
-              "metadata_job": 1
+              "metadata_job": 1,
+              
               }  
               
     {
@@ -438,6 +443,7 @@ class SingleDetector(Plugin):
  "output_dir": "/nobackup/lid02gpu12/output", 
  "WaveLength": 9.95058e-11, 
  "image_file": "/nobackup/lid02gpu11/FRELON/test_laurent_saxs_0000.h5", 
+  "dark_filename": "/nobackup/lid02gpu11/FRELON/test_laurent_dark_0000.h5",
 }
 
     """
@@ -478,8 +484,15 @@ class SingleDetector(Plugin):
         self.npt2_rad = None
         self.npt2_azim = None
         self.dark = None
+        self.dark_filename = None
+        self.flat_filename = None
         self.flat = None
+        self.mask_filename = None
+        self.distortion_filename = None
         self.output_hdf5 = {}
+        self.dist = 1.0
+        self.absolute_solid_angle = None
+        self.in_shape = None
 
     def setup(self, kwargs=None):
         """
@@ -518,7 +531,8 @@ class SingleDetector(Plugin):
             to_save = self.input["to_save"][:]
             if type(to_save) in StringTypes:
                 # fix a bug from spec ...
-                self.to_save = [i for i in to_save.split('"') if i.isalpha()]
+                self.to_save = [i.strip('[\\] ",') for i in to_save.split()]
+                self.log_error("processing planned: " + " ".join(self.to_save), do_raise=False)
             else:
                 self.to_save = to_save
         if "image_file" not in self.input:
@@ -535,7 +549,7 @@ class SingleDetector(Plugin):
         if "raw" in self.to_save:
             t = threading.Thread(target=shutil.copy, name="copy raw", args=(self.image_file, self.dest))
             t.start()
-            self.to_save.remove("raw")
+#            self.to_save.remove("raw")
             self.output_hdf5["raw"] = os.path.join(self.dest, os.path.basename(self.image_file))
         self.hdf5_filename = self.input.get("hdf5_filename")
         self.entry = self.input.get("entry", "entry")
@@ -559,9 +573,99 @@ class SingleDetector(Plugin):
                     "PSize_1", "PSize_2", "Rot_1", "Rot_2", "Rot_3",
                     "SampleDistance", "WaveLength"):
             forai[key] = self.metadata.get(key)
-        self.ai = pyFAI.AzimuthalIntegrator()
+        self.dist = self.metadata.get("SampleDistance")
+        #read detector distortion
+        self.distortion_filename = self.input.get("distortion_filename")
+        if type(self.distortion_filename) in StringTypes:
+            detector = pyFAI.detectors.Detector(splineFile=self.distortion_filename)
+        else:
+            detector = None
+
+        self.ai = pyFAI.AzimuthalIntegrator(detector=detector)
         self.ai.setSPD(**forai)
-        
+
+        # Read and Process dark
+        self.dark_filename = self.input.get("dark_filename")
+        if type(self.dark_filename) in StringTypes and os.path.exists(self.dark_filename):
+            dark = self.read_data(self.dark_filename)
+            if dark.ndim == 3:
+                method = self.input.get("dark_filter")
+                if method.startswith("quantil"):
+                    lower = self.input.get("dark_filter_quantil_lower", 0)
+                    upper = self.input.get("dark_filter_quantil_upper", 1)
+                    self.dark = pyFAI.utils.averageDark(dark, center_method=method, quantiles=(lower, upper))
+                else:
+                    if method == None:
+                        method = "median"
+                    self.dark = pyFAI.utils.averageDark(dark, center_method=method)
+            else:
+                self.dark = dark
+        elif type(self.dark_filename) in (int, float):
+            self.dark = float(self.dark_filename)
+        self.ai.set_darkcurrent(self.dark)
+
+        # Read and Process Flat
+        shape = self.in_shape[-2:]
+        self.flat_filename = self.input.get("flat_filename")
+        if type(self.flat_filename) in StringTypes and os.path.exists(self.flat_filename):
+            if self.flat_filename.endswith(".h5") or self.flat_filename.endswith(".nxs") or self.flat_filename.endswith(".hdf5"):
+                flat = self.read_data(self.flat_filename)
+            else:
+                flat = fabio.open(self.flat_filename).data
+            if flat.ndim == 3:
+                self.flat = pyFAI.utils.averageDark(flat, center_method="median")
+            else:
+                self.flat = flat
+            if (self.flat is not None) and (self.flat.shape != shape):
+                binning = [j/i for i,j in zip(shape, self.flat.shape)]
+                if tuple(binning) != (1,1):
+                    self.log_error("Binning for flat is %s"%binning, False)
+                    if max(binning)>1:
+                        binning = [int(i) for i in binning]
+                        self.flat = pyFAI.utils.binning(self.flat, binsize=binning, norm=False)
+                    else:
+                        binning = [i//j for i,j in zip(shape, self.flat.shape)]
+                        self.flat = pyFAI.utils.unBinning(self.flat, binsize=binning, norm=False)
+            self.ai.set_flatfield(self.flat)
+
+        # Read and Process mask
+        self.mask_filename = self.input.get("regrouping_mask_filename")
+        if type(self.mask_filename) in StringTypes and os.path.exists(self.mask_filename):
+            try:
+                mask_fabio = fabio.open(self.mask_filename)
+            except:
+                mask = self.read_data(self.mask_filename) != 0
+            else: # this is very ID02 specific !!!! 
+                dummy = mask_fabio.header.get("Dummy")
+                try:
+                    dummy = float(dummy)
+                except:
+                    self.log_error("Dummy value in mask is unconsitent %s"%dummy)
+                    dummy = 0
+                ddummy = mask_fabio.header.get("DDummy")
+                try:
+                    ddummy = float(ddummy)
+                except:
+                    self.log_error("DDummy value in mask is unconsitent %s"%ddummy)
+                    ddummy = 0                
+                if ddummy:
+                    mask = abs(mask_fabio.data - dummy) < ddummy
+                else:
+                    mask = (mask_fabio.data==dummy)
+            if mask.ndim == 3:
+                mask = pyFAI.utils.averageDark(mask, center_method="median")
+            if (mask is not None) and (mask.shape != shape):
+                binning = [j/i for i,j in zip(shape, mask.shape)]
+                if tuple(binning) != (1,1):
+                    self.log_error("Binning for mask is %s"%binning, False)
+                    if max(binning)>1:
+                        binning = [int(i) for i in binning]
+                        mask = pyFAI.utils.binning(mask, binsize=binning, norm=True)>0
+                    else:
+                        binning = [i//j for i,j in zip(shape, mask.shape)]
+                        mask = pyFAI.utils.unBinning(mask, binsize=binning, norm=False)>0            
+            self.ai.mask = mask  # nota: this is assigned to the detector !
+
         self.create_hdf5()
         self.process_images()
 
@@ -570,6 +674,7 @@ class SingleDetector(Plugin):
         load the I1 data from a metadata HDF5 file
 
         /entry_0001/id02/MCS/I1
+        TODO: handle correction or not for shutter opening/closing time
 
         @param mfile: metadata HDF5 file
         @return: array with I1
@@ -583,7 +688,7 @@ class SingleDetector(Plugin):
                     mcs = instrument["MCS"]
                     if "I1" in mcs:
                         return numpy.array(mcs["I1"])
-                
+
     def parse_image_file(self):
         """
         @return: dict with interpreted metadata
@@ -599,7 +704,7 @@ class SingleDetector(Plugin):
         if len(instrument) == 1:
             instrument = instrument[0]
         else:
-            self.logg_error("Expected ONE instrument is expected in entry, got %s in %s %s" %
+            self.log_error("Expected ONE instrument is expected in entry, got %s in %s %s" %
                             (len(instrument), self.image_file, self.entry))
         detector_grp = self.input_nxs.get_class(instrument, class_type="NXdetector")
         if len(detector_grp) == 1:
@@ -607,9 +712,10 @@ class SingleDetector(Plugin):
         elif len(detector_grp) == 0 and "detector" in instrument:
             detector_grp = instrument["detector"]
         else:
-            self.logg_error("Expected ONE deteector is expected in experiment, got %s in %s %s %s" %
+            self.log_error("Expected ONE deteector is expected in experiment, got %s in %s %s %s" %
                             (len(detector_grp), self.input_nxs, self.image_file, instrument))
         self.images_ds = detector_grp.get("data")
+        self.in_shape = self.images_ds.shape
         if "detector_information" in detector_grp:
             detector_information = detector_grp["detector_information"]
             if "name" in detector_information:
@@ -623,11 +729,11 @@ class SingleDetector(Plugin):
             if len(collections) >= 1:
                 collection = collections[0]
             else:
-                self.logg_error("Expected ONE collections is expected in entry, got %s in %s %s" %
+                self.log_error("Expected ONE collections is expected in entry, got %s in %s %s" %
                             (len(collections), self.image_file, self.entry))
 
         detector_grps = self.input_nxs.get_class(collection, class_type="NXdetector")
-        if len(detector_grps)==0 and "detector" in collection:
+        if (len(detector_grps) == 0) and ("detector" in collection):
             detector_grp = collection["detector"]
         elif len(detector_grps) > 0:
             detector_grp = detector_grps[0]
@@ -638,20 +744,22 @@ class SingleDetector(Plugin):
         else:
             return {}
 
-        for key, value in parameters_grp.iteritems():
-            base = key.split("_")[0] 
+        for key, value in parameters_grp.items():
+            base = key.split("_")[0]
             conv = self.KEY_CONV.get(base, str)
             metadata[key] = conv(value.value)
         return metadata
-            
+
     def create_hdf5(self):
         """
         Create one HDF5 file per output
-        Also initialize workers
+        Also initialize all workers
         """
-        in_shape = self.images_ds.shape
+#        in_shape = self.images_ds.shape
         basename = os.path.splitext(os.path.basename(self.image_file))[0]
         for ext in self.to_save:
+            if ext == "raw":
+                continue
             outfile = os.path.join(self.dest, "%s_%s_%s.h5" % (basename, self.metadata["DetectorName"], ext))
             self.output_hdf5[ext] = outfile
             try:
@@ -664,30 +772,36 @@ class SingleDetector(Plugin):
             subentry = nxs.new_class(entry, "pyFAI", class_type="NXsubentry")
             subentry["definition_local"] = numpy.string_("PyFAI")
             coll = nxs.new_class(subentry, "process_" + ext, class_type="NXcollection")
-            metadata_grp = coll.require_group("metadata")
+            metadata_grp = coll.require_group("parameters")
             for key, val in self.metadata.iteritems():
                 if type(val) in [str, unicode]:
                     metadata_grp[key] = numpy.string_(val)
                 else:
                     metadata_grp[key] = val
-            shape = in_shape
+            shape = self.in_shape[:]
+
             if ext == "azim":
                 if "npt2_rad" in self.input:
                     self.npt2_rad = int(self.input["npt2_rad"])
                 else:
-                    qmax = self.ai.qArray(in_shape[-2:]).max()
-                    dqmin = self.ai.deltaQ(in_shape[-2:]).min() * 2.0
+                    qmax = self.ai.qArray(self.in_shape[-2:]).max()
+                    dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
                     self.npt2_rad = int(qmax / dqmin)
 
                 if "npt2_azim" in self.input:
                     self.npt2_azim = int(self.input["npt2_azim"])
                 else:
-                    chi = self.ai.chiArray(in_shape[-2:])
+                    chi = self.ai.chiArray(self.in_shape[-2:])
                     self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
-                shape = (in_shape[0], self.npt2_azim, self.npt2_rad)
-                ai = pyFAI.AzimuthalIntegrator()
-                ai.setPyFAI(**self.ai.getPyFAI())
-                worker = pyFAI.worker.Worker(ai, in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
+                shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
+                
+                ai = self.ai.__deepcopy__()
+                worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
+                if self.flat is not None:
+                    worker.ai.set_flatfield(self.flat)
+                if self.dark is not None:
+                    worker.ai.set_darkcurrent(self.dark)
+                self.workers[ext] = worker
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
                 self.workers[ext] = worker
@@ -695,17 +809,13 @@ class SingleDetector(Plugin):
                 if "npt1_rad" in self.input:
                     self.npt1_rad = int(self.input["npt1_rad"])
                 else:
-                    qmax = self.ai.qArray(in_shape[-2:]).max()
-                    dqmin = self.ai.deltaQ(in_shape[-2:]).min() * 2.0
+                    qmax = self.ai.qArray(self.in_shape[-2:]).max()
+                    dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
                     self.npt1_rad = int(qmax / dqmin)
-                shape = (in_shape[0], self.npt1_rad)
-                worker = pyFAI.worker.Worker(self.ai, in_shape[-2:], (1, self.npt1_rad), "q_nm^-1")
+                shape = (self.in_shape[0], self.npt1_rad)
+                worker = pyFAI.worker.Worker(self.ai, self.in_shape[-2:], (1, self.npt1_rad), "q_nm^-1")
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
-                if self.flat:
-                    worker.setFlatfieldFile(self.flat)
-                if self.dark:
-                    worker.setDarkcurrentFile(self.dark)
                 self.workers[ext] = worker
             elif ext == "dark":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark)
@@ -713,10 +823,19 @@ class SingleDetector(Plugin):
             elif ext == "flat":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark, flat=self.flat)
                 self.workers[ext] = worker
+            elif ext == "solid":
+                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle())
+                self.workers[ext] = worker
             elif ext == "dist":
-                raise NotImplementedError("dist is not yet implemented")
+                worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle(),
+                                                       detector=self.ai.detector)
+                self.workers[ext] = worker
             elif ext == "norm":
-                raise NotImplementedError("norm is not yet implemented")
+                worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle(),
+                                                       detector=self.ai.detector)
+                self.workers[ext] = worker
+            else:
+                self.log_error("unknown treatment %s" % ext, do_raise=False)
             output_ds = coll.create_dataset("data", shape, "float32",
                                             chunks=(1,) + shape[1:],
                                             maxshape=(None,) + shape[1:])
@@ -731,24 +850,20 @@ class SingleDetector(Plugin):
         """
         Here we process images....
         """
-        for i in range(self.images_ds.shape[0]):
+        for i in range(self.in_shape[0]):
             data = self.images_ds[i]
             for meth in self.to_save:
+                print(meth)
+                if meth == "raw":
+                    continue
                 res = None
                 ds = self.output_ds[meth]
-                if meth == "dark":
+                if meth in ("dark", "flat","dist", "cor") :
                     res = self.workers[meth].process(data)
-                elif meth == "flat":
-                    res = self.workers[meth].process(data)
-                elif meth == "dist":
-                    raise NotImplementedError("Flat not implemented")
-                elif meth == "cor":
-                    res = self.distortion.correct(ds)
                 elif meth == "norm":
-                    res = self.distortion.correct(ds) / self.I1[i]
+                    res = self.workers[meth].process(data) / self.I1[i]
                 elif meth == "azim":
-                    res = self.workers[meth].process(data)
-                    res /= self.I1[i]
+                    res = self.workers[meth].process(data) / self.I1[i]
                     if i == 0:
                         if "q" not in ds.parent:
                             ds.parent["q"] = self.workers[meth].radial
@@ -757,15 +872,34 @@ class SingleDetector(Plugin):
                             ds.parent["chi"] = self.workers[meth].azimuthal
                             ds.parent["chi"].attrs["unit"] = "deg"
                 elif meth == "ave":
-                    res = self.workers[meth].process(data)
+                    res = self.workers[meth].process(data) / self.I1[i]
                     if i == 0 and "q" not in ds.parent:
                         ds.parent["q"] = self.workers[meth].radial
                         ds.parent["q"].attrs["unit"] = "q_nm^-1"
                     res = res[:, 1]
-                    res /= self.I1[i]
                 else:
-                    self.log_error("Unknown/supported method ... %s"%(meth), do_raise=False)
+                    self.log_error("Unknown/supported method ... %s" % (meth), do_raise=False)
                 ds[i] = res
+
+    def read_data(self, filename):
+        """read dark data from a file
+        
+        @param filename: HDF5 file containing dark frames
+        @return: numpy array with dark 
+        """
+        with pyFAI.io.Nexus(filename, "r") as nxs:
+            for entry in nxs.get_entries():
+                for instrument in nxs.get_class(entry, "NXinstrument"):
+                    for detector in nxs.get_class(instrument, "NXdetector"):
+                        if "data" in detector:
+                            return numpy.array(detector["data"])
+
+    def get_solid_angle(self):
+        """ calculate the solid angle if needed and return it
+        """
+        if self.absolute_solid_angle is None:
+            self.absolute_solid_angle = self.ai.solidAngleArray(self.in_shape[-2:], absolute=True)
+        return self.absolute_solid_angle
 
     def teardown(self):
         if self.images_ds:

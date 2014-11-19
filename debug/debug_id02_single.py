@@ -31,6 +31,26 @@ data = {"DetectorName": 'Rayonix',
         "npt1_rad" : 1000,
         "to_save": ["raw", "azim", "ave"],
         }
+data = {
+    "npt2_rad": 1000,
+    "dark_filter_quantil_lower": 0.1,
+    "dark_filter_quantil_upper": 0.9,
+    "regrouping_mask_filename": "mask-10m.edf",
+    "npt2_azim": 360,
+    "dark_filename": "/mntdirect/_data_opid02_inhouse/com/20141104/nk04_saxs_00048_dark.h5",
+    "to_save": "raw dark flat dist norm azim ave",
+    "dark_filter": "quantil",
+    "output_dir": "/mntdirect/_data_opid02_inhouse/com/20141104/cor",
+    "image_file": "/mntdirect/_data_opid02_inhouse/com/20141104/nk04_saxs_00047.h5",
+    "npt1_rad": 1000,
+    "DetectorName": "saxs",
+    "flat_filename": "/data/opid02/archive/setup/spatcorr-files/saxs/flat_saxs_2x2.edf",
+    "distortion_filename": "/data/opid02/archive/setup/spatcorr-files/saxs/SpatCorrRayonix_2b2.dat",
+    "c216_filename": "/mntdirect/_data_opid02_inhouse/com/20141104/nk04_scalers_00048.h5"
+}
+
+
+
 print dahu.initPlugin(plugin)
 pid = dahu.startJob([plugin, json.dumps(data)])
 print("%s id: %i" % (plugin, pid))
