@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-from __future__ import with_statement, print_function
-import cProfile
+from __future__ import with_statement, print_function, division
+
 
 __doc__ = """
 Data Analysis Highly tailored fror Upbl09a
@@ -11,13 +11,14 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20141010"
+__date__ = "19/11/2014"
 __status__ = "development"
 version = "0.2.0"
 from .factory import plugin_factory, register
 from .utils import fully_qualified_name, get_workdir
 import os
 import logging
+import cProfile
 logger = logging.getLogger("dahu.plugin")
 
 class Plugin(object):
