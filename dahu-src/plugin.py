@@ -76,7 +76,8 @@ class Plugin(object):
         self.output["logging"] = self._logging
         if self.input.get("do_profiling"):
             self.__profiler.disable()
-            profile_file = os.path.join(get_workdir(), "%05i_%s.profile" % (self.input.get("job_id"), fully_qualified_name(self)))
+            name = "%05i_%s.%s.profile" % (self.input.get("job_id"), self.__class__.__module__, self.__class__.__name__)
+            profile_file = os.path.join(get_workdir(), name)
             self.log_error("Profiling information in %s" % profile_file, do_raise=False)
             self.__profiler.dump_stats(profile_file)
 
