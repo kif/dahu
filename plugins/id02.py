@@ -19,6 +19,8 @@ import shutil
 import sys
 import time
 import threading
+import json
+import dahu
 from dahu.factory import register
 from dahu.plugin import Plugin, plugin_from_function
 from dahu.utils import get_isotime
@@ -617,14 +619,14 @@ class SingleDetector(Plugin):
             else:
                 self.flat = flat
             if (self.flat is not None) and (self.flat.shape != shape):
-                binning = [j/i for i,j in zip(shape, self.flat.shape)]
-                if tuple(binning) != (1,1):
-                    self.log_error("Binning for flat is %s"%binning, False)
-                    if max(binning)>1:
+                binning = [j / i for i, j in zip(shape, self.flat.shape)]
+                if tuple(binning) != (1, 1):
+                    self.log_error("Binning for flat is %s" % binning, False)
+                    if max(binning) > 1:
                         binning = [int(i) for i in binning]
                         self.flat = pyFAI.utils.binning(self.flat, binsize=binning, norm=False)
                     else:
-                        binning = [i//j for i,j in zip(shape, self.flat.shape)]
+                        binning = [i // j for i, j in zip(shape, self.flat.shape)]
                         self.flat = pyFAI.utils.unBinning(self.flat, binsize=binning, norm=False)
             self.ai.set_flatfield(self.flat)
 
@@ -635,35 +637,35 @@ class SingleDetector(Plugin):
                 mask_fabio = fabio.open(self.mask_filename)
             except:
                 mask = self.read_data(self.mask_filename) != 0
-            else: # this is very ID02 specific !!!! 
+            else:  # this is very ID02 specific !!!!
                 dummy = mask_fabio.header.get("Dummy")
                 try:
                     dummy = float(dummy)
                 except:
-                    self.log_error("Dummy value in mask is unconsitent %s"%dummy)
+                    self.log_error("Dummy value in mask is unconsitent %s" % dummy)
                     dummy = 0
                 ddummy = mask_fabio.header.get("DDummy")
                 try:
                     ddummy = float(ddummy)
                 except:
-                    self.log_error("DDummy value in mask is unconsitent %s"%ddummy)
-                    ddummy = 0                
+                    self.log_error("DDummy value in mask is unconsitent %s" % ddummy)
+                    ddummy = 0
                 if ddummy:
                     mask = abs(mask_fabio.data - dummy) < ddummy
                 else:
-                    mask = (mask_fabio.data==dummy)
+                    mask = (mask_fabio.data == dummy)
             if mask.ndim == 3:
                 mask = pyFAI.utils.averageDark(mask, center_method="median")
             if (mask is not None) and (mask.shape != shape):
-                binning = [j/i for i,j in zip(shape, mask.shape)]
-                if tuple(binning) != (1,1):
-                    self.log_error("Binning for mask is %s"%binning, False)
-                    if max(binning)>1:
+                binning = [j / i for i, j in zip(shape, mask.shape)]
+                if tuple(binning) != (1, 1):
+                    self.log_error("Binning for mask is %s" % binning, False)
+                    if max(binning) > 1:
                         binning = [int(i) for i in binning]
-                        mask = pyFAI.utils.binning(mask, binsize=binning, norm=True)>0
+                        mask = pyFAI.utils.binning(mask, binsize=binning, norm=True) > 0
                     else:
-                        binning = [i//j for i,j in zip(shape, mask.shape)]
-                        mask = pyFAI.utils.unBinning(mask, binsize=binning, norm=False)>0            
+                        binning = [i // j for i, j in zip(shape, mask.shape)]
+                        mask = pyFAI.utils.unBinning(mask, binsize=binning, norm=False) > 0
             self.ai.mask = mask  # nota: this is assigned to the detector !
 
         self.create_hdf5()
@@ -755,8 +757,13 @@ class SingleDetector(Plugin):
         Create one HDF5 file per output
         Also initialize all workers
         """
-#        in_shape = self.images_ds.shape
         basename = os.path.splitext(os.path.basename(self.image_file))[0]
+        json_config = json.dumps(self.input)
+        isotime = numpy.string_(get_isotime())
+        # retrieve h5py file from self.images_ds.name
+        # get detector_name
+        # d=f["entry_0000/ESRF-ID02/id02-rayonixhs-saxs/detector_information/name"]
+        detector_name = "undefined"
         for ext in self.to_save:
             if ext == "raw":
                 continue
@@ -769,8 +776,21 @@ class SingleDetector(Plugin):
                 os.unlink(outfile)
                 nxs = pyFAI.io.Nexus(outfile)
             entry = nxs.new_entry("entry")
-            subentry = nxs.new_class(entry, "pyFAI", class_type="NXsubentry")
-            subentry["definition_local"] = numpy.string_("PyFAI")
+            entry["program_name"] = numpy.string_("dahu")
+            entry["program_name"].attrs["version"] = dahu.version
+            entry["plugin_name"] = numpy.string_(".".join((__file__, self.__class__.__name__)))
+            entry["plugin_name"].attrs["version"] = dahu.version
+            entry["plugin_config"] = numpy.string_(json_config)
+            entry["title"] = numpy.string_(self.image_file + ":" + self.images_ds.name)
+            entry["detector_name"] = numpy.string_(detector_name)
+
+            # TODO: deep copy of metadata, parameters and Lima parameters
+
+            subentry = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
+            subentry["program"] = numpy.string_("pyFAI")
+            subentry["version"] = numpy.string_(pyFAI.version)
+            subentry["date"] = isotime
+            subentry["processing_type"] = numpy.string_(ext)
             coll = nxs.new_class(subentry, "process_" + ext, class_type="NXcollection")
             metadata_grp = coll.require_group("parameters")
             for key, val in self.metadata.iteritems():
@@ -794,7 +814,7 @@ class SingleDetector(Plugin):
                     chi = self.ai.chiArray(self.in_shape[-2:])
                     self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
                 shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
-                
+
                 ai = self.ai.__deepcopy__()
                 worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
                 if self.flat is not None:
@@ -858,7 +878,7 @@ class SingleDetector(Plugin):
                     continue
                 res = None
                 ds = self.output_ds[meth]
-                if meth in ("dark", "flat","dist", "cor") :
+                if meth in ("dark", "flat", "dist", "cor") :
                     res = self.workers[meth].process(data)
                 elif meth == "norm":
                     res = self.workers[meth].process(data) / self.I1[i]
