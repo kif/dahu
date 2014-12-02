@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-from __future__ import with_statement, print_function
+from __future__ import with_statement, print_function, division
+
 
 __doc__ = """
 Data Analysis Highly tailored fror Upbl09a
@@ -10,13 +11,14 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20141010"
+__date__ = "19/11/2014"
 __status__ = "development"
 version = "0.2.0"
 from .factory import plugin_factory, register
-from .utils import fully_qualified_name
+from .utils import fully_qualified_name, get_workdir
 import os
 import logging
+import cProfile
 logger = logging.getLogger("dahu.plugin")
 
 class Plugin(object):
@@ -42,6 +44,7 @@ class Plugin(object):
         self.output = {}
         self._logging = []  # stores the logging information to send back
         self.is_aborted = False
+        self.__profiler = None
 
     def get_name(self):
         return self.__class__.__name__
@@ -54,6 +57,9 @@ class Plugin(object):
         """
         if kwargs is not None:
             self.input.update(kwargs)
+        if self.input.get("do_profiling"):
+            self.__profiler = cProfile.Profile()
+            self.__profiler.enable()
 
     def process(self):
         """
@@ -64,10 +70,16 @@ class Plugin(object):
     def teardown(self):
         """
         method used to tear-down the plugin (close connection, files)
-        
+
         This is always run, even if process fails
         """
         self.output["logging"] = self._logging
+        if self.input.get("do_profiling"):
+            self.__profiler.disable()
+            name = "%05i_%s.%s.profile" % (self.input.get("job_id"), self.__class__.__module__, self.__class__.__name__)
+            profile_file = os.path.join(get_workdir(), name)
+            self.log_error("Profiling information in %s" % profile_file, do_raise=False)
+            self.__profiler.dump_stats(profile_file)
 
     def get_info(self):
         """

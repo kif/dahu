@@ -3,7 +3,7 @@
 #
 from __future__ import with_statement, print_function
 
-__doc__ = """Contains the Job class which handles jobs. 
+__doc__ = """Contains the Job class which handles jobs.
             A static part of the class contains statistics of the class
             """
 __authors__ = ["Jérôme Kieffer"]
@@ -32,38 +32,38 @@ from .factory import plugin_factory
 class Job(Thread):
     """
     Class Job
-    
+
     * Each instance will be a job
     * Constructor takes an input data and generates the JobId
-    * Each instance will gave a "getOutput" method with optional join 
+    * Each instance will gave a "getOutput" method with optional join
     * there could be a "join" method, waiting for the job to finish
-    * Each instance will have a "execute" method  and  returning a JobId 
-    * Each instance will have a "setCallBack" method  that stores the name of the external callback 
+    * Each instance will have a "execute" method  and  returning a JobId
+    * Each instance will have a "setCallBack" method  that stores the name of the external callback
     * provide status of a job
     * Each instance has an abort method which can be used to stop processing (or a server)
-    
-    
+
+
     Static part:
     * keeps track of all jobs status
     * leave the time to job to initialize
     * static class retrieve job-instance, status, small-log ...
     * does not manage workload of the computer, should be managed at the ExecPlugin level
-    
+
     Used for the tango binding
-    
+
     == class variables ==
     dictPluginStatus[pluginName] = ["uninitialized"|"running"|"executed"|"failed"]
     dictJobs [JobId] = Job.Instance
-    
+
     == static methods ==
     getJob(JobId)
-    
-    
+
+
     RESERVED keywords from Thread:
     start, run, join, name, ident, is_alive, daemon
-    
+
     start is overridden with a call to the factory to instanciate the plugin
-    
+
     """
     STATE_UNITIALIZED = "uninitialized"
     STATE_RUNNING = "running"
@@ -84,7 +84,7 @@ class Job(Thread):
     def __init__(self, name="plugin.Plugin", input_data={}):
         """
         Constructor of the class Job
-        
+
         @param name: name of the plugin to be instanciated
         @param input_data: Should be a dictionary or a JSON string representing that dictionary
         """
@@ -120,7 +120,7 @@ class Job(Thread):
 
     def start(self):
         """
-        We need to create the plugin before starting the new tread... 
+        We need to create the plugin before starting the new tread...
         """
         try:
             self._plugin = plugin_factory(self._name)
@@ -142,7 +142,7 @@ class Job(Thread):
     def abort(self):
         """
         Tell the job to stop !
-        
+
         Needs to be imlemented into the plugin !
         """
         if self._status == self.STATE_RUNNING:
@@ -177,10 +177,10 @@ class Job(Thread):
     def _run_(self, what):
         """
         run setup, process, teardown or abort ...
-        
+
         @param what: setup, process or teardown
         @parma args: argument list to be passed to the method
-        
+
         """
 
         methods = {"process":  self._plugin.DEFAULT_PROCESS,
@@ -219,7 +219,7 @@ class Job(Thread):
 
     def _log_error(self, msg):
         """
-        log an error message in the output 
+        log an error message in the output
         """
         exc_type, exc_value, exc_traceback = sys.exc_info()
         err_msg = [msg, "%s: %s" % (exc_type, exc_value)]
@@ -252,10 +252,10 @@ class Job(Thread):
     def clean(self, force=True, wait=True):
         """
         Frees the memory associated with the plugin
-        
+
         @param force: Force garbage collection after clean-up
         @param wait: wait for job to be finished
-        
+
         """
         logger.debug("In clean %s" % (self._plugin))
         if wait and self.is_alive():
@@ -287,7 +287,7 @@ class Job(Thread):
     @property
     def id(self):
         """
-        @return: JobId 
+        @return: JobId
         @rtype: integer
         """
         return self._jobId
@@ -366,7 +366,7 @@ class Job(Thread):
     def synchronize_job(cls, jobId, timeout=None):
         """
         Wait for all a specific jobs to finish.
-        
+
         @param jobId:
         @param timeout: timeout in second to wait
         @return: status of the job
@@ -384,11 +384,11 @@ class Job(Thread):
     def getStatusFromID(cls, jobId):
         """
         Retrieve the job (hence the plugin) status
-        
+
         @param jobId: the Job identification number
         @type jobId: int
-        @return: the Job status 
-        @rtype: string 
+        @return: the Job status
+        @rtype: string
         """
         if jobId < 0:
             jobId = len(cls._dictJobs) + jobId + 1
@@ -405,10 +405,10 @@ class Job(Thread):
     def getJobFromID(cls, jobId):
         """
         Retrieve the job (hence the plugin)
-        
+
         @param jobId: the Job identification number
         @return: the "Job instance", which contains the plugin and the status
-        @rtype: a Python object, instance of Job. 
+        @rtype: a Python object, instance of Job.
         """
         if jobId < 0:
             jobId = len(cls._dictJobs) + jobId + 1
@@ -424,7 +424,7 @@ class Job(Thread):
     def cleanJobfromId(cls, jobId, forceGC=True):
         """
         Frees the memory associated with the top level plugin
-        
+
         @param jobId: the Job identification number
         @type jobId: int
         @param forceGC: Force garbage collection after clean-up
@@ -447,10 +447,11 @@ class Job(Thread):
     def getDataOutputFromId(cls, jobId, as_JSON=False):
         """
         Returns the Plugin Output Data
-        @param jobId: job idenfier 
+        @param jobId: job idenfier
         @type jobId: int
         @return: Job.DataOutput JSON string
         """
+        none = "" if as_JSON else {}
         output = None
         if jobId < 0:
             jobId = len(cls._dictJobs) + jobId + 1
@@ -471,7 +472,7 @@ class Job(Thread):
                             output = job._output_data
         else:
             output = "No such job: %s" % jobId
-        return output or ""
+        return output or none
     getDataOutputFromID = getDataOutputFromId
 
 
@@ -479,11 +480,12 @@ class Job(Thread):
     def getDataInputFromId(cls, jobId, as_JSON=False):
         """
         Returns the Plugin Input Data
-        @param jobId: job idenfier 
+        @param jobId: job idenfier
         @type jobId: int
         @return: Job.DataInput JSON string
         """
         output = None
+        none = "" if as_JSON else {}
         if jobId < 0:
             jobId = len(cls._dictJobs) + jobId + 1
         if jobId in cls._dictJobs:
@@ -503,15 +505,14 @@ class Job(Thread):
                             output = job._input_data
         else:
             output = "No such job: %s" % jobId
-
-        return output or ""
+        return output or none
     getDataInputFromID = getDataInputFromId
 
     @classmethod
     def getErrorFromId(cls, jobId):
         """
         Returns the error messages from plugin
-        @param jobId: job idenfier 
+        @param jobId: job idenfier
         @type jobId: int
         @return: error message as a string
         """

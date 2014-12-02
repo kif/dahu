@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
 
-from __future__ import with_statement, print_function
+from __future__ import with_statement, print_function, division
 
 import PyTango
 import h5py
@@ -11,9 +11,9 @@ import numpy
 import os
 import posixpath
 import pyFAI
-import pyFAI.distortion
 import pyFAI.worker
 import pyFAI.io
+import pyFAI.utils
 import fabio
 import shutil
 import sys
@@ -605,6 +605,7 @@ class SingleDetector(Plugin):
         self.ai.set_darkcurrent(self.dark)
 
         # Read and Process Flat
+        shape = self.in_shape[-2:]
         self.flat_filename = self.input.get("flat_filename")
         if type(self.flat_filename) in StringTypes and os.path.exists(self.flat_filename):
             if self.flat_filename.endswith(".h5") or self.flat_filename.endswith(".nxs") or self.flat_filename.endswith(".hdf5"):
@@ -615,17 +616,54 @@ class SingleDetector(Plugin):
                 self.flat = pyFAI.utils.averageDark(flat, center_method="median")
             else:
                 self.flat = flat
+            if (self.flat is not None) and (self.flat.shape != shape):
+                binning = [j/i for i,j in zip(shape, self.flat.shape)]
+                if tuple(binning) != (1,1):
+                    self.log_error("Binning for flat is %s"%binning, False)
+                    if max(binning)>1:
+                        binning = [int(i) for i in binning]
+                        self.flat = pyFAI.utils.binning(self.flat, binsize=binning, norm=False)
+                    else:
+                        binning = [i//j for i,j in zip(shape, self.flat.shape)]
+                        self.flat = pyFAI.utils.unBinning(self.flat, binsize=binning, norm=False)
             self.ai.set_flatfield(self.flat)
 
         # Read and Process mask
         self.mask_filename = self.input.get("regrouping_mask_filename")
         if type(self.mask_filename) in StringTypes and os.path.exists(self.mask_filename):
             try:
-                mask = fabio.open(self.mask_filename).data
+                mask_fabio = fabio.open(self.mask_filename)
             except:
-                mask = self.read_data(self.mask_filename)
+                mask = self.read_data(self.mask_filename) != 0
+            else: # this is very ID02 specific !!!! 
+                dummy = mask_fabio.header.get("Dummy")
+                try:
+                    dummy = float(dummy)
+                except:
+                    self.log_error("Dummy value in mask is unconsitent %s"%dummy)
+                    dummy = 0
+                ddummy = mask_fabio.header.get("DDummy")
+                try:
+                    ddummy = float(ddummy)
+                except:
+                    self.log_error("DDummy value in mask is unconsitent %s"%ddummy)
+                    ddummy = 0                
+                if ddummy:
+                    mask = abs(mask_fabio.data - dummy) < ddummy
+                else:
+                    mask = (mask_fabio.data==dummy)
             if mask.ndim == 3:
                 mask = pyFAI.utils.averageDark(mask, center_method="median")
+            if (mask is not None) and (mask.shape != shape):
+                binning = [j/i for i,j in zip(shape, mask.shape)]
+                if tuple(binning) != (1,1):
+                    self.log_error("Binning for mask is %s"%binning, False)
+                    if max(binning)>1:
+                        binning = [int(i) for i in binning]
+                        mask = pyFAI.utils.binning(mask, binsize=binning, norm=True)>0
+                    else:
+                        binning = [i//j for i,j in zip(shape, mask.shape)]
+                        mask = pyFAI.utils.unBinning(mask, binsize=binning, norm=False)>0            
             self.ai.mask = mask  # nota: this is assigned to the detector !
 
         self.create_hdf5()
@@ -666,7 +704,7 @@ class SingleDetector(Plugin):
         if len(instrument) == 1:
             instrument = instrument[0]
         else:
-            self.logg_error("Expected ONE instrument is expected in entry, got %s in %s %s" %
+            self.log_error("Expected ONE instrument is expected in entry, got %s in %s %s" %
                             (len(instrument), self.image_file, self.entry))
         detector_grp = self.input_nxs.get_class(instrument, class_type="NXdetector")
         if len(detector_grp) == 1:
@@ -674,7 +712,7 @@ class SingleDetector(Plugin):
         elif len(detector_grp) == 0 and "detector" in instrument:
             detector_grp = instrument["detector"]
         else:
-            self.logg_error("Expected ONE deteector is expected in experiment, got %s in %s %s %s" %
+            self.log_error("Expected ONE deteector is expected in experiment, got %s in %s %s %s" %
                             (len(detector_grp), self.input_nxs, self.image_file, instrument))
         self.images_ds = detector_grp.get("data")
         self.in_shape = self.images_ds.shape
@@ -691,7 +729,7 @@ class SingleDetector(Plugin):
             if len(collections) >= 1:
                 collection = collections[0]
             else:
-                self.logg_error("Expected ONE collections is expected in entry, got %s in %s %s" %
+                self.log_error("Expected ONE collections is expected in entry, got %s in %s %s" %
                             (len(collections), self.image_file, self.entry))
 
         detector_grps = self.input_nxs.get_class(collection, class_type="NXdetector")
@@ -756,6 +794,7 @@ class SingleDetector(Plugin):
                     chi = self.ai.chiArray(self.in_shape[-2:])
                     self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
                 shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
+                
                 ai = self.ai.__deepcopy__()
                 worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
                 if self.flat is not None:
@@ -777,6 +816,7 @@ class SingleDetector(Plugin):
                 worker = pyFAI.worker.Worker(self.ai, self.in_shape[-2:], (1, self.npt1_rad), "q_nm^-1")
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
+                self.workers[ext] = worker
             elif ext == "dark":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark)
                 self.workers[ext] = worker
@@ -818,19 +858,12 @@ class SingleDetector(Plugin):
                     continue
                 res = None
                 ds = self.output_ds[meth]
-                if meth == "dark":
+                if meth in ("dark", "flat","dist", "cor") :
                     res = self.workers[meth].process(data)
-                elif meth == "flat":
-                    res = self.workers[meth].process(data)
-                elif meth == "dist":
-                    res = self.workers[meth].process(data)
-                elif meth == "cor":
-                    res = self.distortion.correct(ds)
                 elif meth == "norm":
-                    res = self.distortion.correct(ds) / self.I1[i]
+                    res = self.workers[meth].process(data) / self.I1[i]
                 elif meth == "azim":
-                    res = self.workers[meth].process(data)
-                    res /= self.I1[i]
+                    res = self.workers[meth].process(data) / self.I1[i]
                     if i == 0:
                         if "q" not in ds.parent:
                             ds.parent["q"] = self.workers[meth].radial
@@ -839,12 +872,11 @@ class SingleDetector(Plugin):
                             ds.parent["chi"] = self.workers[meth].azimuthal
                             ds.parent["chi"].attrs["unit"] = "deg"
                 elif meth == "ave":
-                    res = self.workers[meth].process(data)
+                    res = self.workers[meth].process(data) / self.I1[i]
                     if i == 0 and "q" not in ds.parent:
                         ds.parent["q"] = self.workers[meth].radial
                         ds.parent["q"].attrs["unit"] = "q_nm^-1"
                     res = res[:, 1]
-                    res /= self.I1[i]
                 else:
                     self.log_error("Unknown/supported method ... %s" % (meth), do_raise=False)
                 ds[i] = res
