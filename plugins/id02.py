@@ -89,11 +89,11 @@ def preproc(**d):
             ShutterClosingTime = float(value)
     else:
         ShutterClosingTime = 0
-    for ind in map(lambda x:'HS32F' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
+    for ind in map(lambda x: 'HS32F' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
             list_f.append(float(dd[ind]))
-    for ind in map(lambda x:'HS32N' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
+    for ind in map(lambda x: 'HS32N' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
             list_n.append(dd[ind])
-    for ind in map(lambda x:'HS32Z' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
+    for ind in map(lambda x: 'HS32Z' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
             list_z.append(float(dd[ind]))
 
     info_dir = {}
@@ -472,8 +472,8 @@ class SingleDetector(Plugin):
         self.distotion_norm = None
         self.workers = {}
         self.output_ds = {}  # output datasets
-        self.dest = None     # output directory
-        self.I1 = None       # beam stop diode values
+        self.dest = None  # output directory
+        self.I1 = None  # beam stop diode values
         self.nframes = None
         self.to_save = ["raw", "ave"]  # by default only raw image and averaged one is saved
         self.input_nxs = None
@@ -508,7 +508,7 @@ class SingleDetector(Plugin):
             status = Job.synchronize_job(job_id, self.TIMEOUT)
             abort_time = time.time() + self.TIMEOUT
             while status == Job.STATE_UNITIALIZED:
-                #Wait for job to start
+                # Wait for job to start
                 time.sleep(1)
                 status = Job.synchronize_job(job_id, self.TIMEOUT)
                 if time.time() > abort_time:
@@ -574,7 +574,7 @@ class SingleDetector(Plugin):
                     "SampleDistance", "WaveLength"):
             forai[key] = self.metadata.get(key)
         self.dist = self.metadata.get("SampleDistance")
-        #read detector distortion
+        # read detector distortion
         self.distortion_filename = self.input.get("distortion_filename")
         if type(self.distortion_filename) in StringTypes:
             detector = pyFAI.detectors.Detector(splineFile=self.distortion_filename)
@@ -661,7 +661,7 @@ class SingleDetector(Plugin):
         if "entry" in self.input:
             self.entry = self.input_nxs.get_entry(self.input["entry"])
         else:
-            self.entry = self.input_nxs.get_entries()[0] #take the last entry
+            self.entry = self.input_nxs.get_entries()[0]  # take the last entry
         instrument = self.input_nxs.get_class(self.entry, class_type="NXinstrument")
         if len(instrument) == 1:
             instrument = instrument[0]
@@ -682,8 +682,8 @@ class SingleDetector(Plugin):
             detector_information = detector_grp["detector_information"]
             if "name" in detector_information:
                 metadata["DetectorName"] = str(detector_information["name"])
-        #now read an interpret all static metadata.
-        #metadata are on the collection side not instrument
+        # now read an interpret all static metadata.
+        # metadata are on the collection side not instrument
         collections = self.input_nxs.get_class(self.entry, class_type="NXcollection")
         if len(collections) == 1:
             collection = collections[0]
