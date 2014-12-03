@@ -587,6 +587,12 @@ class SingleDetector(Plugin):
         self.ai = pyFAI.AzimuthalIntegrator(detector=detector)
         self.ai.setSPD(**forai)
 
+        # Initialize geometry:
+        shape = self.in_shape[-2:]
+        self.ai.deltaQ(shape)
+        self.ai.deltaChi(shape)
+#         self.ai.cos
+
         # Read and Process dark
         self.dark_filename = self.input.get("dark_filename")
         if type(self.dark_filename) in StringTypes and os.path.exists(self.dark_filename):
@@ -608,7 +614,7 @@ class SingleDetector(Plugin):
         self.ai.set_darkcurrent(self.dark)
 
         # Read and Process Flat
-        shape = self.in_shape[-2:]
+
         self.flat_filename = self.input.get("flat_filename")
         if type(self.flat_filename) in StringTypes and os.path.exists(self.flat_filename):
             if self.flat_filename.endswith(".h5") or self.flat_filename.endswith(".nxs") or self.flat_filename.endswith(".hdf5"):
