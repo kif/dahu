@@ -770,7 +770,6 @@ class SingleDetector(Plugin):
         basename = os.path.splitext(os.path.basename(self.image_file))[0]
         json_config = json.dumps(self.input)
         isotime = numpy.string_(get_isotime())
-#         detector_name = self.get_detector_name()
         detector_grp = self.input_nxs.find_detector(all=True)
         detector_name = "undefined"
         for grp in detector_grp:
@@ -796,8 +795,7 @@ class SingleDetector(Plugin):
                 os.unlink(outfile)
                 nxs = pyFAI.io.Nexus(outfile)
             entry = nxs.new_entry("entry", program_name="dahu", title=self.image_file + ":" + self.images_ds.name)
-            self.log_error("file is %s  %s entry is %s with %s" % (nxs, nxs.filename, entry, entry.keys()), do_raise=False)
-#             entry["program_name"] = numpy.string_("dahu")
+
             entry["program_name"].attrs["version"] = dahu.version
             entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
             entry["plugin_name"].attrs["version"] = version
