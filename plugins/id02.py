@@ -589,6 +589,8 @@ class SingleDetector(Plugin):
 
         # Initialize geometry:
         shape = self.in_shape[-2:]
+        self.ai.qArray(shape)
+        self.ai.chiArray(shape)
         self.ai.deltaQ(shape)
         self.ai.deltaChi(shape)
         self.ai.solidAngleArray(shape)
@@ -797,10 +799,9 @@ class SingleDetector(Plugin):
             self.log_error("file is %s  %s entry is %s with %s" % (nxs, nxs.filename, entry, entry.keys()), do_raise=False)
 #             entry["program_name"] = numpy.string_("dahu")
             entry["program_name"].attrs["version"] = dahu.version
-            entry["plugin_name"] = numpy.string_(".".join((__file__, self.__class__.__name__)))
-            entry["plugin_name"].attrs["version"] = dahu.version
+            entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
+            entry["plugin_name"].attrs["version"] = version
             entry["plugin_config"] = numpy.string_(json_config)
-#             entry["title"] = numpy.string_()
             entry["detector_name"] = numpy.string_(detector_name)
 
             subentry = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
