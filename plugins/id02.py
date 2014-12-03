@@ -768,10 +768,8 @@ class SingleDetector(Plugin):
             if "detector_information/name" in grp:
                 detector_name = grp["detector_information/name"].value
         entry = self.metadata_nxs.get_entries()[0]
-        print("entry: %s" % entry)
         instruments = self.metadata_nxs.get_class(entry, "NXinstrument")
-        print("instruments: %s" % instruments)
-        if len(instruments >= 1):
+        if instruments:
             collections = self.metadata_nxs.get_class(instruments[0], "NXcollection")
             to_copy = detector_grp + collections
         else:
