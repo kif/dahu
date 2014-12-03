@@ -767,8 +767,8 @@ class SingleDetector(Plugin):
         for grp in detector_grp:
             if "detector_information/name" in grp:
                 detector_name = grp["detector_information/name"].value
-        entry = self.metadata_nxs.get_entries()[0]
-        instruments = self.metadata_nxs.get_class(entry, "NXinstrument")
+        md_entry = self.metadata_nxs.get_entries()[0]
+        instruments = self.metadata_nxs.get_class(md_entry, "NXinstrument")
         if instruments:
             collections = self.metadata_nxs.get_class(instruments[0], "NXcollection")
             to_copy = detector_grp + collections
@@ -787,7 +787,7 @@ class SingleDetector(Plugin):
                 os.unlink(outfile)
                 nxs = pyFAI.io.Nexus(outfile)
             entry = nxs.new_entry("entry")
-            self.log_error("file is %s entry is %s" % (nxs, entry), do_raise=False)
+            self.log_error("file is %s  %s entry is %s with %s" % (nxs, nxs.filename, entry, entry.keys()), do_raise=False)
             entry["program_name"] = numpy.string_("dahu")
             entry["program_name"].attrs["version"] = dahu.version
             entry["plugin_name"] = numpy.string_(".".join((__file__, self.__class__.__name__)))
