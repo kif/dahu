@@ -479,6 +479,7 @@ class SingleDetector(Plugin):
         self.nframes = None
         self.to_save = ["raw", "ave"]  # by default only raw image and averaged one is saved
         self.input_nxs = None
+        self.metadata_nxs = None
         self.images_ds = None
         self.metadata_plugin = None
         self.metadata = {}
@@ -683,9 +684,9 @@ class SingleDetector(Plugin):
         """
         if "I1" in self.input:
             return numpy.array(self.input["I1"])
-        nxs = pyFAI.io.Nexus(mfile, "r")
-        for entry in nxs.get_entries():
-            for instrument in nxs.get_class(entry, "NXinstrument"):
+        self.metadata_nxs = pyFAI.io.Nexus(mfile, "r")
+        for entry in self.metadata_nxs.get_entries():
+            for instrument in self.metadata_nxs.get_class(entry, "NXinstrument"):
                 if "MCS" in instrument:
                     mcs = instrument["MCS"]
                     if "I1" in mcs:
@@ -760,10 +761,20 @@ class SingleDetector(Plugin):
         basename = os.path.splitext(os.path.basename(self.image_file))[0]
         json_config = json.dumps(self.input)
         isotime = numpy.string_(get_isotime())
-        # retrieve h5py file from self.images_ds.name
-        # get detector_name
-        # d=f["entry_0000/ESRF-ID02/id02-rayonixhs-saxs/detector_information/name"]
+#         detector_name = self.get_detector_name()
+        detector_grp = self.input_nxs.find_detector(all=True)
         detector_name = "undefined"
+        for grp in detector_grp:
+            if "detector_information/name" in grp:
+                detector_name = detector_grp["detector_information/name"].value
+        entry = self.metadata_nxs.get_entries()[0]
+        instruments = self.metadata_nxs.get_class(entry, "NXinstrument")
+        if len(instruments >= 1):
+            collections = self.metadata_nxs.get_class(instruments[0], "NXinstrument")
+            to_copy = detector_grp + collections
+        else:
+            to_copy = detector_grp
+
         for ext in self.to_save:
             if ext == "raw":
                 continue
@@ -784,13 +795,18 @@ class SingleDetector(Plugin):
             entry["title"] = numpy.string_(self.image_file + ":" + self.images_ds.name)
             entry["detector_name"] = numpy.string_(detector_name)
 
-            # TODO: deep copy of metadata, parameters and Lima parameters
-
             subentry = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
-            subentry["program"] = numpy.string_("pyFAI")
+            subentry["program"] = numpy.string_("PyFAI")
             subentry["version"] = numpy.string_(pyFAI.version)
             subentry["date"] = isotime
             subentry["processing_type"] = numpy.string_(ext)
+
+            # copy metadata from other files:
+            def grpdeepcopy(name, obj):
+                nxs.deep_copy(name, obj, toplevel=subentry, excluded=["data"])
+            for grp in to_copy:
+                grp.visititems(grpdeepcopy)
+
             coll = nxs.new_class(subentry, "process_" + ext, class_type="NXcollection")
             metadata_grp = coll.require_group("parameters")
             for key, val in self.metadata.iteritems():
@@ -878,7 +894,7 @@ class SingleDetector(Plugin):
                     continue
                 res = None
                 ds = self.output_ds[meth]
-                if meth in ("dark", "flat", "dist", "cor") :
+                if meth in ("dark", "flat", "dist", "cor"):
                     res = self.workers[meth].process(data)
                 elif meth == "norm":
                     res = self.workers[meth].process(data) / self.I1[i]
@@ -929,4 +945,3 @@ class SingleDetector(Plugin):
         self.ai = None
         self.output["files"] = self.output_hdf5
         Plugin.teardown(self)
-
