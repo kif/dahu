@@ -799,7 +799,7 @@ class SingleDetector(Plugin):
             entry["program_name"].attrs["version"] = dahu.version
             entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
             entry["plugin_name"].attrs["version"] = version
-            entry["plugin_config"] = numpy.string_(json_config)
+            entry["input"] = numpy.string_(json_config)
             entry["detector_name"] = numpy.string_(detector_name)
 
             subentry = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
@@ -813,6 +813,8 @@ class SingleDetector(Plugin):
                 grp_name = posixpath.split(grp.name)[-1]
                 if not grp_name in subentry:
                     toplevel = subentry.require_group(grp_name)
+                    for k, v in grp.attrs.items():
+                        toplevel.attrs[k] = v
                 else:
                     toplevel = subentry[grp_name]
 
