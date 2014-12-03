@@ -811,7 +811,7 @@ class SingleDetector(Plugin):
 
             # copy metadata from other files:
             for grp in to_copy:
-                grp_name = posixpath.split(grp)[-1]
+                grp_name = posixpath.split(grp.name)[-1]
                 if not grp_name in subentry:
                     toplevel = subentry.require_group(grp_name)
                 else:
