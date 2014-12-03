@@ -766,7 +766,7 @@ class SingleDetector(Plugin):
         detector_name = "undefined"
         for grp in detector_grp:
             if "detector_information/name" in grp:
-                detector_name = detector_grp["detector_information/name"].value
+                detector_name = grp["detector_information/name"].value
         entry = self.metadata_nxs.get_entries()[0]
         instruments = self.metadata_nxs.get_class(entry, "NXinstrument")
         if len(instruments >= 1):
