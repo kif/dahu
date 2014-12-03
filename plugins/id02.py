@@ -591,6 +591,7 @@ class SingleDetector(Plugin):
         shape = self.in_shape[-2:]
         self.ai.deltaQ(shape)
         self.ai.deltaChi(shape)
+        self.ai.solidAngleArray(shape)
 #         self.ai.cos
 
         # Read and Process dark
@@ -809,9 +810,16 @@ class SingleDetector(Plugin):
             subentry["processing_type"] = numpy.string_(ext)
 
             # copy metadata from other files:
-            def grpdeepcopy(name, obj):
-                nxs.deep_copy(name, obj, toplevel=subentry, excluded=["data"])
             for grp in to_copy:
+                grp_name = posixpath.split(grp)[-1]
+                if not grp_name in subentry:
+                    toplevel = subentry.require_group(grp_name)
+                else:
+                    toplevel = subentry[grp_name]
+
+                def grpdeepcopy(name, obj):
+                    nxs.deep_copy(name, obj, toplevel=toplevel, excluded=["data"])
+
                 grp.visititems(grpdeepcopy)
 
             coll = nxs.new_class(subentry, "process_" + ext, class_type="NXcollection")
