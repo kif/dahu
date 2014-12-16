@@ -723,13 +723,13 @@ Defined but yet unused keywords:
                     mcs = instrument["MCS"]
                     if key in mcs:
                         I1 = numpy.array(mcs[key])
-                        self.log_error("Got I1 in %s"%instrument, do_raise=False)
+#                         self.log_error("Got I1 in %s"%instrument, do_raise=False)
 
                 if "TFG" in instrument:
                     tfg = instrument["TFG"]
                     if "delta_time" in tfg:
                         t = numpy.array(tfg["delta_time"])
-                        self.log_error("Got delta_time in %s"%instrument, do_raise=False)
+#                         self.log_error("Got delta_time in %s"%instrument, do_raise=False)
                 if (t is None) or (I1 is  None):
                     I1 = t = None
                 else:
