@@ -973,7 +973,8 @@ class SingleDetector(Plugin):
                         ds.parent["q"].attrs["interpretation"] = "scalar"
                     res = res[:, 1]
                 else:
-                    self.log_error("Unknown/supported method ... %s" % (meth), do_raise=False)
+                    self.log_error("Unknown/supported method ... %s, skipping" % (meth), do_raise=False)
+                    continue
                 ds[i] = res
 
     def read_data(self, filename):
