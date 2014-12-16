@@ -821,29 +821,28 @@ class SingleDetector(Plugin):
             subentry["version"] = numpy.string_(pyFAI.version)
             subentry["date"] = isotime
             subentry["processing_type"] = numpy.string_(ext)
-
-            # copy metadata from other files:
-            for grp in to_copy:
-                grp_name = posixpath.split(grp.name)[-1]
-                if not grp_name in subentry:
-                    toplevel = subentry.require_group(grp_name)
-                    for k, v in grp.attrs.items():
-                        toplevel.attrs[k] = v
-                else:
-                    toplevel = subentry[grp_name]
-
-                def grpdeepcopy(name, obj):
-                    nxs.deep_copy(name, obj, toplevel=toplevel, excluded=["data"])
-
-                grp.visititems(grpdeepcopy)
-
             coll = nxs.new_class(subentry, "process_" + ext, class_type="NXdata")
             metadata_grp = coll.require_group("parameters")
+
             for key, val in self.metadata.iteritems():
                 if type(val) in [str, unicode]:
                     metadata_grp[key] = numpy.string_(val)
                 else:
                     metadata_grp[key] = val
+
+            # copy metadata from other files:
+            for grp in to_copy:
+                grp_name = posixpath.split(grp.name)[-1]
+                if not grp_name in coll:
+                    toplevel = coll.require_group(grp_name)
+                    for k, v in grp.attrs.items():
+                        toplevel.attrs[k] = v
+                else:
+                    toplevel = coll[grp_name]
+                def grpdeepcopy(name, obj):
+                    nxs.deep_copy(name, obj, toplevel=toplevel, excluded=["data"])
+                grp.visititems(grpdeepcopy)
+
             shape = self.in_shape[:]
                             
             if ext == "azim":
