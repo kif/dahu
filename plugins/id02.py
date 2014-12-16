@@ -476,6 +476,7 @@ class SingleDetector(Plugin):
         self.output_ds = {}  # output datasets
         self.dest = None  # output directory
         self.I1 = None  # beam stop diode values
+        self.t = None   # time of the start of the frame. Same shape as self.I1
         self.nframes = None
         self.to_save = ["raw", "ave"]  # by default only raw image and averaged one is saved
         self.input_nxs = None
@@ -557,7 +558,7 @@ class SingleDetector(Plugin):
         self.hdf5_filename = self.input.get("hdf5_filename")
         self.entry = self.input.get("entry", "entry")
         self.instrument = self.input.get("instrument", "id02")
-        self.I1 = self.load_I1(c216_filename)
+        self.I1, self.t = self.load_I1_t(c216_filename)
 
     def process(self):
         self.metadata = self.parse_image_file()
@@ -681,25 +682,38 @@ class SingleDetector(Plugin):
         self.create_hdf5()
         self.process_images()
 
-    def load_I1(self, mfile):
+    def load_I1_t(self, mfile):
         """
         load the I1 data from a metadata HDF5 file
 
         /entry_0001/id02/MCS/I1
+        
         TODO: handle correction or not for shutter opening/closing time
-
+        TODO: read as well the delta_time which is the start of the given frame to add.  They will be used as axes for axis #0
+         
         @param mfile: metadata HDF5 file
         @return: array with I1
         """
         if "I1" in self.input:
             return numpy.array(self.input["I1"])
         self.metadata_nxs = pyFAI.io.Nexus(mfile, "r")
+        I1 = None
+        t = None
         for entry in self.metadata_nxs.get_entries():
             for instrument in self.metadata_nxs.get_class(entry, "NXinstrument"):
                 if "MCS" in instrument:
                     mcs = instrument["MCS"]
-                    if "I1" in mcs:
-                        return numpy.array(mcs["I1"])
+                    if I1 is None and "I1" in mcs:
+                        I1 = numpy.array(mcs["I1"])
+                if "TFG" in instrument:
+                    tfg = instrument["TFG"]
+                    if t is None and "delta_time" in tfg:
+                        t = numpy.array(mcs["delta_time"])
+                if (t is not None) and I1 is not None:
+                    break
+                else:
+                    I1 = t = None
+        return I1, t
 
     def parse_image_file(self):
         """
@@ -823,7 +837,7 @@ class SingleDetector(Plugin):
 
                 grp.visititems(grpdeepcopy)
 
-            coll = nxs.new_class(subentry, "process_" + ext, class_type="NXcollection")
+            coll = nxs.new_class(subentry, "process_" + ext, class_type="NXdata")
             metadata_grp = coll.require_group("parameters")
             for key, val in self.metadata.iteritems():
                 if type(val) in [str, unicode]:
@@ -831,7 +845,7 @@ class SingleDetector(Plugin):
                 else:
                     metadata_grp[key] = val
             shape = self.in_shape[:]
-
+                            
             if ext == "azim":
                 if "npt2_rad" in self.input:
                     self.npt2_rad = int(self.input["npt2_rad"])
@@ -891,9 +905,23 @@ class SingleDetector(Plugin):
             output_ds = coll.create_dataset("data", shape, "float32",
                                             chunks=(1,) + shape[1:],
                                             maxshape=(None,) + shape[1:])
-            output_ds.attrs["NX_class"] = "NXdata"
-            if ext == "ave":
+            if self.t is not None:
+                coll["t"] = self.t
+                coll["t"].attrs["axis"] = "1"
+                coll["t"].attrs["interpretation"] = "scalar"
+                coll["t"].attrs["unit"] = "s"
+                
+#             output_ds.attrs["NX_class"] = "NXdata" -> see group
+            output_ds.attrs["signal"] = "1"
+            if ext  == "azim":
+                output_ds.attrs["axes"] = ["t", "chi", "q"]
+                output_ds.attrs["interpretation"] = "image"
+            elif ext == "ave":
+                output_ds.attrs["axes"] = ["t",  "q"]
                 output_ds.attrs["interpretation"] = "spectrum"
+            elif ext in ("dark", "flat", "solid", "dist"):
+                output_ds.attrs["axes"] = "t"
+                output_ds.attrs["interpretation"] = "image"
             else:
                 output_ds.attrs["interpretation"] = "image"
             self.output_ds[ext] = output_ds
@@ -920,14 +948,20 @@ class SingleDetector(Plugin):
                         if "q" not in ds.parent:
                             ds.parent["q"] = self.workers[meth].radial
                             ds.parent["q"].attrs["unit"] = "q_nm^-1"
+                            ds.parent["q"].attrs["axis"] = "3"
+                            ds.parent["q"].attrs["interpretation"] = "scalar"
                         if "chi" not in ds.parent:
                             ds.parent["chi"] = self.workers[meth].azimuthal
                             ds.parent["chi"].attrs["unit"] = "deg"
+                            ds.parent["chi"].attrs["axis"] = "2"
+                            ds.parent["chi"].attrs["interpretation"] = "scalar"
                 elif meth == "ave":
                     res = self.workers[meth].process(data) / self.I1[i]
                     if i == 0 and "q" not in ds.parent:
                         ds.parent["q"] = self.workers[meth].radial
                         ds.parent["q"].attrs["unit"] = "q_nm^-1"
+                        ds.parent["q"].attrs["axis"] = "2"
+                        ds.parent["q"].attrs["interpretation"] = "scalar"
                     res = res[:, 1]
                 else:
                     self.log_error("Unknown/supported method ... %s" % (meth), do_raise=False)
