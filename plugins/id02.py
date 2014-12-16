@@ -594,7 +594,7 @@ Defined but yet unused keywords:
             forai[key] = self.metadata.get(key)
         self.dist = self.metadata.get("SampleDistance")
         # read detector distortion
-        self.distortion_filename = self.input.get("distortion_filename")
+        self.distortion_filename = self.input.get("distortion_filename") or None
         if type(self.distortion_filename) in StringTypes:
             detector = pyFAI.detectors.Detector(splineFile=self.distortion_filename)
         else:
