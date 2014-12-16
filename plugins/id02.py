@@ -537,7 +537,7 @@ Defined but yet unused keywords:
         if not os.path.isdir(self.dest):
             os.makedirs(self.dest)
         c216_filename = os.path.abspath(self.input.get("c216_filename", ""))
-        if os.path.dirname(c216_filename) != self.dest:
+        if (os.path.dirname(c216_filename) != self.dest) and (os.path.basename(c216_filename) not in os.listdir(self.dest)):
             self.output_hdf5["metadata"] = os.path.join(self.dest, os.path.basename(c216_filename))
             m = threading.Thread(target=shutil.copy, name="copy metadata", args=(c216_filename, self.dest))
             m.start()
