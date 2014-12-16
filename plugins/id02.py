@@ -689,28 +689,33 @@ class SingleDetector(Plugin):
         self.create_hdf5()
         self.process_images()
 
-    def load_I1_t(self, mfile):
+    def load_I1_t(self, mfile, correct_shutter_closing_time = False):
         """
-        load the I1 data from a metadata HDF5 file
+        load the I1 data and timstamp for frame start from a metadata HDF5 file
+
 
         /entry_0001/id02/MCS/I1
         
         TODO: handle correction or not for shutter opening/closing time
-        TODO: read as well the delta_time which is the start of the given frame to add.  They will be used as axes for axis #0
          
         @param mfile: metadata HDF5 file
-        @return: array with I1
+        @param correct_shutter_closing_time: set to true for integrating detector (CCD) and false for counting detector (Pilatus)
+        @return: 2-tuple of array with I1 and t
         """
         if "I1" in self.input:
             return numpy.array(self.input["I1"])
         self.metadata_nxs = pyFAI.io.Nexus(mfile, "r")
         I1 = t = None
+        if correct_shutter_closing_time:
+            key = "Intensity1ShutCor"
+        else:
+            key = "Intensity1" 
         for entry in self.metadata_nxs.get_entries():
             for instrument in self.metadata_nxs.get_class(entry, "NXinstrument"):
                 if "MCS" in instrument:
                     mcs = instrument["MCS"]
-                    if "I1" in mcs:
-                        I1 = numpy.array(mcs["I1"])
+                    if key in mcs:
+                        I1 = numpy.array(mcs[key])
                         self.log_error("Got I1 in %s"%instrument, do_raise=False)
 
                 if "TFG" in instrument:
