@@ -709,12 +709,15 @@ class SingleDetector(Plugin):
             for instrument in self.metadata_nxs.get_class(entry, "NXinstrument"):
                 if "MCS" in instrument:
                     mcs = instrument["MCS"]
-                    if I1 is None and "I1" in mcs:
+                    if "I1" in mcs:
                         I1 = numpy.array(mcs["I1"])
+                        self.log_error("Got I1 in %s"%instrument, do_raise=False)
+
                 if "TFG" in instrument:
                     tfg = instrument["TFG"]
-                    if t is None and "delta_time" in tfg:
+                    if "delta_time" in tfg:
                         t = numpy.array(tfg["delta_time"])
+                        self.log_error("Got delta_time in %s"%instrument, do_raise=False)
                 if (t is None) or (I1 is  None):
                     I1 = t = None
                 else:
