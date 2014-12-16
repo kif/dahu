@@ -559,6 +559,7 @@ class SingleDetector(Plugin):
         self.entry = self.input.get("entry", "entry")
         self.instrument = self.input.get("instrument", "id02")
         self.I1, self.t = self.load_I1_t(c216_filename)
+        self.log_error("got I1=%s and t=%s"%(self.I1, self.t), do_raise=False)
 
     def process(self):
         self.metadata = self.parse_image_file()
@@ -933,7 +934,7 @@ class SingleDetector(Plugin):
         for i in range(self.in_shape[0]):
             data = self.images_ds[i]
             for meth in self.to_save:
-                print(meth)
+#                 print(meth)
                 if meth == "raw":
                     continue
                 res = None
