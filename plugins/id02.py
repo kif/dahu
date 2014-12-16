@@ -405,48 +405,60 @@ input = {
 @register
 class SingleDetector(Plugin):
     """This plugin does all processing needed for a single camera
-    input = { "DetectorName": "rayonix",
-              "image_file": "/nobackup/lid02gpu11/FRELON/test_laurent_saxs_0000.h5",
-              #"entry": "entry_0000"
-              #"hdf5": "/entry_0000/id02/data,
-              "output_dir": "/nobackup/lid02gpu12",
-              "PSize_1": 2.4e-05,
-              "PSize_2": 2.4e-05,
-              "BSize_1":1,
-              "BSize_2":1,
-              "Center_1":512,
-              "Center_2":512,
-              "DDummy":1,
-              "SampleDistance":14.9522,
-              "c216_filename": "/nobackup/lid02gpu11/metadata/test.h5",
-              "WaveLength": 9.95058e-11,
-              "Dummy":-10,
-              "output_dir": "/nobackup/lid02gpu12/output",
-#              "do_dark":false,
-#              "do_flat":false,
-              "npt2_azim": 360,
-              "npt2_rad" : 500,
-              "npt1_rad" : 1000,
-              "to_save": ["raw", "dark", "flat", "dist", "norm", "azim", "ave"]
-              "metadata_job": 1,
-              
-              }  
-              
-    {
+
+Minimalistic example:
+              {
  "npt1_rad": 1000, 
  "c216_filename": "/nobackup/lid02gpu11/metadata/test.h5", 
  "npt2_rad": 500, 
  "DetectorName": "rayonix", 
  "npt2_azim": 360, 
- "to_save": [
-  "azim", 
-  "ave"
- ], 
+ "to_save": "raw sub ave azim dist flat", 
  "output_dir": "/nobackup/lid02gpu12/output", 
  "WaveLength": 9.95058e-11, 
  "image_file": "/nobackup/lid02gpu11/FRELON/test_laurent_saxs_0000.h5", 
-  "dark_filename": "/nobackup/lid02gpu11/FRELON/test_laurent_dark_0000.h5",
+ "dark_filename": "/nobackup/lid02gpu11/FRELON/test_laurent_dark_0000.h5",
 }
+
+All possible options are :
+Mandatory options:
+"image_file": HDF5 file containing the raw data
+"output_dir": directory where final data are saved
+"to_save": list of processing to be performed like: "raw sub flat dist norm azim ave"
+"c216_filename": File containing the metadata (I1, timimgs ...)
+"npt2_azim": number on bins in q direction for azim file
+"npt2_rad" : number on bins in azimuthal direction for azim file
+"npt1_rad" : number of bins in q direction for ave file
+
+Optional parameters:
+"DetectorName": "rayonix",
+"PSize_1": 2.4e-05,
+"PSize_2": 2.4e-05,
+"BSize_1":1,
+"BSize_2":1,
+"Center_1":512,
+"Center_2":512,
+"DDummy":1,
+"SampleDistance":14.9522,
+"WaveLength": 9.95058e-11,
+"Dummy":-10,
+"metadata_job": int: wait for this job to finish and retrieve metadata from it.             
+"regrouping_mask_filename": file containing the mask to be used to integration 
+"dark_filename" HDF5 file with dark data in it
+'dark_filter"  can be 'quantil' to average between given lower and upper quantils
+"dark_filter_quantil" ask for the median id 0.5, min if 0 or max if 1
+"dark_filter_quantil_lower" lower quantil for averaging
+"dark_filter_quantil_upper" upper quantil for averaging
+"distortion_filename" Spline file with the distortion correction
+"flat_filename" flat field for intensity response correction
+
+Unused and automatically generated:
+"plugin_name':"id02.singledetector',
+"job_id': 29,
+
+Defined but yet unused keywords:
+"RasterOrientation": int,
+"Rot": float
 
     """
     KEY_CONV = {"BSize": int,
@@ -527,9 +539,8 @@ class SingleDetector(Plugin):
         c216_filename = os.path.abspath(self.input.get("c216_filename", ""))
         if os.path.dirname(c216_filename) != self.dest:
             self.output_hdf5["metadata"] = os.path.join(self.dest, os.path.basename(c216_filename))
-            t = threading.Thread(target=shutil.copy, name="copy metadata", args=(c216_filename, self.dest))
-            t.start()
-#            shutil.copy(c216_filename, self.dest)
+            m = threading.Thread(target=shutil.copy, name="copy metadata", args=(c216_filename, self.dest))
+            m.start()
 
         if "to_save" in self.input:
             to_save = self.input["to_save"][:]
@@ -553,20 +564,16 @@ class SingleDetector(Plugin):
 
         self.dark_filename = self.input.get("dark_filename")    
         if "raw" in self.to_save:
-            t = threading.Thread(target=shutil.copy, name="copy raw", args=(self.image_file, self.dest))
-            t.start()
+            if os.path.dirname(self.image_file) != self.dest:
+                t = threading.Thread(target=shutil.copy, name="copy raw", args=(self.image_file, self.dest))
+                t.start()
             self.output_hdf5["raw"] = os.path.join(self.dest, os.path.basename(self.image_file))
             if type(self.dark_filename) in StringTypes and os.path.exists(self.dark_filename):
-                d = threading.Thread(target=shutil.copy, name="copy raw", args=(self.dark_filename, self.dest))
-                d.start()
-                self.output_hdf5["dark"] = os.path.join(self.dest, os.path.basename(self.dark_filename))
-                
-                
-        self.hdf5_filename = self.input.get("hdf5_filename")
-        self.entry = self.input.get("entry", "entry")
-        self.instrument = self.input.get("instrument", "id02")
+                if os.path.dirname(self.dark_filename) != self.dest:
+                    d = threading.Thread(target=shutil.copy, name="copy dark", args=(self.dark_filename, self.dest))
+                    d.start()
+                self.output_hdf5["dark"] = os.path.join(self.dest, os.path.basename(self.dark_filename))                
         self.I1, self.t = self.load_I1_t(c216_filename)
-        self.log_error("got I1=%s and t=%s"%(self.I1, self.t), do_raise=False)
 
     def process(self):
         self.metadata = self.parse_image_file()
