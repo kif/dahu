@@ -708,7 +708,7 @@ class SingleDetector(Plugin):
                 if "TFG" in instrument:
                     tfg = instrument["TFG"]
                     if t is None and "delta_time" in tfg:
-                        t = numpy.array(mcs["delta_time"])
+                        t = numpy.array(tfg["delta_time"])
                 if (t is not None) and I1 is not None:
                     break
                 else:
