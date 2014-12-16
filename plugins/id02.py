@@ -697,8 +697,7 @@ class SingleDetector(Plugin):
         if "I1" in self.input:
             return numpy.array(self.input["I1"])
         self.metadata_nxs = pyFAI.io.Nexus(mfile, "r")
-        I1 = None
-        t = None
+        I1 = t = None
         for entry in self.metadata_nxs.get_entries():
             for instrument in self.metadata_nxs.get_class(entry, "NXinstrument"):
                 if "MCS" in instrument:
@@ -709,12 +708,14 @@ class SingleDetector(Plugin):
                     tfg = instrument["TFG"]
                     if t is None and "delta_time" in tfg:
                         t = numpy.array(tfg["delta_time"])
-                if (t is not None) and I1 is not None:
-                    break
-                else:
+                if (t is None) or (I1 is  None):
                     I1 = t = None
+                else:
+                    break
+            if (t is not None) and (I1 is not None):
+                return I1, t
         return I1, t
-
+    
     def parse_image_file(self):
         """
         @return: dict with interpreted metadata
