@@ -550,11 +550,18 @@ class SingleDetector(Plugin):
                     self.image_file = image_file
                 else:
                     self.log_error("image_file %s does not exist" % self.image_file)
+
+        self.dark_filename = self.input.get("dark_filename")    
         if "raw" in self.to_save:
             t = threading.Thread(target=shutil.copy, name="copy raw", args=(self.image_file, self.dest))
             t.start()
-#            self.to_save.remove("raw")
             self.output_hdf5["raw"] = os.path.join(self.dest, os.path.basename(self.image_file))
+            if type(self.dark_filename) in StringTypes and os.path.exists(self.dark_filename):
+                d = threading.Thread(target=shutil.copy, name="copy raw", args=(self.dark_filename, self.dest))
+                d.start()
+                self.output_hdf5["dark"] = os.path.join(self.dest, os.path.basename(self.dark_filename))
+                
+                
         self.hdf5_filename = self.input.get("hdf5_filename")
         self.entry = self.input.get("entry", "entry")
         self.instrument = self.input.get("instrument", "id02")
@@ -599,7 +606,6 @@ class SingleDetector(Plugin):
 #         self.ai.cos
 
         # Read and Process dark
-        self.dark_filename = self.input.get("dark_filename")
         if type(self.dark_filename) in StringTypes and os.path.exists(self.dark_filename):
             dark = self.read_data(self.dark_filename)
             if dark.ndim == 3:
@@ -784,6 +790,8 @@ class SingleDetector(Plugin):
         Also initialize all workers
         """
         basename = os.path.splitext(os.path.basename(self.image_file))[0]
+        if basename.endswith("_raw"):
+            basename = basename[:-4]
         json_config = json.dumps(self.input)
         isotime = numpy.string_(get_isotime())
         detector_grp = self.input_nxs.find_detector(all=True)
@@ -802,7 +810,7 @@ class SingleDetector(Plugin):
         for ext in self.to_save:
             if ext == "raw":
                 continue
-            outfile = os.path.join(self.dest, "%s_%s_%s.h5" % (basename, self.metadata["DetectorName"], ext))
+            outfile = os.path.join(self.dest, "%s_%s.h5" % (basename, ext))
             self.output_hdf5[ext] = outfile
             try:
                 nxs = pyFAI.io.Nexus(outfile, "a")
@@ -884,7 +892,7 @@ class SingleDetector(Plugin):
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
                 self.workers[ext] = worker
-            elif ext == "dark":
+            elif ext == "sub":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark)
                 self.workers[ext] = worker
             elif ext == "flat":
@@ -920,7 +928,7 @@ class SingleDetector(Plugin):
             elif ext == "ave":
                 output_ds.attrs["axes"] = ["t",  "q"]
                 output_ds.attrs["interpretation"] = "spectrum"
-            elif ext in ("dark", "flat", "solid", "dist"):
+            elif ext in ("sub", "flat", "solid", "dist"):
                 output_ds.attrs["axes"] = "t"
                 output_ds.attrs["interpretation"] = "image"
             else:
@@ -939,7 +947,7 @@ class SingleDetector(Plugin):
                     continue
                 res = None
                 ds = self.output_ds[meth]
-                if meth in ("dark", "flat", "dist", "cor"):
+                if meth in ("sub", "flat", "dist", "cor"):
                     res = self.workers[meth].process(data)
                 elif meth == "norm":
                     res = self.workers[meth].process(data) / self.I1[i]
