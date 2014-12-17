@@ -63,7 +63,7 @@ def process(args):
         if os.path.exists(fn):
             with open(fn,"r") as fp:
                 dico = json.load(fp)
-        plugin_name = fp["plugin_name"]
+        plugin_name = dico["plugin_name"]
         plugin = dahu.factory.plugin_factory("id02.metadata")
         plugin.input = dico
         status = _run_(plugin, "setup")
