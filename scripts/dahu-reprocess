@@ -47,6 +47,7 @@ def _run_(plugin, what):
             except Exception as error:
                 print("Error %s while calling %s.%s without arguments" %
                                 (error, plugin.__class__.__name__, what))
+                return STATE_FAILURE
             else:
                 return STATE_RUNNING
     else:
@@ -67,7 +68,7 @@ def process(args):
         plugin = dahu.factory.plugin_factory(plugin_name)
         plugin.input = dico
         state = _run_(plugin, "setup")
-        if state != STATE_RUNNING:
+        if state == STATE_RUNNING:
             status1 = _run_(plugin,"process")
             status2 = _run_(plugin,"teardown")
             if status1 == STATE_RUNNING and status2 == self.STATE_RUNNING:
