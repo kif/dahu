@@ -64,7 +64,7 @@ def process(args):
             with open(fn,"r") as fp:
                 dico = json.load(fp)
         plugin_name = dico["plugin_name"]
-        plugin = dahu.factory.plugin_factory("id02.metadata")
+        plugin = dahu.factory.plugin_factory(plugin_name)
         plugin.input = dico
         status = _run_(plugin, "setup")
         if status != STATE_RUNNING:
