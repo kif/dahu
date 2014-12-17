@@ -235,7 +235,7 @@ input = {
                 try:
                     value.encode("ascii")
                 except UnicodeEncodeError:
-                    self.log_error("Unicode Error in field %s: %s, skipping"%(field, value))
+                    self.log_error("Unicode Error in field %s: %s, skipping"%(field, value), do_raise=False)
                 else:
                     self.info_grp[field] = numpy.string_(value)
                                     
