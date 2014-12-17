@@ -71,7 +71,7 @@ def process(args):
         if state == STATE_RUNNING:
             status1 = _run_(plugin,"process")
             status2 = _run_(plugin,"teardown")
-            if status1 == STATE_RUNNING and status2 == self.STATE_RUNNING:
+            if status1 == STATE_RUNNING and status2 == STATE_RUNNING:
                 state = STATE_SUCCESS
             else:
                 state = STATE_FAILURE
