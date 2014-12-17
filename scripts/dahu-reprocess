@@ -76,7 +76,7 @@ def process(args):
             else:
                 state = STATE_FAILURE
         print("Finished with state: %s"%state)
-        print(plugin.output)
+        print(json.dumps(plugin.output, indent=4))
     
 if __name__ == "__main__":
     args = parse()

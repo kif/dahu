@@ -233,10 +233,12 @@ input = {
         for field, value in self.input2.get("Info", {}).items():
             if field not in self.TO_SKIP:
                 try:
-                    self.info_grp[field] = numpy.string_(value)
+                    value.encode("ascii")
                 except UnicodeEncodeError:
                     self.log_error("Unicode Error in field %s: %s, skipping"%(field, value))
-                    
+                else:
+                    self.info_grp[field] = numpy.string_(value)
+                                    
         start_time = self.input2.get("HMStartTime", get_isotime())
 
         # Factor
