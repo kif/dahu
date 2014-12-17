@@ -66,7 +66,7 @@ def process(args):
         plugin_name = dico["plugin_name"]
         plugin = dahu.factory.plugin_factory(plugin_name)
         plugin.input = dico
-        status = _run_(plugin, "setup")
+        state = _run_(plugin, "setup")
         if status != STATE_RUNNING:
             status1 = _run_(plugin,"process")
             status2 = _run_(plugin,"teardown")
@@ -74,7 +74,7 @@ def process(args):
                 state = STATE_SUCCESS
             else:
                 state = STATE_FAILURE
-        print("FInished with state: %s"%state)
+        print("Finished with state: %s"%state)
         print(plugin.output)
     
 if __name__ == "__main__":
