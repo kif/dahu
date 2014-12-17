@@ -1,0 +1,82 @@
+#!/usr/bin/python
+
+"""
+Reprocess a job using the current 
+"""
+import os, json, sys
+from argparse import ArgumentParser
+import dahu.factory
+
+STATE_UNITIALIZED = "uninitialized"
+STATE_RUNNING = "running"
+STATE_SUCCESS = "success"
+STATE_FAILURE = "failure"
+STATE_ABORTED = "aborted"
+STATE = [STATE_UNITIALIZED, STATE_RUNNING, STATE_SUCCESS, STATE_FAILURE, STATE_ABORTED]
+
+
+
+def parse():
+    """
+    Parse the command line a return the parsed arguments
+    """
+    #TODO
+    pass
+
+
+def _run_(plugin, what):
+    """
+    run setup, process, teardown or abort ...
+
+    @param what: setup, process or teardown
+    @parma args: argument list to be passed to the method
+    @return : execution code
+    """
+
+    methods = {"process":  plugin.DEFAULT_PROCESS,
+               "setup":    plugin.DEFAULT_SET_UP,
+               "teardown": plugin.DEFAULT_TEAR_DOWN,
+               "abort":    plugin.DEFAULT_ABORT    }
+    assert what in methods
+    name = methods.get(what)
+    if name in dir(plugin):
+        method = plugin.__getattribute__(name)
+        if "__call__" in dir(method):
+            try:
+                method()
+            except Exception as error:
+                print("Error %s while calling %s.%s without arguments" %
+                                (error, plugin.__class__.__name__, what))
+            else:
+                return STATE_RUNNING
+    else:
+        print("No such method %s in class %s" % (what, plugin.__class__.__name__))
+        return STATE_FAILURE
+
+    
+def process(args):
+    """
+    Process a set of arguments
+    """
+    for fn in sys.argv[1:]:
+        print("Processing %s"%fn)
+        if os.path.exists(fn):
+            with open(fn,"r") as fp:
+                dico = json.load(fp)
+        plugin_name = fp["plugin_name"]
+        plugin = dahu.factory.plugin_factory("id02.metadata")
+        plugin.input = dico
+        status = _run_(plugin, "setup")
+        if status != STATE_RUNNING:
+            status1 = _run_("process")
+            status2 = _run_("teardown")
+            if status1 == STATE_RUNNING and status2 == self.STATE_RUNNING:
+                state = STATE_SUCCESS
+            else:
+                state = STATE_FAILURE
+        print("FInished with state: %s"%state)
+        print(plugin.output)
+    
+if __name__ == "__main__":
+    args = parse()
+    
