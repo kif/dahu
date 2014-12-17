@@ -456,6 +456,7 @@ Optional parameters:
 "dark_filter_quantil_upper" upper quantil for averaging
 "distortion_filename" Spline file with the distortion correction
 "flat_filename" flat field for intensity response correction
+"metadata_job": number of the metadata job to wait for
 
 Unused and automatically generated:
 "plugin_name':"id02.singledetector',
