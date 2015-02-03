@@ -355,7 +355,7 @@ class Job(Thread):
         Wait for all jobs to finish.
         """
         logger.debug("Job.synchronize_all class method ")
-        listJob = cls._dictJobs.keys()
+        listJob = list(cls._dictJobs.keys())
         for jobid in listJob:
             job = cls._dictJobs[jobid]
             job.join()
@@ -375,10 +375,11 @@ class Job(Thread):
         job = cls.getJobFromID(jobId)
 
         if job is None:
-            res = "No Job"
+            res = "No such jobid %s"%jobId
         else:
             job.join(timeout)
             res = job.status
+        return res
 
     @classmethod
     def getStatusFromID(cls, jobId):
