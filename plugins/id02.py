@@ -40,7 +40,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/10/2014"
+__date__ = "16/02/2015"
 __status__ = "development"
 version = "0.3"
 
@@ -235,10 +235,10 @@ input = {
                 try:
                     value.encode("ascii")
                 except UnicodeEncodeError:
-                    self.log_error("Unicode Error in field %s: %s, skipping"%(field, value), do_raise=False)
+                    self.log_error("Unicode Error in field %s: %s, skipping" % (field, value), do_raise=False)
                 else:
                     self.info_grp[field] = numpy.string_(value)
-                                    
+
         start_time = self.input2.get("HMStartTime", get_isotime())
 
         # Factor
@@ -466,6 +466,17 @@ Defined but yet unused keywords:
 "RasterOrientation": int,
 "Rot": float
 
+Possible values for to_save:
+----------------------------
+
+* sub: subtract dark signal
+* flat: subtract dark then divide by flat
+* solid: subtract dark then divide by flat and absolute solid angle
+* dist: subtract dark then divide by flat and absolute solid angle, finally rebin on a regular grid
+* norm: subtract dark then divide by flat and absolute solid angle, finally rebin on a regular grid and divide intensity by "I1"
+* azim: subtract dark then divide by flat and absolute solid angle, finally rebin on a regular q/Chi grid and divide intensity by "I1"
+* ave: subtract dark then divide by flat and absolute solid angle, finally rebin on a regular q grid and divide intensity by "I1"
+
     """
     KEY_CONV = {"BSize": int,
                 "Offset": int,
@@ -494,7 +505,7 @@ Defined but yet unused keywords:
         self.output_ds = {}  # output datasets
         self.dest = None  # output directory
         self.I1 = None  # beam stop diode values
-        self.t = None   # time of the start of the frame. Same shape as self.I1
+        self.t = None  # time of the start of the frame. Same shape as self.I1
         self.nframes = None
         self.to_save = ["raw", "ave"]  # by default only raw image and averaged one is saved
         self.input_nxs = None
@@ -568,7 +579,7 @@ Defined but yet unused keywords:
                 else:
                     self.log_error("image_file %s does not exist" % self.image_file)
 
-        self.dark_filename = self.input.get("dark_filename")    
+        self.dark_filename = self.input.get("dark_filename")
         if "raw" in self.to_save:
             if os.path.dirname(self.image_file) != self.dest:
                 t = threading.Thread(target=shutil.copy, name="copy raw", args=(self.image_file, self.dest))
@@ -578,7 +589,7 @@ Defined but yet unused keywords:
                 if os.path.dirname(self.dark_filename) != self.dest:
                     d = threading.Thread(target=shutil.copy, name="copy dark", args=(self.dark_filename, self.dest))
                     d.start()
-                self.output_hdf5["dark"] = os.path.join(self.dest, os.path.basename(self.dark_filename))                
+                self.output_hdf5["dark"] = os.path.join(self.dest, os.path.basename(self.dark_filename))
         self.I1, self.t = self.load_I1_t(c216_filename)
 
     def process(self):
@@ -628,7 +639,7 @@ Defined but yet unused keywords:
                     upper = self.input.get("dark_filter_quantil_upper", 1)
                     self.dark = pyFAI.utils.averageDark(dark, center_method=method, quantiles=(lower, upper))
                 else:
-                    if method == None:
+                    if method is None:
                         method = "median"
                     self.dark = pyFAI.utils.averageDark(dark, center_method=method)
             else:
@@ -702,7 +713,7 @@ Defined but yet unused keywords:
         self.create_hdf5()
         self.process_images()
 
-    def load_I1_t(self, mfile, correct_shutter_closing_time = False):
+    def load_I1_t(self, mfile, correct_shutter_closing_time=False):
         """
         load the I1 data and timstamp for frame start from a metadata HDF5 file
 
@@ -715,14 +726,14 @@ Defined but yet unused keywords:
         @param correct_shutter_closing_time: set to true for integrating detector (CCD) and false for counting detector (Pilatus)
         @return: 2-tuple of array with I1 and t
         """
-        if "I1" in self.input:
-            return numpy.array(self.input["I1"])
+        if ("I1" in self.input):
+            return numpy.array(self.input["I1"]), None
         self.metadata_nxs = pyFAI.io.Nexus(mfile, "r")
         I1 = t = None
         if correct_shutter_closing_time:
             key = "Intensity1ShutCor"
         else:
-            key = "Intensity1" 
+            key = "Intensity1"
         for entry in self.metadata_nxs.get_entries():
             for instrument in self.metadata_nxs.get_class(entry, "NXinstrument"):
                 if "MCS" in instrument:
@@ -736,14 +747,14 @@ Defined but yet unused keywords:
                     if "delta_time" in tfg:
                         t = numpy.array(tfg["delta_time"])
 #                         self.log_error("Got delta_time in %s"%instrument, do_raise=False)
-                if (t is None) or (I1 is  None):
+                if (t is None) or (I1 is None):
                     I1 = t = None
                 else:
                     break
             if (t is not None) and (I1 is not None):
                 return I1, t
         return I1, t
-    
+
     def parse_image_file(self):
         """
         @return: dict with interpreted metadata
@@ -760,7 +771,7 @@ Defined but yet unused keywords:
             instrument = instrument[0]
         else:
             self.log_error("Expected ONE instrument is expected in entry, got %s in %s %s" %
-                            (len(instrument), self.image_file, self.entry))
+                           (len(instrument), self.image_file, self.entry))
         detector_grp = self.input_nxs.get_class(instrument, class_type="NXdetector")
         if len(detector_grp) == 1:
             detector_grp = detector_grp[0]
@@ -768,7 +779,7 @@ Defined but yet unused keywords:
             detector_grp = instrument["detector"]
         else:
             self.log_error("Expected ONE deteector is expected in experiment, got %s in %s %s %s" %
-                            (len(detector_grp), self.input_nxs, self.image_file, instrument))
+                           (len(detector_grp), self.input_nxs, self.image_file, instrument))
         self.images_ds = detector_grp.get("data")
         self.in_shape = self.images_ds.shape
         if "detector_information" in detector_grp:
@@ -785,7 +796,7 @@ Defined but yet unused keywords:
                 collection = collections[0]
             else:
                 self.log_error("Expected ONE collections is expected in entry, got %s in %s %s" %
-                            (len(collections), self.image_file, self.entry))
+                               (len(collections), self.image_file, self.entry))
 
         detector_grps = self.input_nxs.get_class(collection, class_type="NXdetector")
         if (len(detector_grps) == 0) and ("detector" in collection):
@@ -864,18 +875,20 @@ Defined but yet unused keywords:
             # copy metadata from other files:
             for grp in to_copy:
                 grp_name = posixpath.split(grp.name)[-1]
-                if not grp_name in coll:
+                if grp_name not in coll:
                     toplevel = coll.require_group(grp_name)
                     for k, v in grp.attrs.items():
                         toplevel.attrs[k] = v
                 else:
                     toplevel = coll[grp_name]
+
                 def grpdeepcopy(name, obj):
                     nxs.deep_copy(name, obj, toplevel=toplevel, excluded=["data"])
+
                 grp.visititems(grpdeepcopy)
 
             shape = self.in_shape[:]
-                            
+
             if ext == "azim":
                 if "npt2_rad" in self.input:
                     self.npt2_rad = int(self.input["npt2_rad"])
@@ -940,14 +953,14 @@ Defined but yet unused keywords:
                 coll["t"].attrs["axis"] = "1"
                 coll["t"].attrs["interpretation"] = "scalar"
                 coll["t"].attrs["unit"] = "s"
-                
+
 #             output_ds.attrs["NX_class"] = "NXdata" -> see group
             output_ds.attrs["signal"] = "1"
-            if ext  == "azim":
+            if ext == "azim":
                 output_ds.attrs["axes"] = ["t", "chi", "q"]
                 output_ds.attrs["interpretation"] = "image"
             elif ext == "ave":
-                output_ds.attrs["axes"] = ["t",  "q"]
+                output_ds.attrs["axes"] = ["t", "q"]
                 output_ds.attrs["interpretation"] = "spectrum"
             elif ext in ("sub", "flat", "solid", "dist"):
                 output_ds.attrs["axes"] = "t"
@@ -963,7 +976,6 @@ Defined but yet unused keywords:
         for i in range(self.in_shape[0]):
             data = self.images_ds[i]
             for meth in self.to_save:
-#                 print(meth)
                 if meth == "raw":
                     continue
                 res = None
