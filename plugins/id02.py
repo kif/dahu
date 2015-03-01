@@ -128,7 +128,7 @@ plugin_from_function(preproc)
 @register
 class Metadata(Plugin):
     """Plugin in charge of retrieving all metadata for ID02 and storing them into a HDF5 file
-    
+
     TODO: rewrite using Nexus class from pyFAI: shorter code
 
     NOTA: pin number are 1-based (I0, I1, time)
@@ -413,15 +413,15 @@ class SingleDetector(Plugin):
 
 Minimalistic example:
               {
- "npt1_rad": 1000, 
- "c216_filename": "/nobackup/lid02gpu11/metadata/test.h5", 
- "npt2_rad": 500, 
- "DetectorName": "rayonix", 
- "npt2_azim": 360, 
- "to_save": "raw sub ave azim dist flat", 
- "output_dir": "/nobackup/lid02gpu12/output", 
- "WaveLength": 9.95058e-11, 
- "image_file": "/nobackup/lid02gpu11/FRELON/test_laurent_saxs_0000.h5", 
+ "npt1_rad": 1000,
+ "c216_filename": "/nobackup/lid02gpu11/metadata/test.h5",
+ "npt2_rad": 500,
+ "DetectorName": "rayonix",
+ "npt2_azim": 360,
+ "to_save": "raw sub ave azim dist flat",
+ "output_dir": "/nobackup/lid02gpu12/output",
+ "WaveLength": 9.95058e-11,
+ "image_file": "/nobackup/lid02gpu11/FRELON/test_laurent_saxs_0000.h5",
  "dark_filename": "/nobackup/lid02gpu11/FRELON/test_laurent_dark_0000.h5",
 }
 
@@ -447,8 +447,8 @@ Optional parameters:
 "SampleDistance":14.9522,
 "WaveLength": 9.95058e-11,
 "Dummy":-10,
-"metadata_job": int: wait for this job to finish and retrieve metadata from it.             
-"regrouping_mask_filename": file containing the mask to be used to integration 
+"metadata_job": int: wait for this job to finish and retrieve metadata from it.
+"regrouping_mask_filename": file containing the mask to be used to integration
 "dark_filename" HDF5 file with dark data in it
 'dark_filter"  can be 'quantil' to average between given lower and upper quantils
 "dark_filter_quantil" ask for the median id 0.5, min if 0 or max if 1
@@ -713,15 +713,15 @@ Possible values for to_save:
         self.create_hdf5()
         self.process_images()
 
-    def load_I1_t(self, mfile, correct_shutter_closing_time=False):
+    def load_I1_t(self, mfile, correct_shutter_closing_time=True):
         """
         load the I1 data and timstamp for frame start from a metadata HDF5 file
 
 
         /entry_0001/id02/MCS/I1
-        
+
         TODO: handle correction or not for shutter opening/closing time
-         
+
         @param mfile: metadata HDF5 file
         @param correct_shutter_closing_time: set to true for integrating detector (CCD) and false for counting detector (Pilatus)
         @return: 2-tuple of array with I1 and t
@@ -1012,9 +1012,9 @@ Possible values for to_save:
 
     def read_data(self, filename):
         """read dark data from a file
-        
+
         @param filename: HDF5 file containing dark frames
-        @return: numpy array with dark 
+        @return: numpy array with dark
         """
         with pyFAI.io.Nexus(filename, "r") as nxs:
             for entry in nxs.get_entries():
