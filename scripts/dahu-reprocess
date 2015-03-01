@@ -1,11 +1,12 @@
 #!/usr/bin/python
 
 """
-Reprocess a job using the current 
+Reprocess a job using the current
 """
-import os, json, sys
+import os, json, sys, logging
 from argparse import ArgumentParser
 import dahu.factory
+logging.basicConfig()
 
 STATE_UNITIALIZED = "uninitialized"
 STATE_RUNNING = "running"
@@ -21,7 +22,14 @@ def parse():
     Parse the command line a return the parsed arguments
     """
     #TODO
-    pass
+    parser = ArgumentParser(description='reProcess some data using the Dahu')
+    parser.add_argument("-d", '--debug', dest='debug', action='store_true',
+                        default=False, help='debug mode')
+    parser.add_argument(dest='args', nargs='+', help='job inputs to be re-processed')
+    args = parser.parse_args()
+    if args.debug:
+        logging.root.setLevel(logging.DEBUG)
+    return args.args
 
 
 def _run_(plugin, what):
@@ -54,7 +62,7 @@ def _run_(plugin, what):
         print("No such method %s in class %s" % (what, plugin.__class__.__name__))
         return STATE_FAILURE
 
-    
+
 def process(args):
     """
     Process a set of arguments
@@ -64,6 +72,9 @@ def process(args):
         if os.path.exists(fn):
             with open(fn,"r") as fp:
                 dico = json.load(fp)
+        else:
+            logging.warning("No such file: %s" % fn)
+            continue
         plugin_name = dico["plugin_name"]
         plugin = dahu.factory.plugin_factory(plugin_name)
         plugin.input = dico
@@ -77,8 +88,7 @@ def process(args):
                 state = STATE_FAILURE
         print("Finished with state: %s"%state)
         print(json.dumps(plugin.output, indent=4))
-    
+
 if __name__ == "__main__":
     args = parse()
-    process(sys.argv[1:]) 
-    
+    process(args)
