@@ -610,15 +610,17 @@ Possible values for to_save:
                     "SampleDistance", "WaveLength"):
             forai[key] = self.metadata.get(key)
         self.dist = self.metadata.get("SampleDistance")
-        # read detector distortion
+        # read detector distortion distortion_filename
+        self.ai = pyFAI.AzimuthalIntegrator()
+        self.ai.setSPD(**forai)
+
         self.distortion_filename = self.input.get("distortion_filename") or None
         if type(self.distortion_filename) in StringTypes:
             detector = pyFAI.detectors.Detector(splineFile=self.distortion_filename)
         else:
             detector = None
-
-        self.ai = pyFAI.AzimuthalIntegrator(detector=detector)
-        self.ai.setSPD(**forai)
+        self.ai.detector = detector
+        self.log_error("AI:%s" % self.ai, do_raise=False)
 
         # Initialize geometry:
         shape = self.in_shape[-2:]
@@ -913,6 +915,8 @@ Possible values for to_save:
                 self.workers[ext] = worker
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
+                worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
+                self.log_error("Normalization factor: %s" % worker.normalization_factor, do_raise=False)
                 self.workers[ext] = worker
             elif ext == "ave":
                 if "npt1_rad" in self.input:
@@ -925,6 +929,7 @@ Possible values for to_save:
                 worker = pyFAI.worker.Worker(self.ai, self.in_shape[-2:], (1, self.npt1_rad), "q_nm^-1")
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
+                worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
                 self.workers[ext] = worker
             elif ext == "sub":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark)
@@ -976,16 +981,17 @@ Possible values for to_save:
         for i in range(self.in_shape[0]):
             data = self.images_ds[i]
             for meth in self.to_save:
-                if meth == "raw":
+                if meth in ["raw", "dark"]:
                     continue
                 res = None
                 ds = self.output_ds[meth]
+                I1 = self.I1[i]
                 if meth in ("sub", "flat", "dist", "cor"):
                     res = self.workers[meth].process(data)
                 elif meth == "norm":
-                    res = self.workers[meth].process(data) / self.I1[i]
+                    res = self.workers[meth].process(data) / I1
                 elif meth == "azim":
-                    res = self.workers[meth].process(data) / self.I1[i]
+                    res = self.workers[meth].process(data) / I1
                     if i == 0:
                         if "q" not in ds.parent:
                             ds.parent["q"] = self.workers[meth].radial
@@ -998,7 +1004,7 @@ Possible values for to_save:
                             ds.parent["chi"].attrs["axis"] = "2"
                             ds.parent["chi"].attrs["interpretation"] = "scalar"
                 elif meth == "ave":
-                    res = self.workers[meth].process(data) / self.I1[i]
+                    res = self.workers[meth].process(data) / I1
                     if i == 0 and "q" not in ds.parent:
                         ds.parent["q"] = self.workers[meth].radial
                         ds.parent["q"].attrs["unit"] = "q_nm^-1"
