@@ -698,6 +698,7 @@ Possible values for to_save:
                     mask = abs(mask_fabio.data - dummy) < ddummy
                 else:
                     mask = (mask_fabio.data == dummy)
+                self.log_error("found %s pixel masked out" % (mask.sum()), do_raise=False)
             if mask.ndim == 3:
                 mask = pyFAI.utils.averageDark(mask, center_method="median")
             if (mask is not None) and (mask.shape != shape):
@@ -710,7 +711,8 @@ Possible values for to_save:
                     else:
                         binning = [i // j for i, j in zip(shape, mask.shape)]
                         mask = pyFAI.utils.unBinning(mask, binsize=binning, norm=False) > 0
-            self.ai.mask = mask  # nota: this is assigned to the detector !
+            # nota: this is assigned to the detector !
+            self.ai.mask = mask
 
         self.create_hdf5()
         self.process_images()
@@ -980,12 +982,14 @@ Possible values for to_save:
         """
         for i in range(self.in_shape[0]):
             data = self.images_ds[i]
+            I1 = self.I1[i]
+            self.log_error("I1=%s" % I1, do_raise=False)
             for meth in self.to_save:
                 if meth in ["raw", "dark"]:
                     continue
                 res = None
                 ds = self.output_ds[meth]
-                I1 = self.I1[i]
+
                 if meth in ("sub", "flat", "dist", "cor"):
                     res = self.workers[meth].process(data)
                 elif meth == "norm":
