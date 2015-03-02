@@ -40,7 +40,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/02/2015"
+__date__ = "02/03/2015"
 __status__ = "development"
 version = "0.3"
 
@@ -351,9 +351,9 @@ input = {
             values_int = (raw_scalers - zero * exptime) * factor
             values_avg = (raw_scalers / exptime - zero) * factor
             mask = (numpy.outer(numpy.ones(frames), modes)).astype(bool)
-            values[mask] = values_int[mask]
             nmask = numpy.logical_not(mask)
-            values[nmask] = values_avg[nmask]
+            values[mask] = values_avg[mask]
+            values[nmask] = values_int[nmask]
             self.mcs_grp["HS32V"] = values.astype(numpy.float32)
             self.mcs_grp["HS32V"].attrs["interpretation"] = "scalar"
             for i, name in enumerate(self.mcs_grp["HS32N"]):
