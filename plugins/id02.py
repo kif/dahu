@@ -40,7 +40,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/03/2015"
+__date__ = "12/03/2015"
 __status__ = "development"
 version = "0.3"
 
@@ -594,10 +594,11 @@ Possible values for to_save:
 
     def process(self):
         self.metadata = self.parse_image_file()
+        shape = self.in_shape[-2:]
         if self.I1 is None:
-            self.I1 = numpy.ones(self.images_ds.shape[0], dtype=float)
-        elif self.I1.size < self.images_ds.shape[0]:
-            ones = numpy.ones(self.images_ds.shape[0], dtype=float)
+            self.I1 = numpy.ones(shape, dtype=float)
+        elif self.I1.size < self.in_shape[0]:
+            ones = numpy.ones(self.in_shape[0], dtype=float)
             ones[:self.I1.size] = self.I1
             self.I1 = ones
         # update all metadata with the one provided by input
@@ -617,13 +618,15 @@ Possible values for to_save:
         self.distortion_filename = self.input.get("distortion_filename") or None
         if type(self.distortion_filename) in StringTypes:
             detector = pyFAI.detectors.Detector(splineFile=self.distortion_filename)
+            if tuple(detector.shape) != shape:
+                self.log_error("Binning needed for spline ? detector claims %s but image size is %s" % (detector.shape, shape), do_raise=False)
+                detector.guess_binning(shape)
         else:
             detector = None
         self.ai.detector = detector
         self.log_error("AI:%s" % self.ai, do_raise=False)
 
         # Initialize geometry:
-        shape = self.in_shape[-2:]
         self.ai.qArray(shape)
         self.ai.chiArray(shape)
         self.ai.deltaQ(shape)
