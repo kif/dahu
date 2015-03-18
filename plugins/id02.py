@@ -40,7 +40,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "12/03/2015"
+__date__ = "18/03/2015"
 __status__ = "development"
 version = "0.3"
 
@@ -205,7 +205,7 @@ input = {
             self.hdf5 = h5py.File(self.hdf5_filename, 'a')
         except IOError as error:
             os.unlink(self.hdf5_filename)
-            self.log_error("Unable to open %s: %s. Removing file and starting from scratch" % (self.hdf5_filename, error), False)
+            self.log_warning("Unable to open %s: %s. Removing file and starting from scratch" % (self.hdf5_filename, error))
             self.hdf5 = h5py.File(self.hdf5_filename)
 
         if not self.entry.endswith("_"):
@@ -235,7 +235,7 @@ input = {
                 try:
                     value.encode("ascii")
                 except UnicodeEncodeError:
-                    self.log_error("Unicode Error in field %s: %s, skipping" % (field, value), do_raise=False)
+                    self.log_warning("Unicode Error in field %s: %s, skipping" % (field, value))
                 else:
                     self.info_grp[field] = numpy.string_(value)
 
@@ -328,7 +328,7 @@ input = {
             if "HS32F" in self.mcs_grp:
                 factor = self.mcs_grp["HS32F"][pin]
             else:
-                self.log_error("No factors provided for time measurement: defaulting to 1e-6", False)
+                self.log_warning("No factors provided for time measurement: defaulting to 1e-6")
                 factor = 1e-6
             measured_time = time_counter * factor
             self.mcs_grp["ExposureTime"] = measured_time
@@ -392,7 +392,7 @@ input = {
                     self.mcs_grp[dest + "ShutCor"] = measured * correction_time
                     self.mcs_grp[dest + "ShutCor"].attrs["interpretation"] = "scalar"
         else:
-            self.log_error("Not factor/zero to calculate I0/I1", True)
+            self.log_error("Not factor/zero to calculate I0/I1")
 
     def teardown(self):
         self.output["c216_filename"] = self.hdf5_filename
@@ -545,12 +545,12 @@ Possible values for to_save:
                 time.sleep(1)
                 status = Job.synchronize_job(job_id, self.TIMEOUT)
                 if time.time() > abort_time:
-                    self.log_error("Timeout while waiting metadata plugin to finish", do_raise=True)
+                    self.log_error("Timeout while waiting metadata plugin to finish")
                     break
             if status == Job.STATE_SUCCESS:
                 self.metadata_plugin = Job.getJobFromId(job_id)
             else:
-                self.log_error("Metadata plugin ended in %s: aborting myself" % status, do_raise=True)
+                self.log_error("Metadata plugin ended in %s: aborting myself" % status)
         if not os.path.isdir(self.dest):
             os.makedirs(self.dest)
         c216_filename = os.path.abspath(self.input.get("c216_filename", ""))
@@ -564,7 +564,7 @@ Possible values for to_save:
             if type(to_save) in StringTypes:
                 # fix a bug from spec ...
                 self.to_save = [i.strip('[\\] ",') for i in to_save.split()]
-                self.log_error("processing planned: " + " ".join(self.to_save), do_raise=False)
+                self.log_warning("processing planned: " + " ".join(self.to_save))
             else:
                 self.to_save = to_save
         if "image_file" not in self.input:
@@ -619,12 +619,11 @@ Possible values for to_save:
         if type(self.distortion_filename) in StringTypes:
             detector = pyFAI.detectors.Detector(splineFile=self.distortion_filename)
             if tuple(detector.shape) != shape:
-                self.log_error("Binning needed for spline ? detector claims %s but image size is %s" % (detector.shape, shape), do_raise=False)
+                self.log_warning("Binning needed for spline ? detector claims %s but image size is %s" % (detector.shape, shape))
                 detector.guess_binning(shape)
-        else:
-            detector = None
-        self.ai.detector = detector
-        self.log_error("AI:%s" % self.ai, do_raise=False)
+            self.ai.detector = detector
+
+        self.log_warning("AI:%s" % self.ai)
 
         # Initialize geometry:
         self.ai.qArray(shape)
@@ -668,7 +667,7 @@ Possible values for to_save:
             if (self.flat is not None) and (self.flat.shape != shape):
                 binning = [j / i for i, j in zip(shape, self.flat.shape)]
                 if tuple(binning) != (1, 1):
-                    self.log_error("Binning for flat is %s" % binning, False)
+                    self.log_warning("Binning for flat is %s" % binning)
                     if max(binning) > 1:
                         binning = [int(i) for i in binning]
                         self.flat = pyFAI.utils.binning(self.flat, binsize=binning, norm=False)
@@ -701,13 +700,13 @@ Possible values for to_save:
                     mask = abs(mask_fabio.data - dummy) < ddummy
                 else:
                     mask = (mask_fabio.data == dummy)
-                self.log_error("found %s pixel masked out" % (mask.sum()), do_raise=False)
+                self.log_warning("found %s pixel masked out" % (mask.sum()))
             if mask.ndim == 3:
                 mask = pyFAI.utils.averageDark(mask, center_method="median")
             if (mask is not None) and (mask.shape != shape):
                 binning = [j / i for i, j in zip(shape, mask.shape)]
                 if tuple(binning) != (1, 1):
-                    self.log_error("Binning for mask is %s" % binning, False)
+                    self.log_warning("Binning for mask is %s" % binning)
                     if max(binning) > 1:
                         binning = [int(i) for i in binning]
                         mask = pyFAI.utils.binning(mask, binsize=binning, norm=True) > 0
@@ -747,13 +746,10 @@ Possible values for to_save:
                     mcs = instrument["MCS"]
                     if key in mcs:
                         I1 = numpy.array(mcs[key])
-#                         self.log_error("Got I1 in %s"%instrument, do_raise=False)
-
                 if "TFG" in instrument:
                     tfg = instrument["TFG"]
                     if "delta_time" in tfg:
                         t = numpy.array(tfg["delta_time"])
-#                         self.log_error("Got delta_time in %s"%instrument, do_raise=False)
                 if (t is None) or (I1 is None):
                     I1 = t = None
                 else:
@@ -854,7 +850,7 @@ Possible values for to_save:
             try:
                 nxs = pyFAI.io.Nexus(outfile, "a")
             except IOError as error:
-                self.log_error("invalid HDF5 file %s: remove and re-create!\n%s" % (outfile, error), False)
+                self.log_warning("invalid HDF5 file %s: remove and re-create!\n%s" % (outfile, error))
                 os.unlink(outfile)
                 nxs = pyFAI.io.Nexus(outfile)
             entry = nxs.new_entry("entry", program_name="dahu", title=self.image_file + ":" + self.images_ds.name)
@@ -921,7 +917,7 @@ Possible values for to_save:
                 worker.output = "numpy"
                 worker.method = "ocl_csr_gpu"
                 worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
-                self.log_error("Normalization factor: %s" % worker.normalization_factor, do_raise=False)
+                self.log_warning("Normalization factor: %s" % worker.normalization_factor)
                 self.workers[ext] = worker
             elif ext == "ave":
                 if "npt1_rad" in self.input:
@@ -954,7 +950,7 @@ Possible values for to_save:
                                                        detector=self.ai.detector)
                 self.workers[ext] = worker
             else:
-                self.log_error("unknown treatment %s" % ext, do_raise=False)
+                self.log_warning("unknown treatment %s" % ext)
             output_ds = coll.create_dataset("data", shape, "float32",
                                             chunks=(1,) + shape[1:],
                                             maxshape=(None,) + shape[1:])
@@ -986,7 +982,7 @@ Possible values for to_save:
         for i in range(self.in_shape[0]):
             data = self.images_ds[i]
             I1 = self.I1[i]
-            self.log_error("I1=%s" % I1, do_raise=False)
+            self.log_warning("I1=%s" % I1)
             for meth in self.to_save:
                 if meth in ["raw", "dark"]:
                     continue
@@ -1019,7 +1015,7 @@ Possible values for to_save:
                         ds.parent["q"].attrs["interpretation"] = "scalar"
                     res = res[:, 1]
                 else:
-                    self.log_error("Unknown/supported method ... %s, skipping" % (meth), do_raise=False)
+                    self.log_warning("Unknown/supported method ... %s, skipping" % (meth))
                     continue
                 ds[i] = res
 

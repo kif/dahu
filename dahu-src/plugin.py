@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/11/2014"
+__date__ = "18/03/2015"
 __status__ = "development"
 version = "0.2.0"
 from .factory import plugin_factory, register
@@ -97,15 +97,22 @@ class Plugin(object):
         Way to log errors and raise error
         """
         if do_raise:
-            err = "ERROR in %s: %s" %( self.get_name(), txt)
+            err = "ERROR in %s: %s" % (self.get_name(), txt)
             logger.error(err)
         else:
-            err = "Warning in %s: %s" %( self.get_name(), txt)
+            err = "Warning in %s: %s" % (self.get_name(), txt)
             logger.warning(err)
         self._logging.append(err)
         if do_raise:
             raise RuntimeError(err)
 
+    def log_warning(self, txt):
+        """
+        Way to log warning
+        """
+        err = "Warning in %s: %s" % (self.get_name(), txt)
+        logger.warning(err)
+        self._logging.append(err)
 
 
 class PluginFromFunction(Plugin):
@@ -131,7 +138,7 @@ class PluginFromFunction(Plugin):
         if self.input is None:
             print("PluginFromFunction.process: self.input is None !!! %s", self.input)
         else:
-            funct_input =  self.input.copy()
+            funct_input = self.input.copy()
             if "job_id" in funct_input:
                 funct_input.pop("job_id")
             if "plugin_name" in funct_input:
