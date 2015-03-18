@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "14/03/2015"
+__date__ = "18/03/2015"
 __status__ = "development"
 
 import os, sys, subprocess
@@ -30,11 +30,15 @@ except ImportError:
 
 import glob
 
-cmdclass={}
+cmdclass = {}
 
-version = [eval(l.split("=")[1]) for l in open(os.path.join(os.path.dirname(
-    os.path.abspath(__file__)), "dahu-src", "__init__.py"))
-    if l.strip().startswith("version")][0]
+def get_version():
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "dahu-src"))
+    import _version
+    sys.path.pop(0)
+    return _version.strictversion
+
+version = get_version()
 
 class PyTest(Command):
     user_options = []
