@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Data Analysis plugin for focus analysis 
+Data Analysis plugin for focus analysis
 """
 
 from __future__ import with_statement, print_function
@@ -22,13 +22,13 @@ from threading import Semaphore
 import pyFAI
 import logging
 logger = logging.getLogger("plugin.focus")
-import scipy, scipy.misc, scipy.stats
+import scipy, scipy.misc, scipy.stats, scipy.ndimage
 
 
 @register
 class Plugin(Plugin):
     """Plugin in charge of calculating a descriptor of the focus quality related to the decay of the power spectrum of an image
-    
+
 
     Structure of the input data:
 input = {
@@ -56,4 +56,5 @@ input = {
         r, i = ai.integrate1d(abs(fts) ** 2, nr, unit="r_mm")
         value = -scipy.stats.linregress(numpy.log(r), numpy.log(i))[0]
         self.output["filename"] = self.input["filename"]
+        self.output["standard_deviation"] = scipy.ndimage.standard_deviation(img)
         self.output["value"] = value
