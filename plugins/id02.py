@@ -40,7 +40,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "18/03/2015"
+__date__ = "08/04/2015"
 __status__ = "development"
 version = "0.3"
 
@@ -915,7 +915,10 @@ Possible values for to_save:
                     worker.ai.set_darkcurrent(self.dark)
                 self.workers[ext] = worker
                 worker.output = "numpy"
-                worker.method = "ocl_csr_gpu"
+                if self.in_shape[0] < 5:
+                    worker.method = "splitbbox"
+                else:
+                    worker.method = "ocl_csr_gpu"
                 worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
                 self.log_warning("Normalization factor: %s" % worker.normalization_factor)
                 self.workers[ext] = worker
@@ -929,7 +932,10 @@ Possible values for to_save:
                 shape = (self.in_shape[0], self.npt1_rad)
                 worker = pyFAI.worker.Worker(self.ai, self.in_shape[-2:], (1, self.npt1_rad), "q_nm^-1")
                 worker.output = "numpy"
-                worker.method = "ocl_csr_gpu"
+                if self.in_shape[0] < 5:
+                    worker.method = "splitbbox"
+                else:
+                    worker.method = "ocl_csr_gpu"
                 worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
                 self.workers[ext] = worker
             elif ext == "sub":
