@@ -461,6 +461,8 @@ Optional parameters:
 "flat_filename" flat field for intensity response correction
 "metadata_job": number of the metadata job to wait for (unused)
 "scaling_factor": float (default=1) by which all intensity will be multiplied 
+"correct_solid_angle": True by default, set to 0/False to disable such correction 
+"correct_I1": True by default, set to false to deactivate scaling by Exposure time / transmitted intensity
 
 Unused and automatically generated:
 "plugin_name':"id02.singledetector',
@@ -531,6 +533,8 @@ Possible values for to_save:
         self.absolute_solid_angle = None
         self.in_shape = None
         self.scaling_factor = 1.0
+        self.correct_solid_angle = True
+        self.correct_I1 = True
 
     def setup(self, kwargs=None):
         """
@@ -596,6 +600,8 @@ Possible values for to_save:
                     d.start()
                 self.output_hdf5["dark"] = os.path.join(self.dest, os.path.basename(self.dark_filename))
         self.scaling_factor = self.input.get("scaling_factor", 1.0)
+        self.correct_solid_angle = bool(self.input.get("correct_solid_angle", True))
+        self.correct_I1 = bool(self.input.get("correct_I1", True))
         self.I1, self.t = self.load_I1_t(c216_filename)
 
     def process(self):
@@ -925,7 +931,12 @@ Possible values for to_save:
                     worker.method = "splitbbox"
                 else:
                     worker.method = "ocl_csr_gpu"
-                worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist / self.scaling_factor)
+                if self.correct_solid_angle:
+                    worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist / self.scaling_factor)
+                else:
+                    worker.set_normalization_factor(1.0 / self.scaling_factor)
+                    worker.correct_solid_angle = self.correct_solid_angle
+                    
                 self.log_warning("Normalization factor: %s" % worker.normalization_factor)
                 self.workers[ext] = worker
             elif ext == "ave":
@@ -942,7 +953,11 @@ Possible values for to_save:
                     worker.method = "splitbbox"
                 else:
                     worker.method = "ocl_csr_gpu"
-                worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist / self.scaling_factor)
+                if self.correct_solid_angle:
+                    worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist / self.scaling_factor)
+                else:
+                    worker.set_normalization_factor(1.0 / self.scaling_factor)
+                    worker.correct_solid_angle = self.correct_solid_angle
                 self.workers[ext] = worker
             elif ext == "sub":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark)
@@ -991,10 +1006,13 @@ Possible values for to_save:
         """
         Here we process images....
         """
-        for i in range(self.in_shape[0]):
+        if  self.correct_I1:
+            I1s = self.I1
+        else:
+            I1s = numpy.ones_like(self.I1)
+        for i, I1 in enumerate(I1s):
             data = self.images_ds[i]
-            I1 = self.I1[i]
-            self.log_warning("I1=%s" % I1)
+            #self.log_warning("I1=%s" % I1)
             for meth in self.to_save:
                 if meth in ["raw", "dark"]:
                     continue
@@ -1047,7 +1065,7 @@ Possible values for to_save:
     def get_solid_angle(self):
         """ calculate the solid angle if needed and return it
         """
-        if self.absolute_solid_angle is None:
+        if (self.absolute_solid_angle is None) and self.correct_solid_angle:
             self.absolute_solid_angle = self.ai.solidAngleArray(self.in_shape[-2:], absolute=True)
         return self.absolute_solid_angle
 
