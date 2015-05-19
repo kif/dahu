@@ -28,11 +28,12 @@ if sys.version > (3, 0):
     from queue import Queue
 else:
     from Queue import Queue
+
 logger = logging.getLogger("dahu.server")
 # set loglevel at least at INFO
 if logger.getEffectiveLevel() > logging.INFO:
     logger.setLevel(logging.INFO)
-logger.setLevel(logging.DEBUG)
+
 import numpy
 import PyTango
 from .job import Job, plugin_factory

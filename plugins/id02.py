@@ -45,7 +45,11 @@ __status__ = "productoin"
 version = "0.4"
 
 logger = logging.getLogger("dahu.id02")
-
+# set loglevel at least at INFO
+if logger.getEffectiveLevel() > logging.INFO:
+    logger.setLevel(logging.INFO)
+elif logger.getEffectiveLevel() < logging.root.level:
+    logger.setLevel(logging.root.level)
 
 # silence non serious error messages, which are printed
 # because we use h5py in a new thread (not in the main one)
