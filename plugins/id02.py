@@ -456,7 +456,8 @@ Optional parameters:
 "dark_filter_quantil_upper" upper quantil for averaging
 "distortion_filename" Spline file with the distortion correction
 "flat_filename" flat field for intensity response correction
-"metadata_job": number of the metadata job to wait for
+"metadata_job": number of the metadata job to wait for (unused)
+"scaling_factor": float (default=1) by which all intensity will be multiplied 
 
 Unused and automatically generated:
 "plugin_name':"id02.singledetector',
@@ -526,6 +527,7 @@ Possible values for to_save:
         self.dist = 1.0
         self.absolute_solid_angle = None
         self.in_shape = None
+        self.scaling_factor = 1.0
 
     def setup(self, kwargs=None):
         """
@@ -590,6 +592,7 @@ Possible values for to_save:
                     d = threading.Thread(target=shutil.copy, name="copy dark", args=(self.dark_filename, self.dest))
                     d.start()
                 self.output_hdf5["dark"] = os.path.join(self.dest, os.path.basename(self.dark_filename))
+        self.scaling_factor = self.input.get("scaling_factor", 1.0)
         self.I1, self.t = self.load_I1_t(c216_filename)
 
     def process(self):
@@ -602,7 +605,7 @@ Possible values for to_save:
             ones[:self.I1.size] = self.I1
             self.I1 = ones
         # update all metadata with the one provided by input
-        for key, value in self.input.iteritems():
+        for key, value in self.input.items():
             if key in self.KEYS:
                 self.metadata[key] = value
         forai = {}
@@ -919,7 +922,7 @@ Possible values for to_save:
                     worker.method = "splitbbox"
                 else:
                     worker.method = "ocl_csr_gpu"
-                worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
+                worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist / self.scaling_factor)
                 self.log_warning("Normalization factor: %s" % worker.normalization_factor)
                 self.workers[ext] = worker
             elif ext == "ave":
@@ -936,7 +939,7 @@ Possible values for to_save:
                     worker.method = "splitbbox"
                 else:
                     worker.method = "ocl_csr_gpu"
-                worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
+                worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist / self.scaling_factor)
                 self.workers[ext] = worker
             elif ext == "sub":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark)
@@ -998,7 +1001,7 @@ Possible values for to_save:
                 if meth in ("sub", "flat", "dist", "cor"):
                     res = self.workers[meth].process(data)
                 elif meth == "norm":
-                    res = self.workers[meth].process(data) / I1
+                    res = self.workers[meth].process(data) * self.scaling_factor / I1
                 elif meth == "azim":
                     res = self.workers[meth].process(data) / I1
                     if i == 0:
