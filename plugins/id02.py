@@ -599,7 +599,7 @@ Possible values for to_save:
                     d = threading.Thread(target=shutil.copy, name="copy dark", args=(self.dark_filename, self.dest))
                     d.start()
                 self.output_hdf5["dark"] = os.path.join(self.dest, os.path.basename(self.dark_filename))
-        self.scaling_factor = self.input.get("scaling_factor", 1.0)
+        self.scaling_factor = float(self.input.get("scaling_factor", 1.0))
         self.correct_solid_angle = bool(self.input.get("correct_solid_angle", True))
         self.correct_I1 = bool(self.input.get("correct_I1", True))
         self.I1, self.t = self.load_I1_t(c216_filename)
