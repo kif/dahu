@@ -367,11 +367,11 @@ class Job(Thread):
         """
         Wait for all a specific jobs to finish.
 
-        @param jobId:
+        @param jobId: identifier of the job ... intg
         @param timeout: timeout in second to wait
         @return: status of the job
         """
-        logger.debug("Job.synchronize_job class method for id=%s (timeout=%s)" % (id, timeout))
+        logger.debug("Job.synchronize_job class method for id=%s (timeout=%s)" % (jobId, timeout))
         job = cls.getJobFromID(jobId)
 
         if job is None:
@@ -379,6 +379,7 @@ class Job(Thread):
         else:
             job.join(timeout)
             res = job.status
+        logger.debug("Job.synchronize_job(jobid=%s) ==>  %s" % (jobId, res))
         return res
 
     @classmethod
