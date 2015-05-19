@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-from __future__ import with_statement, print_function, division
+from __future__ import with_statement, print_function, absolute_import, division
+
 
 
 __doc__ = """
@@ -13,12 +14,14 @@ __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "19/05/2015"
 __status__ = "production"
+
 from .factory import plugin_factory, register
 from .utils import fully_qualified_name, get_workdir
 import os
 import logging
 import cProfile
 logger = logging.getLogger("dahu.plugin")
+
 
 class Plugin(object):
     """

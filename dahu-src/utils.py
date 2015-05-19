@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-from __future__ import with_statement, print_function
+from __future__ import with_statement, print_function, absolute_import, division
 
 __doc__ = """Data Analysis Highly tailored for Upbl09a 
             """
@@ -9,14 +9,15 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20140303"
-__status__ = "development"
-version = "0.1"
+__date__ = "19/05/2015"
+__status__ = "production"
+
 
 import time
 import os
 import tempfile
 workdir = None
+
 
 def get_isotime(forceTime=None, for_path=False):
     """
@@ -38,6 +39,7 @@ def get_isotime(forceTime=None, for_path=False):
         sloctime = time.strftime("%Y-%m-%dT%H:%M:%S", localtime)
         return "%s%+03i:%02i" % (sloctime, tz_h, tz_m)
 
+
 def get_workdir(basedir=None):
     """
     Creates a working directory
@@ -50,12 +52,18 @@ def get_workdir(basedir=None):
     if not(workdir) or not (workdir.startswith(basedir)):
         if not basedir:
             basedir = tempfile.gettempdir()
-        subdir = "dahu_%s" % get_isotime(for_path=True)
-        workdir = os.path.join(basedir, subdir)
+        foldername = os.path.basename(basedir)
+        if foldername.startswith("dahu_") and len(foldername) == 24:
+            #likely the time has already been added
+            workdir = os.path.abspath(basedir)
+        else:
+            subdir = "dahu_%s" % get_isotime(for_path=True)
+            workdir = os.path.join(basedir, subdir)
         if not os.path.isdir(workdir):
             os.makedirs(workdir)
         globals()["workdir"] = workdir
     return workdir
+
 
 def fully_qualified_name(obj):
     """
@@ -69,3 +77,4 @@ def fully_qualified_name(obj):
     module = obj.__module__.lower()
     name = obj.__name__.lower()
     return module + "." + name
+

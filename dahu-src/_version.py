@@ -1,7 +1,7 @@
 # coding: utf-8
 # Simple module to handle versions
 
-from __future__ import absolute_import, print_function, division
+from __future__ import absolute_import, print_function, division, with_statement
 
 __author__ = "Jerome Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"

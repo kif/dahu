@@ -5,7 +5,8 @@
 Data Analysis Highly tailored for Upbl09a 
 """
 
-from __future__ import with_statement, print_function
+from __future__ import with_statement, print_function, absolute_import, division
+
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"

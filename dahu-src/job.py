@@ -1,17 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-from __future__ import with_statement, print_function
+
+from __future__ import with_statement, print_function, absolute_import, division
 
 __doc__ = """Contains the Job class which handles jobs.
             A static part of the class contains statistics of the class
             """
+
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "19/05/2015"
 __status__ = "production"
+
 
 from threading import Thread, Semaphore
 import time

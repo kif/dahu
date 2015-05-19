@@ -5,7 +5,8 @@
 """
 Data Analysis Highly tailored for Upbl09a 
 """
-from __future__ import with_statement, print_function
+from __future__ import with_statement, print_function, absolute_import, division
+
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
@@ -21,6 +22,7 @@ from threading import Semaphore
 from .utils import get_workdir, fully_qualified_name
 
 dahu_root = os.path.dirname(os.path.abspath(__file__))
+
 
 class Factory(object):
     """
