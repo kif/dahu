@@ -285,7 +285,14 @@ class DahuDS(PyTango.Device_4Impl):
         @param jobId:
         @return: status of the job
         """
-        return Job.synchronize_job(jobId)
+        res = Job.synchronize_job(jobId)
+        if res == Job.STATE_UNITIALIZED:
+            for i in range(10):
+                time.sleep(0.1)
+                res = Job.synchronize_job(jobId)
+                if res != Job.STATE_UNITIALIZED:
+                    break
+        return res
 
 
 class DahuDSClass(PyTango.DeviceClass):
