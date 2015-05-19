@@ -52,6 +52,7 @@ class DahuDS(PyTango.Device_4Impl):
         PyTango.Device_4Impl.__init__(self, cl, name)
         self.init_device()
         self.queue = Queue() #queue containing jobs to process
+        self.event_queue = Queue() #queue containing finished jobs
         self.processing_lock = threading.Semaphore()
         self.stat_lock = threading.Semaphore()
         self.last_stats = "No statistics collected yet, please use the 'collectStatistics' method first"
@@ -59,6 +60,8 @@ class DahuDS(PyTango.Device_4Impl):
         self.last_success = -1
         self.statistics_threads = None
 #         self._ncpu_sem = threading.Semaphore(multiprocessing.cpu_count())
+        t = threading.Thread(target=self.process_event)
+        t.start()
 
     def get_name(self):
         """Returns the name of the class"""
@@ -183,15 +186,28 @@ class DahuDS(PyTango.Device_4Impl):
         job.clean(wait=False)
         if job.status == job.STATE_SUCCESS:
             self.last_success = job.id
-            self.push_change_event("jobSuccess", job.id)
+#            self.push_change_event("jobSuccess", job.id)
         else:
             sys.stdout.flush()
             sys.stderr.flush()
             self.last_failure = job.id
-            self.push_change_event("jobFailure", job.id)
+            #self.push_change_event("jobFailure", job.id)
         self.queue.task_done()
         gc.collect()
-
+        self.event_queue.put(job)
+        
+    def process_event(self):
+        """
+        process finished jobs on the tango side (issue with tango locks)
+        """
+        
+        while True:
+            job = self.event_queue.get()
+            if job.status == job.STATE_SUCCESS:
+                self.push_change_event("jobSuccess", job.id)
+            else:
+                self.push_change_event("jobFailure", job.id)
+        
 #TODO one day
 #    def getRunning(self):
 #        """
