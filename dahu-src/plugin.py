@@ -11,9 +11,8 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "18/03/2015"
-__status__ = "development"
-version = "0.2.0"
+__date__ = "19/05/2015"
+__status__ = "production"
 from .factory import plugin_factory, register
 from .utils import fully_qualified_name, get_workdir
 import os

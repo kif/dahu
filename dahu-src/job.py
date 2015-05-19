@@ -10,8 +10,8 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20140207"
-__status__ = "development"
+__date__ = "19/05/2015"
+__status__ = "production"
 
 from threading import Thread, Semaphore
 import time
@@ -65,12 +65,12 @@ class Job(Thread):
     start is overridden with a call to the factory to instanciate the plugin
 
     """
-    STATE_UNITIALIZED = "uninitialized"
+    STATE_UNINITIALIZED = "uninitialized"
     STATE_RUNNING = "running"
     STATE_SUCCESS = "success"
     STATE_FAILURE = "failure"
     STATE_ABORTED = "aborted"
-    STATE = [STATE_UNITIALIZED, STATE_RUNNING, STATE_SUCCESS, STATE_FAILURE, STATE_ABORTED]
+    STATE = [STATE_UNINITIALIZED, STATE_RUNNING, STATE_SUCCESS, STATE_FAILURE, STATE_ABORTED]
 
     _dictJobs = {}
     _semaphore = Semaphore()
@@ -89,7 +89,7 @@ class Job(Thread):
         @param input_data: Should be a dictionary or a JSON string representing that dictionary
         """
         Thread.__init__(self)
-        self._status = Job.STATE_UNITIALIZED
+        self._status = Job.STATE_UNINITIALIZED
         self._name = name
         if type(input_data) in types.StringTypes:
             if os.path.isfile(input_data):
@@ -114,8 +114,13 @@ class Job(Thread):
         self._callbacks = []
 
     def __repr__(self):
-        txt = "dahu job (thread) #%i using plugin %s currently %s" % (
-              self._jobId, self._plugin.__class__.__name__, self._status)
+        if self._plugin is None:
+            txt = "dahu job (thread) #%i using finished plugin (%s) %s" % (
+                  self._jobId, self._name, self._status)
+
+        else:
+            txt = "dahu job (thread) #%i using plugin %s currently %s" % (
+                  self._jobId, self._plugin.__class__.__name__, self._status)
         return txt
 
     def start(self):

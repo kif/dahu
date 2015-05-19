@@ -8,12 +8,12 @@ from argparse import ArgumentParser
 import dahu.factory
 logging.basicConfig()
 
-STATE_UNITIALIZED = "uninitialized"
+STATE_UNINITIALIZED = "uninitialized"
 STATE_RUNNING = "running"
 STATE_SUCCESS = "success"
 STATE_FAILURE = "failure"
 STATE_ABORTED = "aborted"
-STATE = [STATE_UNITIALIZED, STATE_RUNNING, STATE_SUCCESS, STATE_FAILURE, STATE_ABORTED]
+STATE = [STATE_UNINITIALIZED, STATE_RUNNING, STATE_SUCCESS, STATE_FAILURE, STATE_ABORTED]
 
 
 

@@ -10,13 +10,13 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "2014-10-10"
+__date__ = "14/03/2015"
 __status__ = "development"
 version = "0.3.0"
 
 import os
 import numpy
-from dahu.plugin import Plugin
+from dahu.plugin import Plugin, plugin_from_function
 from dahu.factory import register
 from threading import Semaphore
 import logging
@@ -25,12 +25,21 @@ logger = logging.getLogger("plugin.pyFAI")
 try:
     import pyFAI
 except ImportError:
-    logger.error("Failed to import PyFAI: download and install it from \
-        https://forge.epn-campus.eu/projects/azimuthal/files")
+    logger.error("Failed to import PyFAI: download and install it from pypi")
 try:
     import fabio
 except ImportError:
-    logger.error("Failed to import Fabio: download and install it from sourceforge")
+    logger.error("Failed to import Fabio: download and install it from pypi")
+
+import pyFAI, fabio
+def integrate_simple(poni_file, image_file, curve_file):
+    ai = pyFAI.load(poni_file)
+    img = fabio.open(image_file).data
+    ai.integrate1d(img, 1000, filename=curve_file, unit="2th_deg")
+    return {"out_file":curve_file}
+    
+from dahu.plugin import plugin_from_function
+plugin_from_function(integrate_simple)
 
 #@register
 class PluginIntegrate(Plugin):

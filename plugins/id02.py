@@ -34,15 +34,15 @@ Plugins for ID02:
 
 * Distortion correction
 * Metadata saving (C216)
-* single detector prcessing
+* single detector processing
 """
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "08/04/2015"
-__status__ = "development"
-version = "0.3"
+__date__ = "19/05/2015"
+__status__ = "productoin"
+version = "0.4"
 
 logger = logging.getLogger("dahu.id02")
 
@@ -542,7 +542,7 @@ Possible values for to_save:
             job_id = int(self.input.get("metadata_job"))
             status = Job.synchronize_job(job_id, self.TIMEOUT)
             abort_time = time.time() + self.TIMEOUT
-            while status == Job.STATE_UNITIALIZED:
+            while status == Job.STATE_UNINITIALIZED:
                 # Wait for job to start
                 time.sleep(1)
                 status = Job.synchronize_job(job_id, self.TIMEOUT)

@@ -11,8 +11,8 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "23/05/2014"
-__status__ = "beta"
+__date__ = "19/05/2015"
+__status__ = "production"
 __docformat__ = 'restructuredtext'
 
 import sys
@@ -51,7 +51,7 @@ class DahuDS(PyTango.Device_4Impl):
     def __init__(self, cl, name):
         PyTango.Device_4Impl.__init__(self, cl, name)
         self.init_device()
-        self.queue = Queue() #queue containing jobs to process
+        self.job_queue = Queue() #queue containing jobs to process
         self.event_queue = Queue() #queue containing finished jobs
         self.processing_lock = threading.Semaphore()
         self.stat_lock = threading.Semaphore()
@@ -60,8 +60,12 @@ class DahuDS(PyTango.Device_4Impl):
         self.last_success = -1
         self.statistics_threads = None
 #         self._ncpu_sem = threading.Semaphore(multiprocessing.cpu_count())
-        t = threading.Thread(target=self.process_event)
-        t.start()
+        #start the two threads related to queues: process_job and event_queue
+        t2 = threading.Thread(target=self.process_job)
+        t2.start()
+        t1 = threading.Thread(target=self.process_event)
+        t1.start()
+
 
     def get_name(self):
         """Returns the name of the class"""
@@ -149,31 +153,22 @@ class DahuDS(PyTango.Device_4Impl):
         """
         logger.debug("In %s.startJob()" % self.get_name())
         name, data_input = argin[:2]
-        print(name, data_input)
         if data_input.strip() == "":
             return -1
         job = Job(name, data_input)
-        print(job)
-        print(job.input_data)
-        print(job)
         if job is None:
             return -1
-        self.queue.put(job)
-        if self.processing_lock._Semaphore__value > 0 :
-            t = threading.Thread(target=self.process_queue)
-            t.start()
+        self.job_queue.put(job)
         return job.id
 
-    def process_queue(self):
+    def process_job(self):
         """
         Process all jobs in the queue.
         """
-        with self.processing_lock:
-            while not self.queue.empty():
-#                 self._ncpu_sem.acquire()
-                job = self.queue.get()
-                job.connect_callback(self.finished_processing)
-                job.start()
+        while True:
+            job = self.job_queue.get()
+            job.connect_callback(self.finished_processing)
+            job.start()
 
     def finished_processing(self, job):
         """
@@ -186,13 +181,11 @@ class DahuDS(PyTango.Device_4Impl):
         job.clean(wait=False)
         if job.status == job.STATE_SUCCESS:
             self.last_success = job.id
-#            self.push_change_event("jobSuccess", job.id)
         else:
             sys.stdout.flush()
             sys.stderr.flush()
             self.last_failure = job.id
-            #self.push_change_event("jobFailure", job.id)
-        self.queue.task_done()
+        self.job_queue.task_done()
         gc.collect()
         self.event_queue.put(job)
         
@@ -281,17 +274,19 @@ class DahuDS(PyTango.Device_4Impl):
         """
         Wait for a job to be finished and returns the status.
         May cause Tango timeout if too slow to finish ....
+        May do polling to wait the job actually started
         
-        @param jobId:
+        @param jobId: identifier of the job (int)
         @return: status of the job
         """
         res = Job.synchronize_job(jobId)
-        if res == Job.STATE_UNITIALIZED:
-            for i in range(10):
-                time.sleep(0.1)
-                res = Job.synchronize_job(jobId)
-                if res != Job.STATE_UNITIALIZED:
-                    break
+        i = 0
+        while res == Job.STATE_UNINITIALIZED:            
+            if i>10:
+                break
+            i+=1
+            time.sleep(0.1)
+            res = Job.synchronize_job(jobId)
         return res
 
 
