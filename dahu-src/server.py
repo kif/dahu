@@ -261,6 +261,16 @@ class DahuDS(PyTango.Device_4Impl):
         """
         return Job.getErrorFromId(jobId)
 
+    def waitJob(self, jobId):
+        """
+        Wait for a job to be finished and returns the status.
+        May cause Tango timeout if too slow to finish ....
+        
+        @param jobId:
+        @return: status of the job
+        """
+        return Job.synchronize_job(jobId)
+
 
 class DahuDSClass(PyTango.DeviceClass):
     #    Class Properties
@@ -289,6 +299,7 @@ class DahuDSClass(PyTango.DeviceClass):
         'getJobInput': [[PyTango.DevLong, "job id"], [PyTango.DevString, "<JSON serialized dict>"]],
         'getJobError': [[PyTango.DevLong, "job id"], [PyTango.DevString, "Error message"]],
         'listPlugins': [[PyTango.DevVoid, "nothing needed"], [PyTango.DevString, "prints the list of all plugin classes currently loaded"]],
+        'waitJob': [[PyTango.DevLong, "job id"], [PyTango.DevString, "job state"]],
         }
 
 
