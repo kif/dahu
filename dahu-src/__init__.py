@@ -17,7 +17,7 @@ __status__ = "production"
 from ._version import version, version_info, hexversion, date
 
 import sys, logging
-logging.basicConfig()
+logging.basicConfig(level=logging.INFO)
 
 from . import utils
 from . import factory

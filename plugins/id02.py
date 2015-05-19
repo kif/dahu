@@ -252,7 +252,6 @@ input = {
         # Name
         HS32N = self.input2.get("HS32N")
         if HS32N is not None:
-            print(HS32N)
             self.mcs_grp["HS32N"] = numpy.array([str(i) for i in HS32N])
         # Mode
         HS32M = self.input2.get("HS32M")

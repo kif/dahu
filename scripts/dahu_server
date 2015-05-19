@@ -23,7 +23,6 @@ import sys
 import os
 import tempfile
 import logging
-logging.basicConfig()
 logger = logging.getLogger("dahu_server")
 
 
