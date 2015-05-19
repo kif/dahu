@@ -231,7 +231,7 @@ input = {
         self.info_grp.attrs["NX_class"] = "NXcollection"
 
         for field, value in self.input2.get("Info", {}).items():
-            if field not in self.TO_SKIP:
+            if field not in self.TO_SKIP and not isinstance(value, dict):
                 try:
                     value.encode("ascii")
                 except UnicodeEncodeError:
