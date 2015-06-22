@@ -40,7 +40,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/05/2015"
+__date__ = "22/06/2015"
 __status__ = "productoin"
 version = "0.4"
 
@@ -128,6 +128,7 @@ def preproc(**d):
             final_dir[key] = dd[key]
     return final_dir
 plugin_from_function(preproc)
+
 
 @register
 class Metadata(Plugin):
@@ -535,6 +536,8 @@ Possible values for to_save:
         self.scaling_factor = 1.0
         self.correct_solid_angle = True
         self.correct_I1 = True
+        self.dummy = None
+        self.delta_dummy = None
 
     def setup(self, kwargs=None):
         """
@@ -623,6 +626,8 @@ Possible values for to_save:
                     "SampleDistance", "WaveLength"):
             forai[key] = self.metadata.get(key)
         self.dist = self.metadata.get("SampleDistance")
+        self.dummy = self.metadata.get("Dummy", self.dummy)
+        self.delta_dummy = self.metadata.get("DDummy", self.delta_dummy)
         # read detector distortion distortion_filename
         self.ai = pyFAI.AzimuthalIntegrator()
         self.ai.setSPD(**forai)
@@ -709,10 +714,12 @@ Possible values for to_save:
                     self.log_error("DDummy value in mask is unconsitent %s" % ddummy)
                     ddummy = 0
                 if ddummy:
-                    mask = abs(mask_fabio.data - dummy) < ddummy
+                    mask = abs(mask_fabio.data - dummy) <= ddummy
                 else:
                     mask = (mask_fabio.data == dummy)
                 self.log_warning("found %s pixel masked out" % (mask.sum()))
+                self.dummy = dummy
+                self.delta_dummy = ddummy
             if mask.ndim == 3:
                 mask = pyFAI.utils.averageDark(mask, center_method="median")
             if (mask is not None) and (mask.shape != shape):
@@ -925,7 +932,6 @@ Possible values for to_save:
                     worker.ai.set_flatfield(self.flat)
                 if self.dark is not None:
                     worker.ai.set_darkcurrent(self.dark)
-                self.workers[ext] = worker
                 worker.output = "numpy"
                 if self.in_shape[0] < 5:
                     worker.method = "splitbbox"
@@ -936,8 +942,10 @@ Possible values for to_save:
                 else:
                     worker.set_normalization_factor(1.0 / self.scaling_factor)
                     worker.correct_solid_angle = self.correct_solid_angle
-                    
                 self.log_warning("Normalization factor: %s" % worker.normalization_factor)
+
+                worker.dummy = self.dummy
+                worker.delta_dummy = self.delta_dummy
                 self.workers[ext] = worker
             elif ext == "ave":
                 if "npt1_rad" in self.input:
@@ -958,6 +966,8 @@ Possible values for to_save:
                 else:
                     worker.set_normalization_factor(1.0 / self.scaling_factor)
                     worker.correct_solid_angle = self.correct_solid_angle
+                worker.dummy = self.dummy
+                worker.delta_dummy = self.delta_dummy
                 self.workers[ext] = worker
             elif ext == "sub":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark)
@@ -1006,13 +1016,13 @@ Possible values for to_save:
         """
         Here we process images....
         """
-        if  self.correct_I1:
+        if self.correct_I1:
             I1s = self.I1
         else:
             I1s = numpy.ones_like(self.I1)
         for i, I1 in enumerate(I1s):
             data = self.images_ds[i]
-            #self.log_warning("I1=%s" % I1)
+            # self.log_warning("I1=%s" % I1)
             for meth in self.to_save:
                 if meth in ["raw", "dark"]:
                     continue
