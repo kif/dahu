@@ -240,9 +240,9 @@ input = {
                 try:
                     value.encode("ascii")
                 except UnicodeEncodeError:
-                    self.log_warning("Unicode Error in field %s: %s, skipping", field, value)
+                    self.log_warning("Unicode Error in field %s: %s, skipping" % (field, value))
                 except AttributeError as err:
-                    self.log_warning("Attribute Error %s in field %s: %s, forcing to string. %s", err, field, value)
+                    self.log_warning("Attribute Error %s \n in field %s: %s, forcing to string." % (err, field, value))
                     self.info_grp[field] = numpy.string_(value)
                 else:
                     self.info_grp[field] = numpy.string_(value)
