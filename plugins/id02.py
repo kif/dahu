@@ -40,7 +40,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22/06/2015"
+__date__ = "29/01/2016"
 __status__ = "productoin"
 version = "0.4"
 
@@ -239,7 +239,7 @@ input = {
             if field not in self.TO_SKIP and not isinstance(value, dict):
                 try:
                     value.encode("ascii")
-                except UnicodeEncodeError:
+                except (UnicodeEncodeError, AttributeError):
                     self.log_warning("Unicode Error in field %s: %s, skipping" % (field, value))
                 else:
                     self.info_grp[field] = numpy.string_(value)
