@@ -239,8 +239,11 @@ input = {
             if field not in self.TO_SKIP and not isinstance(value, dict):
                 try:
                     value.encode("ascii")
-                except (UnicodeEncodeError, AttributeError):
-                    self.log_warning("Unicode Error in field %s: %s, skipping" % (field, value))
+                except UnicodeEncodeError:
+                    self.log_warning("Unicode Error in field %s: %s, skipping", field, value)
+                except AttributeError as err:
+                    self.log_warning("Attribute Error %s in field %s: %s, forcing to string. %s", err, field, value)
+                    self.info_grp[field] = numpy.string_(value)
                 else:
                     self.info_grp[field] = numpy.string_(value)
 
