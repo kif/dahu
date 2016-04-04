@@ -13,7 +13,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "01/04/2016"
+__date__ = "04/04/2016"
 __status__ = "development"
 version = "0.1.0"
 
@@ -158,7 +158,6 @@ class DataCache(dict):
         return myData
 
 
-
 # Use thre register decorator to make it available from Dahu
 @register
 class Integrate(Plugin):
@@ -171,42 +170,76 @@ class Integrate(Plugin):
     
     Typical JSON file:
     {"poni_file": "/tmp/example.poni",
-     "input_files": ["/tmp/file1.edf", "/tmp/file2.edf"], 
+     "input_files": ["/tmp/file1.edf", "/tmp/file2.edf"],
+     "monitor_values": [1, 1.1],
+     "npt": 2000,
+     "unit": "2th_deg",
     }
     """
-    _ais = {}  # key: str(a), value= ai
+    _ais = DataCache()  # key: str(a), value= ai
 
     def __init__(self):
         """
         """
         Plugin.__init__(self)
-        self.shared = None
-        self.strOutputFile = None
         self.ai = None  # this is the azimuthal integrator to use
-        self.data = None
-        self.mask = None
-        self.dummy = None
-        self.delta_dummy = None
         self.dest_dir = None
+        self.ntp = 1000
+        self.input_files = []
+        self.monitor_values = None
+        self.method = "full_ocl_csr"
+        self.unit = "q_nm^-1"
+        self.output_files = []
 
     def setup(self, kwargs):
-        Plugin.setup(self, kwargs)
         logger.debug("Integrate.setup")
         Plugin.setup(self, kwargs)
+
         if "output_dir" not in self.input:
             self.log_error("output_dir not in input")
         self.dest_dir = os.path.abspath(self.input["output_dir"])
+
         ponifile = self.input.get("poni_file", "")
         if not os.path.exists(ponifile):
             self.log_error("Ponifile: %s does not exist" % ponifile, do_raise=True)
         ai = pyFAI.load(ponifile)
-        self.ai = self._ais.get(str(ai), ai)
+        stored = self._ais.get(str(ai), ai)
+        if stored is ai:
+            self.ai = stored
+        else:
+            self.ai = stored.__deepcopy__()
+
+        self.npt = int(self.input.get("npt", self.npt))
+        self.unit = self.input.get("unit", self.unit)
 
     def process(self):
         Plugin.process(self)
         logger.debug("Integrate.process")
+        if self.monitor_values is None:
+            self.monitor_values = [1] * len(self.input_files)
+        for monitor, fname in zip(self.monitor_values, self.input_files):
+            if not os.path.exists(fname):
+                self.log_error("image file: %s does not exist, skipping" % fname,
+                               do_raise=False)
+                continue
+            if not monitor:
+                self.log_error("Monitor value is %s: skipping image %s" % (monitor, fname),
+                               do_raise=False)
+                continue
+
+            basename = os.path.splitext(os.path.basename(fname))[0]
+            destination = os.path.join(self.dest_dir, basename + ".dat")
+            data = fabio.open(fname).data
+            self.ai.integrate1d(data, npt=self.npt, method=self.method,
+                                safe=False,
+                                filename=destination,
+                                normalization_factor=monitor,
+                                unit=self.unit)
+            self.output_files.append(destination)
 
     def teardown(self):
         Plugin.teardown(self)
-        logger.debug("PluginPyFAIv1_0.teardown")
+        logger.debug("Integrate.teardown")
         # Create some output data
+        self.output["output_files"] = self.output_files
+
