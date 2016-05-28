@@ -24,6 +24,7 @@ from dahu.factory import register
 from threading import Semaphore
 import logging
 logger = logging.getLogger("plugin.pyFAI")
+import json
 
 try:
     import pyFAI
@@ -33,7 +34,10 @@ try:
     import fabio
 except ImportError:
     logger.error("Failed to import Fabio: download and install it from pypi")
-
+try:
+    import calculate_flux as flux
+except ImportError:
+    logger.error("Failed to import flux calculator for ID31")
 
 def integrate_simple(poni_file, image_file, curve_file, nbins=1000):
     """Simple azimuthal integration for a single frame (very inefficient)
@@ -184,12 +188,20 @@ class Integrate(Plugin):
         Plugin.__init__(self)
         self.ai = None  # this is the azimuthal integrator to use
         self.dest_dir = None
-        self.ntp = 1000
+        self.json_data = None
+        self.ntp = 3000
         self.input_files = []
-        self.monitor_values = None
         self.method = "full_ocl_csr"
         self.unit = "q_nm^-1"
         self.output_files = []
+        self.mask = ""
+        self.wavelength = -1
+        self.dummy = -1
+        self.delta_dummy = 0
+        self.polarization_factor = None
+        self.do_SA = False
+        self.norm = 1e12
+        
 
     def setup(self, kwargs):
         logger.debug("Integrate.setup")
@@ -197,9 +209,15 @@ class Integrate(Plugin):
 
         if "output_dir" not in self.input:
             self.log_error("output_dir not in input")
-        self.dest_dir = os.path.abspath(self.input["output_dir"])
-
-        ponifile = self.input.get("poni_file", "")
+        self.dest_dir = os.path.abspath(self.input["output_dir"]) # this needs to be added in the SPEC macro
+        if "json" not in self.input:
+            self.log_error("json not in input")
+        json_path=self.input.get("json","")
+        if not os.path.exists(json_path):
+            self.log_error("Integration setup file (JSON): %s does not exist" % ponifile, do_raise=True)
+        self.json_data=json.load(open(json.path))
+       
+        ponifile = self.json_data.get("poni", "")
         if not os.path.exists(ponifile):
             self.log_error("Ponifile: %s does not exist" % ponifile, do_raise=True)
         ai = pyFAI.load(ponifile)
@@ -209,32 +227,49 @@ class Integrate(Plugin):
         else:
             self.ai = stored.__deepcopy__()
 
-        self.npt = int(self.input.get("npt", self.npt))
-        self.unit = self.input.get("unit", self.unit)
+       
+        self.npt = int(self.json_data.get("npt", self.npt))
+        self.unit = self.json_data.get("unit", self.unit)
+        self.wavelength = self.json_data.get("wavelength", self.wavelength)
+        if os.path.exists(self.json_data["mask"]):  
+            self.mask=self.json_data.get("mask", self.mask)
+        self.dummy = self.json_data.get("val_dummy", self.dummy)
+        self.delta_dummy = self.json_data.get("delta_dummy", self.delta_dummy)
+        if self.json_data["do_polarziation"]:
+            self.polarization_factor = self.json_data.get("polarization_factor", self.polarization_factor)
+        self.do_SA = self.json_data.get("do_SA", self.do_SA)
+        self.norm = self.json_data.get("norm", self.norm)  # need to be added in the spec macro
+        
+        
+            
 
     def process(self):
         Plugin.process(self)
         logger.debug("Integrate.process")
-        if self.monitor_values is None:
-            self.monitor_values = [1] * len(self.input_files)
-        for monitor, fname in zip(self.monitor_values, self.input_files):
+       # if self.monitor_values is None:
+       #     self.monitor_values = [1] * len(self.input_files)
+        for fname in self.input_files:
             if not os.path.exists(fname):
                 self.log_error("image file: %s does not exist, skipping" % fname,
                                do_raise=False)
                 continue
-            if not monitor:
-                self.log_error("Monitor value is %s: skipping image %s" % (monitor, fname),
-                               do_raise=False)
-                continue
-
             basename = os.path.splitext(os.path.basename(fname))[0]
             destination = os.path.join(self.dest_dir, basename + ".dat")
-            data = fabio.open(fname).data
+            data, header = fabio.open(fname)
+            if self.wavelength not -1:
+                monitor = getMon(header,self.wavelength)/self.norm
+            else:
+                monitor = 1
             self.ai.integrate1d(data, npt=self.npt, method=self.method,
                                 safe=False,
                                 filename=destination,
                                 normalization_factor=monitor,
-                                unit=self.unit)
+                                unit=self.unit,
+                                dummy=self.dummy,
+                                delta_dummy=self.delta_dummy,
+                                polarization_factor=self.polarization_factor,
+                                correctSolidAngle=self.do_SA
+                                )
             self.output_files.append(destination)
 
     def teardown(self):
@@ -242,4 +277,10 @@ class Integrate(Plugin):
         logger.debug("Integrate.teardown")
         # Create some output data
         self.output["output_files"] = self.output_files
+        
+    def getMon(header,lam):
+        strCount=header['counter_mne'].split()
+        strCountPos=header['counter_pos'].split()
+        E = 4.13566766225e-15*299792458/lam/1000
+        return flux.main(float(strCountPos[strCount.index('mondio')]),E)
 
