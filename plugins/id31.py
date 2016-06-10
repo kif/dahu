@@ -13,7 +13,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "04/04/2016"
+__date__ = "10/06/2016"
 __status__ = "development"
 version = "0.1.0"
 
@@ -28,6 +28,7 @@ import json
 
 try:
     import pyFAI
+    from pyFAI.worker import make_ai
 except ImportError:
     logger.error("Failed to import PyFAI: download and install it from pypi")
 try:
@@ -38,6 +39,7 @@ try:
     import calculate_flux as flux
 except ImportError:
     logger.error("Failed to import flux calculator for ID31")
+
 
 def integrate_simple(poni_file, image_file, curve_file, nbins=1000):
     """Simple azimuthal integration for a single frame (very inefficient)
@@ -162,7 +164,7 @@ class DataCache(dict):
         return myData
 
 
-# Use thre register decorator to make it available from Dahu
+# Use the register decorator to make it available from Dahu
 @register
 class Integrate(Plugin):
     """This is the basic plugin of PyFAI for azimuthal integration
@@ -195,13 +197,12 @@ class Integrate(Plugin):
         self.unit = "q_nm^-1"
         self.output_files = []
         self.mask = ""
-        self.wavelength = -1
+        self.wavelength = None
         self.dummy = -1
         self.delta_dummy = 0
         self.polarization_factor = None
         self.do_SA = False
         self.norm = 1e12
-        
 
     def setup(self, kwargs):
         logger.debug("Integrate.setup")
@@ -209,45 +210,37 @@ class Integrate(Plugin):
 
         if "output_dir" not in self.input:
             self.log_error("output_dir not in input")
-        self.dest_dir = os.path.abspath(self.input["output_dir"]) # this needs to be added in the SPEC macro
+        # this needs to be added in the SPEC macro
+        self.dest_dir = os.path.abspath(self.input["output_dir"])
         if "json" not in self.input:
             self.log_error("json not in input")
-        json_path=self.input.get("json","")
+        json_path = self.input.get("json", "")
         if not os.path.exists(json_path):
-            self.log_error("Integration setup file (JSON): %s does not exist" % ponifile, do_raise=True)
-        self.json_data=json.load(open(json.path))
-       
-        ponifile = self.json_data.get("poni", "")
-        if not os.path.exists(ponifile):
-            self.log_error("Ponifile: %s does not exist" % ponifile, do_raise=True)
-        ai = pyFAI.load(ponifile)
+            self.log_error("Integration setup file (JSON): %s does not exist" % json_path, do_raise=True)
+        self.json_data = json.load(open(json_path))
+
+        ai = make_ai(self.json_data)
         stored = self._ais.get(str(ai), ai)
         if stored is ai:
             self.ai = stored
         else:
             self.ai = stored.__deepcopy__()
 
-       
         self.npt = int(self.json_data.get("npt", self.npt))
         self.unit = self.json_data.get("unit", self.unit)
         self.wavelength = self.json_data.get("wavelength", self.wavelength)
-        if os.path.exists(self.json_data["mask"]):  
-            self.mask=self.json_data.get("mask", self.mask)
+        if os.path.exists(self.json_data["mask"]):
+            self.mask = self.json_data.get("mask", self.mask)
         self.dummy = self.json_data.get("val_dummy", self.dummy)
         self.delta_dummy = self.json_data.get("delta_dummy", self.delta_dummy)
         if self.json_data["do_polarziation"]:
             self.polarization_factor = self.json_data.get("polarization_factor", self.polarization_factor)
         self.do_SA = self.json_data.get("do_SA", self.do_SA)
         self.norm = self.json_data.get("norm", self.norm)  # need to be added in the spec macro
-        
-        
-            
 
     def process(self):
         Plugin.process(self)
         logger.debug("Integrate.process")
-       # if self.monitor_values is None:
-       #     self.monitor_values = [1] * len(self.input_files)
         for fname in self.input_files:
             if not os.path.exists(fname):
                 self.log_error("image file: %s does not exist, skipping" % fname,
@@ -255,12 +248,12 @@ class Integrate(Plugin):
                 continue
             basename = os.path.splitext(os.path.basename(fname))[0]
             destination = os.path.join(self.dest_dir, basename + ".dat")
-            data, header = fabio.open(fname)
-            if self.wavelength not -1:
-                monitor = getMon(header,self.wavelength)/self.norm
+            fimg = fabio.open(fname)
+            if self.wavelength is not None:
+                monitor = self.getMon(fimg.header, self.wavelength) / self.norm
             else:
-                monitor = 1
-            self.ai.integrate1d(data, npt=self.npt, method=self.method,
+                monitor = 1.0
+            self.ai.integrate1d(fimg.data, npt=self.npt, method=self.method,
                                 safe=False,
                                 filename=destination,
                                 normalization_factor=monitor,
@@ -277,10 +270,11 @@ class Integrate(Plugin):
         logger.debug("Integrate.teardown")
         # Create some output data
         self.output["output_files"] = self.output_files
-        
-    def getMon(header,lam):
-        strCount=header['counter_mne'].split()
-        strCountPos=header['counter_pos'].split()
-        E = 4.13566766225e-15*299792458/lam/1000
-        return flux.main(float(strCountPos[strCount.index('mondio')]),E)
+
+    @staticmethod
+    def getMon(header, lam):
+        strCount = header['counter_mne'].split()
+        strCountPos = header['counter_pos'].split()
+        E = 4.13566766225e-15 * 299792458 / lam / 1000
+        return flux.main(float(strCountPos[strCount.index('mondio')]), E)
 
