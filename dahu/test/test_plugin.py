@@ -7,11 +7,11 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20140324"
+__date__ = "10/06/2016"
 __status__ = "development"
 
-import sys, os, unittest
-import utilstest
+import unittest
+from . import utilstest
 logger = utilstest.getLogger("test_plugin")
 from dahu.plugin import Plugin, plugin_from_function
 from dahu.factory import plugin_factory
@@ -33,11 +33,11 @@ class TestPlugin(unittest.TestCase):
         plugin_name = plugin_from_function(cube)
         logger.debug(plugin_name)
         plugin = plugin_factory(plugin_name)
-        #plugin from functions are callable:
+        # plugin from functions are callable:
         assert plugin(a=5) == 125
 
 
-def test_suite_all_plugin():
+def suite():
     testSuite = unittest.TestSuite()
     testSuite.addTest(TestPlugin("test_plugin"))
     testSuite.addTest(TestPlugin("test_plugin_from_function"))
@@ -45,6 +45,6 @@ def test_suite_all_plugin():
     return testSuite
 
 if __name__ == '__main__':
-    mysuite = test_suite_all_plugin()
+    mysuite = suite()
     runner = unittest.TextTestRunner()
     runner.run(mysuite)

@@ -7,10 +7,11 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/03/2015"
+__date__ = "10/06/2016"
 __status__ = "development"
 
-import sys, os, unittest
+import os
+import unittest
 import utilstest
 logger = utilstest.getLogger("test_job")
 import dahu.job
@@ -39,12 +40,13 @@ class TestJob(unittest.TestCase):
         assert len(args) == 1
         self.called = True
 
-def test_suite_all_job():
+
+def suite():
     testSuite = unittest.TestSuite()
     testSuite.addTest(TestJob("test_plugin_from_function"))
     return testSuite
 
 if __name__ == '__main__':
-    mysuite = test_suite_all_job()
+    mysuite = suite()
     runner = unittest.TextTestRunner()
     runner.run(mysuite)

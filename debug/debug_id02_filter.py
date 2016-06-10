@@ -33,3 +33,26 @@ print(dahu.getJobOutput(pid))
 if dahu.getJobState(pid) == "failure":
     print("Error:")
     print(dahu.getJobError(pid))
+
+data = {
+    "dark_filter_loq": 0.9,
+    "npt2_rad": 1000,
+    "dark_filter_quantil_lower": 0.1,
+    "dark_filter_quantil_upper": 0.9,
+    "regrouping_mask_filename": "mask-10m.edf",
+    "npt2_azim": 360,
+    "job_id": 66,
+    "dark_filename": "/mntdirect/_data_opid02_inhouse/com/20141104/nk04_saxs_-0001_dark.h5",
+    "to_save": "[\"azim\",\"ave\"]",
+    "dark_filter": "quantil",
+    "output_dir": "/mntdirect/_data_opid02_inhouse/com/20141104/cor",
+    "image_file": "/mntdirect/_data_opid02_inhouse/com/20141104/nk04_saxs_-0001.h5",
+    "npt1_rad": 1000,
+    "dark_filter_quantil": 0.5,
+    "DetectorName": "saxs",
+    "plugin_name": "id02.singledetector",
+    "flat_filename": "/data/opid02/archive/setup/spatcorr-files/saxs/flat_saxs_1x1.h5",
+    "dark_filter_pq": 0.5,
+    "distortion_filename": "/data/opid02/archive/setup/spatcorr-files/saxs/spline_saxs_1x1.dat",
+    "c216_filename": "/mntdirect/_data_opid02_inhouse/com/20141104/nk04_scalers_-0001.h5"
+}

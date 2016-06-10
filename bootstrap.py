@@ -102,9 +102,9 @@ os.chdir(home)
 build = subprocess.Popen([sys.executable, "setup.py", "build"],
                 shell=False, cwd=os.path.dirname(os.path.abspath(__file__)))
 logger.info("Build process ended with rc= %s" % build.wait())
-_copy_files("openCL", os.path.join(LIBPATH, TARGET, "openCL"), ".cl")
-_copy_files("gui", os.path.join(LIBPATH, TARGET, "gui"), ".ui")
-_copy_files("calibration", os.path.join(LIBPATH, TARGET, "calibration"), ".D")
+# _copy_files("openCL", os.path.join(LIBPATH, TARGET, "openCL"), ".cl")
+# _copy_files("gui", os.path.join(LIBPATH, TARGET, "gui"), ".ui")
+# _copy_files("calibration", os.path.join(LIBPATH, TARGET, "calibration"), ".D")
 os.chdir(cwd)
 
 if __name__ == "__main__":
