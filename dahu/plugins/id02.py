@@ -469,6 +469,7 @@ Optional parameters:
 "scaling_factor": float (default=1) by which all intensity will be multiplied 
 "correct_solid_angle": True by default, set to 0/False to disable such correction 
 "correct_I1": True by default, set to false to deactivate scaling by Exposure time / transmitted intensity
+"unit": "q_nm^-1" can be changed to "log(q)_m" for log(q) units
 
 Unused and automatically generated:
 "plugin_name':"id02.singledetector',
@@ -543,6 +544,7 @@ Possible values for to_save:
         self.correct_I1 = True
         self.dummy = None
         self.delta_dummy = None
+        self.unit = "q_nm^-1"
 
     def setup(self, kwargs=None):
         """
@@ -552,6 +554,9 @@ Possible values for to_save:
         if "output_dir" not in self.input:
             self.log_error("output_dir not in input")
         self.dest = os.path.abspath(self.input["output_dir"])
+
+        if "unit" in self.input:
+            self.unit = self.input.get("unit")
 
         if "metadata_job" in self.input:
             job_id = int(self.input.get("metadata_job"))
@@ -932,7 +937,7 @@ Possible values for to_save:
                 shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
 
                 ai = self.ai.__deepcopy__()
-                worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
+                worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), self.unit)
                 if self.flat is not None:
                     worker.ai.set_flatfield(self.flat)
                 if self.dark is not None:
@@ -943,9 +948,9 @@ Possible values for to_save:
                 else:
                     worker.method = "ocl_csr_gpu"
                 if self.correct_solid_angle:
-                    worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist / self.scaling_factor)
+                    worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
                 else:
-                    worker.set_normalization_factor(1.0 / self.scaling_factor)
+                    worker.set_normalization_factor(1.0)
                     worker.correct_solid_angle = self.correct_solid_angle
                 self.log_warning("Normalization factor: %s" % worker.normalization_factor)
 
@@ -960,16 +965,16 @@ Possible values for to_save:
                     dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
                     self.npt1_rad = int(qmax / dqmin)
                 shape = (self.in_shape[0], self.npt1_rad)
-                worker = pyFAI.worker.Worker(self.ai, self.in_shape[-2:], (1, self.npt1_rad), "q_nm^-1")
+                worker = pyFAI.worker.Worker(self.ai, self.in_shape[-2:], (1, self.npt1_rad), self.unit)
                 worker.output = "numpy"
                 if self.in_shape[0] < 5:
                     worker.method = "splitbbox"
                 else:
                     worker.method = "ocl_csr_gpu"
                 if self.correct_solid_angle:
-                    worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist / self.scaling_factor)
+                    worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
                 else:
-                    worker.set_normalization_factor(1.0 / self.scaling_factor)
+                    worker.set_normalization_factor(1.0)
                     worker.correct_solid_angle = self.correct_solid_angle
                 worker.dummy = self.dummy
                 worker.delta_dummy = self.delta_dummy
@@ -1037,13 +1042,13 @@ Possible values for to_save:
                 if meth in ("sub", "flat", "dist", "cor"):
                     res = self.workers[meth].process(data)
                 elif meth == "norm":
-                    res = self.workers[meth].process(data) * self.scaling_factor / I1
+                    res = self.workers[meth].process(data, I1 / self.scaling_factor) 
                 elif meth == "azim":
-                    res = self.workers[meth].process(data) / I1
+                    res = self.workers[meth].process(data, I1 / self.scaling_factor) 
                     if i == 0:
                         if "q" not in ds.parent:
                             ds.parent["q"] = self.workers[meth].radial
-                            ds.parent["q"].attrs["unit"] = "q_nm^-1"
+                            ds.parent["q"].attrs["unit"] = self.unit
                             ds.parent["q"].attrs["axis"] = "3"
                             ds.parent["q"].attrs["interpretation"] = "scalar"
                         if "chi" not in ds.parent:
@@ -1052,10 +1057,10 @@ Possible values for to_save:
                             ds.parent["chi"].attrs["axis"] = "2"
                             ds.parent["chi"].attrs["interpretation"] = "scalar"
                 elif meth == "ave":
-                    res = self.workers[meth].process(data) / I1
+                    res = self.workers[meth].process(data, I1 / self.scaling_factor)  
                     if i == 0 and "q" not in ds.parent:
                         ds.parent["q"] = self.workers[meth].radial
-                        ds.parent["q"].attrs["unit"] = "q_nm^-1"
+                        ds.parent["q"].attrs["unit"] = self.unit
                         ds.parent["q"].attrs["axis"] = "2"
                         ds.parent["q"].attrs["interpretation"] = "scalar"
                     res = res[:, 1]
