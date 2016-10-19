@@ -2,7 +2,23 @@
 # -*- coding: utf-8 -*-
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
 
+"""Plugins for ID02:
+
+* Distortion correction
+* Metadata saving (C216)
+* single detector processing
+"""
+
 from __future__ import with_statement, print_function, division
+
+__authors__ = ["Jérôme Kieffer"]
+__contact__ = "Jerome.Kieffer@ESRF.eu"
+__license__ = "MIT"
+__copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
+__date__ = "19/10/2016"
+__status__ = "production"
+version = "0.5"
+
 
 import PyTango
 import h5py
@@ -29,20 +45,6 @@ if sys.version_info < (3, 0):
     StringTypes = (str, unicode)
 else:
     StringTypes = (str, bytes)
-__doc__ = """
-Plugins for ID02:
-
-* Distortion correction
-* Metadata saving (C216)
-* single detector processing
-"""
-__authors__ = ["Jérôme Kieffer"]
-__contact__ = "Jerome.Kieffer@ESRF.eu"
-__license__ = "MIT"
-__copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "29/01/2016"
-__status__ = "productoin"
-version = "0.4"
 
 logger = logging.getLogger("dahu.id02")
 # set loglevel at least at INFO
@@ -283,16 +285,16 @@ input = {
             logger.warning(msg)
 
         raw_status = c216ds.GetCompleteConfigAndStatus()
-        status = {"TFU_MODE":          raw_status[0],
-                  "TFU_FRAME_MODE":    raw_status[1],
-                  "START_MODE":        raw_status[2],
-                  "FRAMES"     :       raw_status[14] // 2,
-                  "CYCLES"      :      raw_status[17],
-                  "CHANNELS"    :      raw_status[19],
-                  "ACQ_BANK"       :   raw_status[65],
-                  "TFU_CONFIG":        raw_status[:28],
-                  "DIGI_IN":           raw_status[28:44],
-                  "ANA_IN":            raw_status[44:60]}
+        status = {"TFU_MODE": raw_status[0],
+                  "TFU_FRAME_MODE": raw_status[1],
+                  "START_MODE": raw_status[2],
+                  "FRAMES": raw_status[14] // 2,
+                  "CYCLES": raw_status[17],
+                  "CHANNELS": raw_status[19],
+                  "ACQ_BANK": raw_status[65],
+                  "TFU_CONFIG": raw_status[:28],
+                  "DIGI_IN": raw_status[28:44],
+                  "ANA_IN": raw_status[44:60]}
 
         cycles = status["CYCLES"]
         frames = status["FRAMES"]
@@ -439,8 +441,8 @@ Mandatory options:
 "to_save": list of processing to be performed like: "raw sub flat dist norm azim ave"
 "c216_filename": File containing the metadata (I1, timimgs ...)
 "npt2_azim": number on bins in q direction for azim file
-"npt2_rad" : number on bins in azimuthal direction for azim file
-"npt1_rad" : number of bins in q direction for ave file
+"npt2_rad": number on bins in azimuthal direction for azim file
+"npt1_rad": number of bins in q direction for ave file
 
 Optional parameters:
 "DetectorName": "rayonix",
@@ -661,11 +663,11 @@ Possible values for to_save:
                 if method.startswith("quantil"):
                     lower = self.input.get("dark_filter_quantil_lower", 0)
                     upper = self.input.get("dark_filter_quantil_upper", 1)
-                    self.dark = pyFAI.utils.averageDark(dark, center_method=method, quantiles=(lower, upper))
+                    self.dark = pyFAI.average.average_dark(dark, center_method=method, quantiles=(lower, upper))
                 else:
                     if method is None:
                         method = "median"
-                    self.dark = pyFAI.utils.averageDark(dark, center_method=method)
+                    self.dark = pyFAI.average.average_dark(dark, center_method=method)
             else:
                 self.dark = dark
         elif type(self.dark_filename) in (int, float):
@@ -681,7 +683,7 @@ Possible values for to_save:
             else:
                 flat = fabio.open(self.flat_filename).data
             if flat.ndim == 3:
-                self.flat = pyFAI.utils.averageDark(flat, center_method="median")
+                self.flat = pyFAI.average.average_dark(flat, center_method="median")
             else:
                 self.flat = flat
             if (self.flat is not None) and (self.flat.shape != shape):
@@ -724,7 +726,7 @@ Possible values for to_save:
                 self.dummy = dummy
                 self.delta_dummy = ddummy
             if mask.ndim == 3:
-                mask = pyFAI.utils.averageDark(mask, center_method="median")
+                mask = pyFAI.average.average_dark(mask, center_method="median")
             if (mask is not None) and (mask.shape != shape):
                 binning = [j / i for i, j in zip(shape, mask.shape)]
                 if tuple(binning) != (1, 1):

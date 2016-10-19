@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
+
+"""Test suite for all dahu modules."""
+
 from __future__ import with_statement, print_function
-__doc__ = """
-Test suite for all pyFAI modules.
-"""
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "jerome.kieffer@esrf.eu"
@@ -32,4 +32,3 @@ if __name__ == '__main__':
     runner = unittest.TextTestRunner()
     if not runner.run(mysuite).wasSuccessful():
         sys.exit(1)
-
