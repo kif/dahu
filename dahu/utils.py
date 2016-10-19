@@ -1,15 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
+
+"""Dahu: Data analysis server controlled from Tango 
+"""
 from __future__ import with_statement, print_function, absolute_import, division
 
-__doc__ = """Data Analysis Highly tailored for Upbl09a 
-            """
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/05/2015"
+__date__ = "19/10/2016"
 __status__ = "production"
 
 
@@ -54,7 +55,7 @@ def get_workdir(basedir=None):
             basedir = tempfile.gettempdir()
         foldername = os.path.basename(basedir)
         if foldername.startswith("dahu_") and len(foldername) == 24:
-            #likely the time has already been added
+            # likely the time has already been added
             workdir = os.path.abspath(basedir)
         else:
             subdir = "dahu_%s" % get_isotime(for_path=True)
@@ -72,9 +73,8 @@ def fully_qualified_name(obj):
     @param obj: any python object
     @return: the full name as a string
     """
-    if "__module__" not in dir(obj):# or "__name__" not in dir(obj):
+    if "__module__" not in dir(obj):  # or "__name__" not in dir(obj):
         obj = obj.__class__
     module = obj.__module__.lower()
     name = obj.__name__.lower()
     return module + "." + name
-

@@ -5,9 +5,9 @@ from __future__ import absolute_import, print_function, division, with_statement
 
 __author__ = "Jerome Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
-__license__ = "GPLv3+"
+__license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/06/2016"
+__date__ = "19/10/2016"
 __status__ = "producton"
 __docformat__ = 'restructuredtext'
 __doc__ = """
