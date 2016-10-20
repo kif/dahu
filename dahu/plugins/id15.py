@@ -11,21 +11,23 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/10/2016"
+__date__ = "20/10/2016"
 __status__ = "development"
 version = "0.1.0"
 
 import os
+import json
 import numpy
+import logging
+import copy
+from .. import version as dahu_version
 from ..plugin import Plugin, plugin_from_function
 from ..factory import register
 from ..cache import DataCache
 from ..utils import get_isotime
 from threading import Semaphore, Thread, Event
-import logging
-import copy
 logger = logging.getLogger("id15")
-import json
+
 try:
     from queue import Queue
 except:
@@ -74,13 +76,7 @@ class Reader(Thread):
 @register
 class IntegrateManyFrames(Plugin):
     """This is the basic plugin of PyFAI for azimuthal integration
-    
-    Input parameters:
-    :param poni_file: configuration of the geometry
-    :param input_files:
-    :param output_file:
-    monitor_values
-    
+       
     Typical JSON file:
     {"poni_file": "/tmp/example.poni",
      "input_files": ["/tmp/file1.cbf", "/tmp/file2.cbf"],
@@ -88,10 +84,19 @@ class IntegrateManyFrames(Plugin):
      "npt": 2000,
      "unit": "2th_deg",
      "output_file": "/path/to/dest.h5",
+     "mask":
+     "wavelength"
+     "unit"
+     "dummy"
+     "delta_dummy"
+     "do_polarziation"
+     "polarization_factor"
+     "do_SA"
+     "norm"
     }
     """
-    _ais = DataCache(10)  # key: str(a), value= ai
-    pool_size = 6 #Default number of reader: needs to be tuned. 
+    _ais = DataCache(10)  # key: poni-filename, value: ai
+    pool_size = 6  # Default number of reader: needs to be tuned.
 
     @staticmethod
     def build_pool(worker, args, size=1):
@@ -123,47 +128,50 @@ class IntegrateManyFrames(Plugin):
         self.method = "full_ocl_csr"
         self.unit = "q_nm^-1"
         self.output_file = None
-        self.mask = ""
+        self.mask = None
         self.wavelength = None
         self.polarization_factor = None
         self.do_SA = False
         self.norm = 1e12
-        
+
     def setup(self, kwargs):
         logger.debug("Integrate.setup")
         Plugin.setup(self, kwargs)
 
-        if "input_files" not in self.input:
-            self.log_error("input_files not in input, save in input directory")
-        self.input_files = 
+        self.input_files = self.input.get("input_files")
+        if not self.input_files:
+            self.log_error("InputError: input_files not in input.")
 
         if "output_file" not in self.input:
-            self.log_error("output_file not in input, save in input directory")
-            self.output_file = "output.h5"
-            # TODO: set path properly
+            self.log_error("InputWarning: output_file not in input, save in input directory",
+                           do_raise=False)
+            self.output_file = os.path.join(os.path.dirname(self.input_files[0]), "output.h5")
         else:
             self.output_file = os.path.abspath(self.input["output_file"])
         if not self.output_file.endswith(".h5"):
             self.output_file = self.output_file + ".h5"
 
-        ai = make_ai(self.json_data)
-        stored = self._ais.get(str(ai), ai)
+        poni_file = self.input.get("poni_file")
+        if not poni_file:
+            self.log_error("InputError: poni_file not in input.")
+        ai = pyFAI.load(poni_file)
+        stored = self._ais.get(poni_file, ai)
         if stored is ai:
             self.ai = stored
         else:
-            self.ai = stored.__deepcopy__()
+            self.ai = copy.deepcopy(stored)
 
         self.npt = int(self.json_data.get("npt", self.npt))
         self.unit = self.json_data.get("unit", self.unit)
         self.wavelength = self.json_data.get("wavelength", self.wavelength)
         if os.path.exists(self.json_data["mask"]):
             self.mask = self.json_data.get("mask", self.mask)
-        self.dummy = self.json_data.get("val_dummy", self.dummy)
+        self.dummy = self.json_data.get("dummy", self.dummy)
         self.delta_dummy = self.json_data.get("delta_dummy", self.delta_dummy)
         if self.json_data["do_polarziation"]:
             self.polarization_factor = self.json_data.get("polarization_factor", self.polarization_factor)
         self.do_SA = self.json_data.get("do_SA", self.do_SA)
-        self.norm = self.json_data.get("norm", self.norm)  # need to be added in the spec macro
+        self.norm = self.json_data.get("norm", self.norm)
 
     def process(self):
         Plugin.process(self)
@@ -189,180 +197,61 @@ class IntegrateManyFrames(Plugin):
         self.quit_event.set()
         for _ in self.pool:
             self.queue_in.put(None)
-        return res
 
-#
-#             fimg = fabio.open(fname)
-#             if self.wavelength is not None:
-#                 monitor = self.getMon(fimg.header, self.wavelength) / self.norm
-#             else:
-#                 monitor = 1.0
-#             self.ai.integrate1d(fimg.data, npt=self.npt, method=self.method,
-#                                 safe=False,
-#                                 filename=destination,
-#                                 normalization_factor=monitor,
-#                                 unit=self.unit,
-#                                 dummy=self.dummy,
-#                                 delta_dummy=self.delta_dummy,
-#                                 polarization_factor=self.polarization_factor,
-#                                 correctSolidAngle=self.do_SA
-#                                 )
-#             self.output_files.append(destination)
+        self.save_result(q, res)
 
-    def save_result(self, q, I):
+    def save_result(self, q, I, sigma=None):
+        """Save the result of the work as a HDF5 file
+        
+        :param q: scattering vector, 1D array
+        :param I: Intensities as 2D array
+        :param sigma: standard deviation of I as 2D array, is possible 
+        """
         isotime = numpy.string_(get_isotime())
-        outfile = os.path.join(self.dest, "%s_%s.h5" % (basename, ext))
-        self.output_hdf5[ext] = outfile
         try:
-            nxs = pyFAI.io.Nexus(outfile, "a")
+            nxs = pyFAI.io.Nexus(self.output_file, "a")
         except IOError as error:
-            self.log_warning("invalid HDF5 file %s: remove and re-create!\n%s" % (outfile, error))
-            os.unlink(outfile)
-            nxs = pyFAI.io.Nexus(outfile)
-        entry = nxs.new_entry("entry", program_name="dahu", title=self.image_file + ":" + self.images_ds.name)
+            self.log_warning("invalid HDF5 file %s: remove and re-create!\n%s" % (self.output_file, error))
+            os.unlink(self.output_file)
+            nxs = pyFAI.io.Nexus(self.output_file)
+        entry = nxs.new_entry("entry", program_name="dahu", title="To be defined !")
 
-        entry["program_name"].attrs["version"] = dahu.version
+        entry["program_name"].attrs["version"] = dahu_version
         entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
         entry["plugin_name"].attrs["version"] = version
-        entry["input"] = numpy.string_(json_config)
-        entry["detector_name"] = numpy.string_(detector_name)
+        input_grp = entry.require_group("input")
+        for key, value in self.input.items():
+            if isinstance(value, str):
+                input_grp[key] = numpy.string_(value)
+            else:
+                input_grp[key] = value
+        entry["input"] = numpy.string_()
 
         subentry = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
         subentry["program"] = numpy.string_("PyFAI")
         subentry["version"] = numpy.string_(pyFAI.version)
         subentry["date"] = isotime
-        subentry["processing_type"] = numpy.string_(ext)
-        coll = nxs.new_class(subentry, "process_" + ext, class_type="NXdata")
+        subentry["processing_type"] = numpy.string_("integrate1d")
+        coll = nxs.new_class(subentry, "process_integrate1d", class_type="NXdata")
         metadata_grp = coll.require_group("parameters")
+        for key, value in self.ai.getPyFAI().items():
+            metadata_grp[key] = numpy.string_(value)
+        coll["q"] = q.astype("float32")
+        coll["q"].attrs["interpretation"] = "scalar"
 
-        for key, val in self.metadata.iteritems():
-            if type(val) in [str, unicode]:
-                metadata_grp[key] = numpy.string_(val)
-            else:
-                metadata_grp[key] = val
+        coll["I"] = I.astype("float32")
+        coll["I"].attrs["interpretation"] = "spectrum"
+        coll["I"].attrs["axes"] = ["t", "q"]
+        coll["I"].attrs["signal"] = "1"
 
-        # copy metadata from other files:
-        for grp in to_copy:
-            grp_name = posixpath.split(grp.name)[-1]
-            if grp_name not in coll:
-                toplevel = coll.require_group(grp_name)
-                for k, v in grp.attrs.items():
-                    toplevel.attrs[k] = v
-            else:
-                toplevel = coll[grp_name]
-
-            def grpdeepcopy(name, obj):
-                nxs.deep_copy(name, obj, toplevel=toplevel, excluded=["data"])
-
-            grp.visititems(grpdeepcopy)
-
-        shape = self.in_shape[:]
-
-        if ext == "azim":
-            if "npt2_rad" in self.input:
-                self.npt2_rad = int(self.input["npt2_rad"])
-            else:
-                qmax = self.ai.qArray(self.in_shape[-2:]).max()
-                dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
-                self.npt2_rad = int(qmax / dqmin)
-
-            if "npt2_azim" in self.input:
-                self.npt2_azim = int(self.input["npt2_azim"])
-            else:
-                chi = self.ai.chiArray(self.in_shape[-2:])
-                self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
-            shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
-
-            ai = self.ai.__deepcopy__()
-            worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), "q_nm^-1")
-            if self.flat is not None:
-                worker.ai.set_flatfield(self.flat)
-            if self.dark is not None:
-                worker.ai.set_darkcurrent(self.dark)
-            worker.output = "numpy"
-            if self.in_shape[0] < 5:
-                worker.method = "splitbbox"
-            else:
-                worker.method = "ocl_csr_gpu"
-            if self.correct_solid_angle:
-                worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist / self.scaling_factor)
-            else:
-                worker.set_normalization_factor(1.0 / self.scaling_factor)
-                worker.correct_solid_angle = self.correct_solid_angle
-            self.log_warning("Normalization factor: %s" % worker.normalization_factor)
-
-            worker.dummy = self.dummy
-            worker.delta_dummy = self.delta_dummy
-            self.workers[ext] = worker
-        elif ext == "ave":
-            if "npt1_rad" in self.input:
-                self.npt1_rad = int(self.input["npt1_rad"])
-            else:
-                qmax = self.ai.qArray(self.in_shape[-2:]).max()
-                dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
-                self.npt1_rad = int(qmax / dqmin)
-            shape = (self.in_shape[0], self.npt1_rad)
-            worker = pyFAI.worker.Worker(self.ai, self.in_shape[-2:], (1, self.npt1_rad), "q_nm^-1")
-            worker.output = "numpy"
-            if self.in_shape[0] < 5:
-                worker.method = "splitbbox"
-            else:
-                worker.method = "ocl_csr_gpu"
-            if self.correct_solid_angle:
-                worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist / self.scaling_factor)
-            else:
-                worker.set_normalization_factor(1.0 / self.scaling_factor)
-                worker.correct_solid_angle = self.correct_solid_angle
-            worker.dummy = self.dummy
-            worker.delta_dummy = self.delta_dummy
-            self.workers[ext] = worker
-        elif ext == "sub":
-            worker = pyFAI.worker.PixelwiseWorker(dark=self.dark)
-            self.workers[ext] = worker
-        elif ext == "flat":
-            worker = pyFAI.worker.PixelwiseWorker(dark=self.dark, flat=self.flat)
-            self.workers[ext] = worker
-        elif ext == "solid":
-            worker = pyFAI.worker.PixelwiseWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle())
-            self.workers[ext] = worker
-        elif ext == "dist":
-            worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle(),
-                                                   detector=self.ai.detector)
-            self.workers[ext] = worker
-        elif ext == "norm":
-            worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle(),
-                                                   detector=self.ai.detector)
-            self.workers[ext] = worker
-        else:
-            self.log_warning("unknown treatment %s" % ext)
-        output_ds = coll.create_dataset("data", shape, "float32",
-                                        chunks=(1,) + shape[1:],
-                                        maxshape=(None,) + shape[1:])
-        if self.t is not None:
-            coll["t"] = self.t
-            coll["t"].attrs["axis"] = "1"
-            coll["t"].attrs["interpretation"] = "scalar"
-            coll["t"].attrs["unit"] = "s"
-
-#             output_ds.attrs["NX_class"] = "NXdata" -> see group
-        output_ds.attrs["signal"] = "1"
-        if ext == "azim":
-            output_ds.attrs["axes"] = ["t", "chi", "q"]
-            output_ds.attrs["interpretation"] = "image"
-        elif ext == "ave":
-            output_ds.attrs["axes"] = ["t", "q"]
-            output_ds.attrs["interpretation"] = "spectrum"
-        elif ext in ("sub", "flat", "solid", "dist"):
-            output_ds.attrs["axes"] = "t"
-            output_ds.attrs["interpretation"] = "image"
-        else:
-            output_ds.attrs["interpretation"] = "image"
-        self.output_ds[ext] = output_ds
-
+        if sigma is not None:
+            coll["sigma"] = sigma.astype("float32")
+            coll["sigma"].attrs["interpretation"] = "spectrum"
+            coll["sigma"].attrs["axes"] = ["t", "q"]
 
     def teardown(self):
         Plugin.teardown(self)
         logger.debug("Integrate.teardown")
         # Create some output data
-        self.output["output_files"] = self.output_files
+        self.output["output_file"] = self.output_file
 
