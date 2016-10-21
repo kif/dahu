@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/10/2016"
+__date__ = "21/10/2016"
 __status__ = "development"
 version = "0.1.0"
 
@@ -34,7 +34,6 @@ except:
     from Queue import Queue
 try:
     import pyFAI
-    from pyFAI.worker import make_ai
 except ImportError:
     logger.error("Failed to import PyFAI: download and install it from pypi")
 try:
@@ -47,7 +46,7 @@ class Reader(Thread):
     """Reader with input and output queue 
     """
     def __init__(self, queue_in, queue_out, quit_event):
-        """onstructor of the class
+        """Constructor of the class
         
         :param queue_in: input queue with (index, filename to read) as input
         :param queue_out: output queue with (index, FabioImage) as output

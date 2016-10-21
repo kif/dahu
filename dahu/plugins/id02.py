@@ -15,7 +15,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/10/2016"
+__date__ = "21/10/2016"
 __status__ = "production"
 version = "0.5"
 
@@ -686,7 +686,15 @@ Possible values for to_save:
             if self.flat_filename.endswith(".h5") or self.flat_filename.endswith(".nxs") or self.flat_filename.endswith(".hdf5"):
                 flat = self.read_data(self.flat_filename)
             else:
-                flat = fabio.open(self.flat_filename).data
+                flat_fabio = fabio.open(self.flat_filename)
+                flat = flat_fabio.data
+                dummy = flat_fabio.header.get("Dummy")
+                try:
+                    dummy = float(dummy)
+                except:
+                    self.log_error("Dummy value in mask is unconsitent %s" % dummy)
+                    dummy = None
+
             if flat.ndim == 3:
                 self.flat = pyFAI.average.average_dark(flat, center_method="median")
             else:
@@ -716,7 +724,7 @@ Possible values for to_save:
                     dummy = float(dummy)
                 except:
                     self.log_error("Dummy value in mask is unconsitent %s" % dummy)
-                    dummy = 0
+                    dummy = None
                 ddummy = mask_fabio.header.get("DDummy")
                 try:
                     ddummy = float(ddummy)
@@ -744,6 +752,10 @@ Possible values for to_save:
                         mask = pyFAI.utils.unBinning(mask, binsize=binning, norm=False) > 0
             # nota: this is assigned to the detector !
             self.ai.mask = mask
+
+        # bug specific to ID02, dummy=0 means no dummy !
+        if self.dummy == 0:
+            self.dummy = None
 
         self.create_hdf5()
         self.process_images()
@@ -1000,7 +1012,7 @@ Possible values for to_save:
                                                        detector=self.ai.detector)
                 self.workers[ext] = worker
             elif ext == "norm":
-                worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle(), 
+                worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle(),
                                                        dummy=self.dummy, delta_dummy=self.delta_dummy,
                                                        detector=self.ai.detector)
                 self.workers[ext] = worker
@@ -1050,9 +1062,9 @@ Possible values for to_save:
                 if meth in ("sub", "flat", "dist", "cor"):
                     res = self.workers[meth].process(data)
                 elif meth == "norm":
-                    res = self.workers[meth].process(data, I1 / self.scaling_factor) 
+                    res = self.workers[meth].process(data, I1 / self.scaling_factor)
                 elif meth == "azim":
-                    res = self.workers[meth].process(data, I1 / self.scaling_factor) 
+                    res = self.workers[meth].process(data, I1 / self.scaling_factor)
                     if i == 0:
                         if "q" not in ds.parent:
                             ds.parent["q"] = self.workers[meth].radial
@@ -1065,7 +1077,7 @@ Possible values for to_save:
                             ds.parent["chi"].attrs["axis"] = "2"
                             ds.parent["chi"].attrs["interpretation"] = "scalar"
                 elif meth == "ave":
-                    res = self.workers[meth].process(data, I1 / self.scaling_factor)  
+                    res = self.workers[meth].process(data, I1 / self.scaling_factor)
                     if i == 0 and "q" not in ds.parent:
                         ds.parent["q"] = self.workers[meth].radial
                         ds.parent["q"].attrs["unit"] = self.unit
