@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/10/2016"
+__date__ = "24/10/2016"
 __status__ = "development"
 version = "0.1.0"
 
@@ -20,11 +20,11 @@ import json
 import numpy
 import logging
 import copy
-from .. import version as dahu_version
-from ..plugin import Plugin, plugin_from_function
-from ..factory import register
-from ..cache import DataCache
-from ..utils import get_isotime
+from dahu import version as dahu_version
+from dahu.plugin import Plugin, plugin_from_function
+from dahu.factory import register
+from dahu.cache import DataCache
+from dahu.utils import get_isotime
 from threading import Semaphore, Thread, Event
 logger = logging.getLogger("id15")
 
