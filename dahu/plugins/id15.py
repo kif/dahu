@@ -25,6 +25,7 @@ from dahu.factory import register
 from dahu.cache import DataCache
 from dahu.utils import get_isotime
 from threading import Thread, Event
+import json
 logger = logging.getLogger("id15")
 
 try:
@@ -234,21 +235,26 @@ class IntegrateManyFrames(Plugin):
             self.log_warning("invalid HDF5 file %s: remove and re-create!\n%s" % (self.output_file, error))
             os.unlink(self.output_file)
             nxs = pyFAI.io.Nexus(self.output_file)
-        entry = nxs.new_entry("entry", program_name="dahu", title="To be defined !")
+        entry = nxs.new_entry("entry", program_name="dahu", title="ID15.IntegrateManyFrames ")
 
         entry["program_name"].attrs["version"] = dahu_version
         entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
         entry["plugin_name"].attrs["version"] = version
-        input_grp = entry.require_group("input")
-        for key, value in self.input.items():
-            try:
-                if isinstance(value, (str, unicode)):
-                    input_grp[key] = numpy.string_(value)
-                else:
-                    input_grp[key] = value
-            except TypeError:
-                logger.warning("Conversion error for %s: %s", key, value)
-        entry["input"] = numpy.string_(self.input)
+
+        # Explicit handling of list of unicode names in needed !
+#         input_grp = entry.require_group("input")
+#         for key, value in self.input.items():
+#             try:
+#                 if isinstance(value, (str, unicode)):
+#                     input_grp[key] = numpy.string_(value)
+#                 elif __len__ in dir(value) and
+#                 else:
+#                     input_grp[key] = value
+#             except TypeError:
+#                 logger.warning("Conversion error for %s: %s", key, value)
+        # If more speed is needed:
+
+        entry["input"] = numpy.string_(json.dumps(self.input))
 
         subentry = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
         subentry["program"] = numpy.string_("PyFAI")
