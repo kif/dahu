@@ -241,11 +241,14 @@ class IntegrateManyFrames(Plugin):
         entry["plugin_name"].attrs["version"] = version
         input_grp = entry.require_group("input")
         for key, value in self.input.items():
-            if isinstance(value, str):
-                input_grp[key] = numpy.string_(value)
-            else:
-                input_grp[key] = value
-        entry["input"] = numpy.string_()
+            try:
+                if isinstance(value, (str, unicode)):
+                    input_grp[key] = numpy.string_(value)
+                else:
+                    input_grp[key] = value
+            except TypeError:
+                logger.warning("Conversion error for %s: %s", key, value)
+        entry["input"] = numpy.string_(self.input)
 
         subentry = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
         subentry["program"] = numpy.string_("PyFAI")
