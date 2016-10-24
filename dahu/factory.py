@@ -42,12 +42,15 @@ class Factory(object):
         """
         self._sem = Semaphore()
         self.workdir = workdir or "."
-        self.add_directory(os.path.join(dahu_root, "plugins"))
-        for directory in (plugin_path or []):
-            self.add_directory(directory)
+        # First the ones from environment
         if "DAHU_PLUGINS" in os.environ:
             for directory in os.environ["DAHU_PLUGINS"].split(os.pathsep):
                 self.add_directory(directory)
+        # Then the ones from configuration
+        for directory in (plugin_path or []):
+            self.add_directory(directory)
+        # Finally the default one
+        self.add_directory(os.path.join(dahu_root, "plugins"))
 
     def add_directory(self, directory):
         abs_dir = os.path.abspath(directory)
