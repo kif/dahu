@@ -57,7 +57,7 @@ def _run_(plugin, what):
                 err_msg = [traceback.format_exc(limit=10), ""
                            "Error %s while calling %s.%s" %
                            (error, plugin.__class__.__name__, what)]
-                print(err_msg)
+                print(os.linesep.join(err_msg))
                 return STATE_FAILURE
             else:
                 return STATE_RUNNING
