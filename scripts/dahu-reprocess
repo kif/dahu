@@ -56,7 +56,7 @@ def _run_(plugin, what):
                 import traceback
                 err_msg = [traceback.format_exc(limit=10), ""
                            "Error %s while calling %s.%s" %
-                           (error, self._plugin.__class__.__name__, what)]
+                           (error, plugin.__class__.__name__, what)]
                 print(err_msg)
                 return STATE_FAILURE
             else:
