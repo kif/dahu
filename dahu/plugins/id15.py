@@ -133,7 +133,13 @@ class IntegrateManyFrames(Plugin):
         self.do_SA = False
         self.norm = 1e12
 
-    def setup(self, kwargs):
+    def setup(self, kwargs=None):
+        """Perform the setup of the job.
+        mainly parsing of the kwargs. 
+         
+        :param kwargs: dict with parmaters.
+        :return: None
+        """
         logger.debug("Integrate.setup")
         Plugin.setup(self, kwargs)
 
