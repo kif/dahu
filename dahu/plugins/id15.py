@@ -16,16 +16,15 @@ __status__ = "development"
 version = "0.1.0"
 
 import os
-import json
 import numpy
 import logging
 import copy
 from dahu import version as dahu_version
-from dahu.plugin import Plugin, plugin_from_function
+from dahu.plugin import Plugin
 from dahu.factory import register
 from dahu.cache import DataCache
 from dahu.utils import get_isotime
-from threading import Semaphore, Thread, Event
+from threading import Thread, Event
 logger = logging.getLogger("id15")
 
 try:
@@ -121,8 +120,9 @@ class IntegrateManyFrames(Plugin):
         self.queue_out = Queue()
         self.quit_event = Event()
         self.pool = []
+
         self.ai = None  # this is the azimuthal integrator to use
-        self.ntp = 2000
+        self.npt = 2000
         self.input_files = []
         self.method = "full_ocl_csr"
         self.unit = "q_nm^-1"
@@ -131,7 +131,10 @@ class IntegrateManyFrames(Plugin):
         self.wavelength = None
         self.polarization_factor = None
         self.do_SA = False
-        self.norm = 1e12
+        self.dummy = None
+        self.delta_dummy = None
+        self.norm = 1
+        self.error_model = None  # "poisson"
 
     def setup(self, kwargs=None):
         """Perform the setup of the job.
@@ -140,8 +143,11 @@ class IntegrateManyFrames(Plugin):
         :param kwargs: dict with parmaters.
         :return: None
         """
-        logger.debug("Integrate.setup")
+        logger.debug("IntegrateManyFrames.setup")
         Plugin.setup(self, kwargs)
+
+        # create the pool of workers
+        self.pool = self.build_pool(Reader, (self.queue_in, self.queue_out, self.quit_event), self.pool_size)
 
         self.input_files = self.input.get("input_files")
         if not self.input_files:
@@ -169,49 +175,58 @@ class IntegrateManyFrames(Plugin):
         self.npt = int(self.input.get("npt", self.npt))
         self.unit = self.input.get("unit", self.unit)
         self.wavelength = self.input.get("wavelength", self.wavelength)
-        if os.path.exists(self.input["mask"]):
-            self.mask = self.json_data.get("mask", self.mask)
+        if os.path.exists(self.input.get("mask", "")):
+            self.mask = fabio.open(self.input["mask"]).data
         self.dummy = self.input.get("dummy", self.dummy)
         self.delta_dummy = self.input.get("delta_dummy", self.delta_dummy)
-        if self.json_data["do_polarziation"]:
+        if self.input.get("do_polarziation"):
             self.polarization_factor = self.input.get("polarization_factor", self.polarization_factor)
         self.do_SA = self.input.get("do_SA", self.do_SA)
         self.norm = self.input.get("norm", self.norm)
+        self.method = self.input.get("method", self.method)
 
     def process(self):
         Plugin.process(self)
-        logger.debug("Integrate.process")
+        logger.debug("IntegrateManyFrames.process")
         for idx, fname in enumerate(self.input_files):
             self.queue_in.put((idx, fname))
-        res = numpy.zeros((len(self.input_files), self.npt))  # numpy array for storing data
-
-        for _ in self.input_files:
+        res = numpy.zeros((len(self.input_files), self.npt), dtype=numpy.float32)  # numpy array for storing data
+        sigma = None
+        if self.error_model:
+            sigma = numpy.zeros((len(self.input_files), self.npt), dtype=numpy.float32)  # numpy array for storing data
+        for i in self.input_files:
+            logger.debug("process %s", i)
             idx, fimg = self.queue_out.get()
             if fimg.data is None:
                 self.log_error("Failed reading file: %s" % self.input_files[idx],
                                do_raise=False)
                 continue
-            q, i = self.ai.integrate1d(fimg.data, self.npt, method="full_csr_ocl", unit=self.unit, safe=False)
-            res[idx, :] = i
+            out = self.ai.integrate1d(fimg.data, self.npt, method=self.method,
+                                      unit=self.unit, safe=False,
+                                      dummy=self.dummy, delta_dummy=self.delta_dummy,
+                                      error_model=self.error_model,
+                                      mask=self.mask,
+                                      polarization_factor=self.polarization_factor,
+                                      normalization_factor=self.norm,
+                                      correctSolidAngle=self.do_SA)
+            res[idx, :] = out.intensity
+            if self.error_model:
+                sigma[idx, :] = out.sigma
             self.queue_out.task_done()
 
         self.queue_in.join()
         self.queue_out.join()
 
-        # now clean up threads
-        self.quit_event.set()
-        for _ in self.pool:
-            self.queue_in.put(None)
+        self.save_result(out, res, sigma)
 
-        self.save_result(q, res)
-
-    def save_result(self, q, I, sigma=None):
+    def save_result(self, out, I, sigma=None):
         """Save the result of the work as a HDF5 file
         
-        :param q: scattering vector, 1D array
+        :param out: scattering result 
         :param I: Intensities as 2D array
         :param sigma: standard deviation of I as 2D array, is possible 
         """
+        logger.debug("IntegrateManyFrames.save_result")
         isotime = numpy.string_(get_isotime())
         try:
             nxs = pyFAI.io.Nexus(self.output_file, "a")
@@ -241,22 +256,32 @@ class IntegrateManyFrames(Plugin):
         metadata_grp = coll.require_group("parameters")
         for key, value in self.ai.getPyFAI().items():
             metadata_grp[key] = numpy.string_(value)
-        coll["q"] = q.astype("float32")
-        coll["q"].attrs["interpretation"] = "scalar"
+        scale, unit = out.unit.split("_", 1)
+        coll[scale] = out[0].astype("float32")
+        coll[scale].attrs["interpretation"] = "scalar"
+        coll[scale].attrs["unit"] = unit
 
         coll["I"] = I.astype("float32")
         coll["I"].attrs["interpretation"] = "spectrum"
-        coll["I"].attrs["axes"] = ["t", "q"]
+        coll["I"].attrs["axes"] = ["t", scale]
         coll["I"].attrs["signal"] = "1"
 
         if sigma is not None:
             coll["sigma"] = sigma.astype("float32")
             coll["sigma"].attrs["interpretation"] = "spectrum"
-            coll["sigma"].attrs["axes"] = ["t", "q"]
+            coll["sigma"].attrs["axes"] = ["t", scale]
 
     def teardown(self):
         Plugin.teardown(self)
-        logger.debug("Integrate.teardown")
+        logger.debug("IntegrateManyFrames.teardown")
         # Create some output data
         self.output["output_file"] = self.output_file
 
+        # now clean up threads, empty pool of workers
+        self.quit_event.set()
+        for _ in self.pool:
+            self.queue_in.put(None)
+        self.pool = None
+        self.queue_in = None
+        self.queue_out = None
+        self.quit_event = None
