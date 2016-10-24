@@ -1,18 +1,18 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
+"""Contains the Job class which handles jobs.
+A static part of the class contains statistics of the class
+"""
 
 from __future__ import with_statement, print_function, absolute_import, division
 
-__doc__ = """Contains the Job class which handles jobs.
-            A static part of the class contains statistics of the class
-            """
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/05/2015"
+__date__ = "24/10/2016"
 __status__ = "production"
 
 
@@ -23,7 +23,6 @@ import sys
 import gc
 import types
 import json
-import numpy
 import tempfile
 import logging
 import traceback
@@ -31,6 +30,7 @@ logger = logging.getLogger("dahu.job")
 logger.setLevel(logging.DEBUG)
 from . import utils
 from .factory import plugin_factory
+
 
 class Job(Thread):
     """
@@ -82,7 +82,6 @@ class Job(Thread):
     _storage_dir = utils.get_workdir()
     if not os.path.isdir(_storage_dir):
         os.makedirs(_storage_dir)
-
 
     def __init__(self, name="plugin.Plugin", input_data={}):
         """
@@ -140,7 +139,7 @@ class Job(Thread):
                 self._log_error("plugin %s failed to be instanciated." % self._name)
                 logger.debug(plugin_factory.registry)
             else:
-                #finally launch the new thread.
+                # finally launch the new thread.
                 Thread.start(self)
 
     def join(self, timeout=None):
@@ -181,7 +180,6 @@ class Job(Thread):
                 self._status = self.STATE_SUCCESS
         self._run_callbacks()
 
-
     def _run_(self, what):
         """
         run setup, process, teardown or abort ...
@@ -190,7 +188,6 @@ class Job(Thread):
         @parma args: argument list to be passed to the method
 
         """
-
         methods = {"process":  self._plugin.DEFAULT_PROCESS,
                    "setup":    self._plugin.DEFAULT_SET_UP,
                    "teardown": self._plugin.DEFAULT_TEAR_DOWN,
@@ -211,8 +208,11 @@ class Job(Thread):
                 try:
                     method()
                 except Exception as error:
-                    self._log_error("Error %s while calling %s.%s without arguments" %
-                                    (error, self._plugin.__class__.__name__, what))
+                    import traceback
+                    err_msg = [traceback.format_exc(limit=10), ""
+                               "Error %s while calling %s.%s" %
+                               (error, self._plugin.__class__.__name__, what)]
+                    self._log_error(os.linesep.join(err_msg))
         else:
             logger.error("No such method %s in class %s" % (what, self._plugin.__class__.__name__))
 
@@ -383,7 +383,7 @@ class Job(Thread):
         job = cls.getJobFromID(jobId)
 
         if job is None:
-            res = "No such jobid %s"%jobId
+            res = "No such jobid %s" % jobId
         else:
             job.join(timeout)
             res = job.status
@@ -410,7 +410,6 @@ class Job(Thread):
         return strRet
     getStatusFromId = getStatusFromID
 
-
     @classmethod
     def getJobFromID(cls, jobId):
         """
@@ -427,8 +426,6 @@ class Job(Thread):
         else:
             logger.warning("Unable to retrieve such Job: %s" % jobId)
     getJobFromId = getJobFromID
-
-
 
     @classmethod
     def cleanJobfromId(cls, jobId, forceGC=True):
@@ -451,7 +448,6 @@ class Job(Thread):
             logger.warning(strRet)
         return strRet
     cleanJobfromID = cleanJobfromId
-
 
     @classmethod
     def getDataOutputFromId(cls, jobId, as_JSON=False):
@@ -484,7 +480,6 @@ class Job(Thread):
             output = "No such job: %s" % jobId
         return output or none
     getDataOutputFromID = getDataOutputFromId
-
 
     @classmethod
     def getDataInputFromId(cls, jobId, as_JSON=False):
@@ -529,8 +524,8 @@ class Job(Thread):
         out = cls.getDataOutputFromId(jobId)
         return os.linesep.join(out.get("error", [])).encode("UTF-8")
 
-
     getErrorFromID = getErrorFromId
+
     @classmethod
     def stats(cls):
         """
