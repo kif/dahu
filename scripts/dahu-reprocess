@@ -21,7 +21,7 @@ def parse():
     """
     Parse the command line a return the parsed arguments
     """
-    #TODO
+    # TODO
     parser = ArgumentParser(description='reProcess some data using the Dahu')
     parser.add_argument("-d", '--debug', dest='debug', action='store_true',
                         default=False, help='debug mode')
@@ -53,8 +53,11 @@ def _run_(plugin, what):
             try:
                 method()
             except Exception as error:
-                print("Error %s while calling %s.%s without arguments" %
-                                (error, plugin.__class__.__name__, what))
+                import traceback
+                err_msg = [traceback.format_exc(limit=10), ""
+                           "Error %s while calling %s.%s" %
+                           (error, self._plugin.__class__.__name__, what)]
+                print(err_msg)
                 return STATE_FAILURE
             else:
                 return STATE_RUNNING
@@ -68,9 +71,9 @@ def process(args):
     Process a set of arguments
     """
     for fn in args:
-        print("Processing %s"%fn)
+        print("Processing %s" % fn)
         if os.path.exists(fn):
-            with open(fn,"r") as fp:
+            with open(fn, "r") as fp:
                 dico = json.load(fp)
         else:
             logging.warning("No such file: %s" % fn)
@@ -80,13 +83,13 @@ def process(args):
         plugin.input = dico
         state = _run_(plugin, "setup")
         if state == STATE_RUNNING:
-            status1 = _run_(plugin,"process")
-            status2 = _run_(plugin,"teardown")
+            status1 = _run_(plugin, "process")
+            status2 = _run_(plugin, "teardown")
             if status1 == STATE_RUNNING and status2 == STATE_RUNNING:
                 state = STATE_SUCCESS
             else:
                 state = STATE_FAILURE
-        print("Finished with state: %s"%state)
+        print("Finished with state: %s" % state)
         print(json.dumps(plugin.output, indent=4))
 
 if __name__ == "__main__":
