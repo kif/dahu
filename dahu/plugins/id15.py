@@ -166,17 +166,17 @@ class IntegrateManyFrames(Plugin):
         else:
             self.ai = copy.deepcopy(stored)
 
-        self.npt = int(self.json_data.get("npt", self.npt))
-        self.unit = self.json_data.get("unit", self.unit)
-        self.wavelength = self.json_data.get("wavelength", self.wavelength)
-        if os.path.exists(self.json_data["mask"]):
+        self.npt = int(self.input.get("npt", self.npt))
+        self.unit = self.input.get("unit", self.unit)
+        self.wavelength = self.input.get("wavelength", self.wavelength)
+        if os.path.exists(self.input["mask"]):
             self.mask = self.json_data.get("mask", self.mask)
-        self.dummy = self.json_data.get("dummy", self.dummy)
-        self.delta_dummy = self.json_data.get("delta_dummy", self.delta_dummy)
+        self.dummy = self.input.get("dummy", self.dummy)
+        self.delta_dummy = self.input.get("delta_dummy", self.delta_dummy)
         if self.json_data["do_polarziation"]:
-            self.polarization_factor = self.json_data.get("polarization_factor", self.polarization_factor)
-        self.do_SA = self.json_data.get("do_SA", self.do_SA)
-        self.norm = self.json_data.get("norm", self.norm)
+            self.polarization_factor = self.input.get("polarization_factor", self.polarization_factor)
+        self.do_SA = self.input.get("do_SA", self.do_SA)
+        self.norm = self.input.get("norm", self.norm)
 
     def process(self):
         Plugin.process(self)
