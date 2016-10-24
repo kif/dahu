@@ -11,10 +11,12 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/05/2015"
+__date__ = "24/10/2016"
 __status__ = "production"
 
-import os, sys, imp
+import os
+import sys
+import imp
 import os.path as op
 import logging
 logger = logging.getLogger("dahu.factory")
@@ -32,6 +34,7 @@ class Factory(object):
     modules = {}
     plugin_dirs = {}  # key: directory name, value=list of modules
     reg_sem = Semaphore()
+
     def __init__(self, workdir=None, plugin_path=None):
         """
         @param workdir: place were we are allowed to write
@@ -43,7 +46,7 @@ class Factory(object):
         for directory in (plugin_path or []):
             self.add_directory(directory)
         if "DAHU_PLUGINS" in os.environ:
-            for directory in os.environ["DAHU_PATH"].split(os.pathsep):
+            for directory in os.environ["DAHU_PLUGINS"].split(os.pathsep):
                 self.add_directory(directory)
 
     def add_directory(self, directory):
@@ -51,8 +54,8 @@ class Factory(object):
         if not os.path.isdir(directory):
             logger.warning("No such directory: %s" % directory)
             return
-        python_files = [ i[:-3] for i in os.listdir(abs_dir)
-                       if op.isfile(op.join(abs_dir, i)) and i.endswith(".py")]
+        python_files = [i[:-3] for i in os.listdir(abs_dir)
+                        if op.isfile(op.join(abs_dir, i)) and i.endswith(".py")]
         with self._sem:
             self.plugin_dirs[abs_dir] = python_files
 
@@ -66,15 +69,13 @@ class Factory(object):
             return
         splitted = plugin_name.split(".")
         module_name = ".".join(splitted[:-1])
-        class_name = splitted[-1]
 
         for dirname, modules in self.plugin_dirs.iteritems():
-            if  module_name in modules and module_name not in self.modules:
+            if module_name in modules and module_name not in self.modules:
                 print("load %s %s" % (module_name, os.path.join(dirname, module_name + ".py")))
                 mod = imp.load_source(module_name, os.path.join(dirname, module_name + ".py"))
                 with self.reg_sem:
                     self.modules[module_name] = mod
-
 
     def __call__(self, plugin_name):
         """
@@ -90,10 +91,9 @@ class Factory(object):
             self.search_plugin(plugin_name)
         if plugin_name not in self.registry:
             logger.error("Plugin directories have been searched but plugin"
-                           " %s was not found" % plugin_name)
+                         " %s was not found" % plugin_name)
         else:
             return self.registry[plugin_name]()
-
 
     @classmethod
     def register(cls, klass, fqn=None):
