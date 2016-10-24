@@ -265,8 +265,8 @@ class IntegrateManyFrames(Plugin):
         metadata_grp = coll.require_group("parameters")
         for key, value in self.ai.getPyFAI().items():
             metadata_grp[key] = numpy.string_(value)
-        scale, unit = out.unit.split("_", 1)
-        coll[scale] = out[0].astype("float32")
+        scale, unit = str(out.unit).split("_", 1)
+        coll[scale] = out.radial.astype("float32")
         coll[scale].attrs["interpretation"] = "scalar"
         coll[scale].attrs["unit"] = unit
 
