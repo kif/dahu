@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "24/10/2016"
+__date__ = "25/10/2016"
 __status__ = "development"
 version = "0.1.0"
 
@@ -279,6 +279,7 @@ class IntegrateManyFrames(Plugin):
             coll["sigma"] = sigma.astype("float32")
             coll["sigma"].attrs["interpretation"] = "spectrum"
             coll["sigma"].attrs["axes"] = ["t", scale]
+        nxs.close()
 
     def teardown(self):
         Plugin.teardown(self)
