@@ -900,6 +900,8 @@ Possible values for to_save:
             entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
             entry["plugin_name"].attrs["version"] = version
             entry["input"] = numpy.string_(json_config)
+            entry["input"].attrs["format"] = 'json'
+
             entry["detector_name"] = numpy.string_(detector_name)
 
             subentry = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
