@@ -1,17 +1,19 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-from __future__ import with_statement, print_function
-
 """Data Analysis plugin tailored for ID15
 
  
 """
 
+
+from __future__ import with_statement, print_function
+
+
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "25/10/2016"
+__date__ = "26/10/2016"
 __status__ = "development"
 version = "0.1.0"
 
@@ -255,7 +257,7 @@ class IntegrateManyFrames(Plugin):
         # If more speed is needed:
 
         entry["input"] = numpy.string_(json.dumps(self.input))
-
+        entry["input"].attrs["format"] = 'json'
         subentry = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
         subentry["program"] = numpy.string_("PyFAI")
         subentry["version"] = numpy.string_(pyFAI.version)
