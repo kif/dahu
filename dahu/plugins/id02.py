@@ -15,7 +15,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/10/2016"
+__date__ = "27/10/2016"
 __status__ = "production"
 version = "0.5"
 
@@ -1067,19 +1067,19 @@ Possible values for to_save:
                     res = self.workers[meth].process(data, I1 / self.scaling_factor)
                     if i == 0:
                         if "q" not in ds.parent:
-                            ds.parent["q"] = self.workers[meth].radial
+                            ds.parent["q"] = numpy.ascontiguousarray(self.workers[meth].radial, dtype=numpy.float32)
                             ds.parent["q"].attrs["unit"] = self.unit
                             ds.parent["q"].attrs["axis"] = "3"
                             ds.parent["q"].attrs["interpretation"] = "scalar"
                         if "chi" not in ds.parent:
-                            ds.parent["chi"] = self.workers[meth].azimuthal
+                            ds.parent["chi"] = numpy.ascontiguousarray(self.workers[meth].azimuthal, dtype=numpy.float32)
                             ds.parent["chi"].attrs["unit"] = "deg"
                             ds.parent["chi"].attrs["axis"] = "2"
                             ds.parent["chi"].attrs["interpretation"] = "scalar"
                 elif meth == "ave":
                     res = self.workers[meth].process(data, I1 / self.scaling_factor)
                     if i == 0 and "q" not in ds.parent:
-                        ds.parent["q"] = self.workers[meth].radial
+                        ds.parent["q"] = numpy.ascontiguousarray(self.workers[meth].radial, dtype=numpy.float32)
                         ds.parent["q"].attrs["unit"] = self.unit
                         ds.parent["q"].attrs["axis"] = "2"
                         ds.parent["q"].attrs["interpretation"] = "scalar"
