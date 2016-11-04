@@ -12,7 +12,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "24/10/2016"
+__date__ = "04/11/2016"
 __status__ = "production"
 
 
@@ -23,7 +23,6 @@ import sys
 import gc
 import types
 import json
-import tempfile
 import logging
 import traceback
 logger = logging.getLogger("dahu.job")
@@ -69,11 +68,12 @@ class Job(Thread):
 
     """
     STATE_UNINITIALIZED = "uninitialized"
+    STATE_STARTING = "starting"
     STATE_RUNNING = "running"
     STATE_SUCCESS = "success"
     STATE_FAILURE = "failure"
     STATE_ABORTED = "aborted"
-    STATE = [STATE_UNINITIALIZED, STATE_RUNNING, STATE_SUCCESS, STATE_FAILURE, STATE_ABORTED]
+    STATE = [STATE_UNINITIALIZED, STATE_STARTING, STATE_RUNNING, STATE_SUCCESS, STATE_FAILURE, STATE_ABORTED]
 
     _dictJobs = {}
     _semaphore = Semaphore()
@@ -129,10 +129,11 @@ class Job(Thread):
         """
         We need to create the plugin before starting the new tread...
         """
+        self._status = self.STATE_STARTING
         try:
             self._plugin = plugin_factory(self._name)
         except Exception as error:
-            self._log_error("plugin %s failed to be instanciated." % self._name)
+            self._log_error("plugin %s failed to be instanciated, raised: %s" % (self._name, error))
             self._run_callbacks()
         else:
             if self._plugin is None:
@@ -143,14 +144,14 @@ class Job(Thread):
                 Thread.start(self)
 
     def join(self, timeout=None):
-        if self._status == self.STATE_RUNNING:
+        if self._status in (self.STATE_RUNNING, self.STATE_STARTING):
             Thread.join(self, timeout)
 
     def abort(self):
         """
         Tell the job to stop !
 
-        Needs to be imlemented into the plugin !
+        Needs to be implemented into the plugin !
         """
         if self._status == self.STATE_RUNNING:
             with self._sem:
@@ -188,10 +189,10 @@ class Job(Thread):
         @parma args: argument list to be passed to the method
 
         """
-        methods = {"process":  self._plugin.DEFAULT_PROCESS,
-                   "setup":    self._plugin.DEFAULT_SET_UP,
+        methods = {"process": self._plugin.DEFAULT_PROCESS,
+                   "setup": self._plugin.DEFAULT_SET_UP,
                    "teardown": self._plugin.DEFAULT_TEAR_DOWN,
-                   "abort":    self._plugin.DEFAULT_ABORT    }
+                   "abort": self._plugin.DEFAULT_ABORT    }
         assert what in methods
         name = methods.get(what)
         if name in dir(self._plugin):
@@ -239,7 +240,7 @@ class Job(Thread):
             if "error" not in self._output_data:
                 self._output_data["error"] = err_msg
             else:
-                self._output_data["error"] += ["*"*50] + err_msg
+                self._output_data["error"] += ["*" * 50] + err_msg
             logger.error(err_msg)
 
     def _update_runtime(self):
@@ -346,6 +347,7 @@ class Job(Thread):
 
     def getName(self):
         return self._name
+
     def setName(self, name):
         if self._name is None:
             self._name = name
@@ -532,11 +534,10 @@ class Job(Thread):
         Retrieve some statistics and print them
         """
         lout = [""]
-        output = []
         run_time = time.time() - cls._global_start_time
         keys = list(cls._dictJobs.keys())
         keys.sort()
-        output = [ (k, cls._dictJobs[k]._name, cls._dictJobs[k]._status, cls._dictJobs[k]._runtime)
+        output = [(k, cls._dictJobs[k]._name, cls._dictJobs[k]._status, cls._dictJobs[k]._runtime)
                   for k in keys]
         total_jobs = max(1, len(keys))
         lout.append("_" * 80)
@@ -566,4 +567,3 @@ class Job(Thread):
         sout = os.linesep.join(lout)
         logger.info(sout)
         return sout
-
