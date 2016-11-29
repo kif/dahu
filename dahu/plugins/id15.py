@@ -13,9 +13,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "26/10/2016"
+__date__ = "29/11/2016"
 __status__ = "development"
-version = "0.1.0"
+version = "0.2.0"
 
 import os
 import numpy
@@ -94,6 +94,7 @@ class IntegrateManyFrames(Plugin):
      "polarization_factor"
      "do_SA"
      "norm"
+     "save_raw": "/path/to/hdf5/with/raw.h5",
     }
     """
     _ais = DataCache(10)  # key: poni-filename, value: ai
@@ -138,6 +139,9 @@ class IntegrateManyFrames(Plugin):
         self.delta_dummy = None
         self.norm = 1
         self.error_model = None  # "poisson"
+        self.save_raw = None
+        self.raw_nxs = None
+        self.raw_ds = None
 
     def setup(self, kwargs=None):
         """Perform the setup of the job.
@@ -187,6 +191,9 @@ class IntegrateManyFrames(Plugin):
         self.do_SA = self.input.get("do_SA", self.do_SA)
         self.norm = self.input.get("norm", self.norm)
         self.method = self.input.get("method", self.method)
+        self.save_raw = self.input.get("save_raw", self.save_raw)
+        if self.save_raw:
+            self.prepare_raw_hdf5()
 
     def process(self):
         Plugin.process(self)
@@ -216,11 +223,56 @@ class IntegrateManyFrames(Plugin):
             if self.error_model:
                 sigma[idx, :] = out.sigma
             self.queue_out.task_done()
-
+            if self.raw_ds is not None:
+                self.raw_ds[idx] = fimg.data
         self.queue_in.join()
         self.queue_out.join()
 
         self.save_result(out, res, sigma)
+
+    def prepare_raw_hdf5(self, filter_=None):
+        """Prepare an HDF5 output file for saving raw data
+        :param filter_: name of the compression filter 
+        """
+        kwfilter = {}
+        if filter_ == "gzip":
+            kwfilter = {"compression": "gzip", "shuffle": True}
+        elif filter_ == "lz4":
+            kwfilter = {"compression": 32004, "shuffle": True}
+        elif filter_ == "bitshuffle":
+            kwfilter = {"compression": 32008, "compression_opts": (0, 2)}  # enforce lz4 compression
+
+        first_image = self.input_files[0]
+        fimg = fabio.open(first_image)
+        shape = fimg.data.shape
+        stack_shape = (len(self.input_files),) + shape
+        first_frame_timestamp = os.stat(first_image).st_ctime
+
+        try:
+            self.raw_nxs = pyFAI.io.Nexus(self.save_raw, "a")
+        except IOError as error:
+            self.log_warning("invalid HDF5 file %s: remove and re-create!\n%s" % (self.save_raw, error))
+            os.unlink(self.save_raw)
+            self.raw_nxs = pyFAI.io.Nexus(self.save_raw)
+        entry = self.raw_nxs.new_entry("entry",
+                                       program_name="dahu",
+                                       title="ID15.raw_data",
+                                       force_time=first_frame_timestamp,
+                                       force_name=True)
+        entry["program_name"].attrs["version"] = dahu_version
+        entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
+        entry["plugin_name"].attrs["version"] = version
+        coll = self.raw_nxs.new_class(entry, "data", class_type="NXdata")
+        try:
+            self.raw_ds = coll.require_dataset(name="data", shape=stack_shape,
+                                               dtype=fimg.data.dtype,
+                                               chunks=(1,) + shape,
+                                               **kwfilter)
+        except Exception as error:
+            logger.error("Error in creating dataset, disabling compression:%s", error)
+            self.raw_ds = coll.require_dataset(name="data", shape=stack_shape,
+                                               dtype=fimg.data.dtype,
+                                               chunks=(1,) + shape)
 
     def save_result(self, out, I, sigma=None):
         """Save the result of the work as a HDF5 file
@@ -242,19 +294,6 @@ class IntegrateManyFrames(Plugin):
         entry["program_name"].attrs["version"] = dahu_version
         entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
         entry["plugin_name"].attrs["version"] = version
-
-        # Explicit handling of list of unicode names in needed !
-#         input_grp = entry.require_group("input")
-#         for key, value in self.input.items():
-#             try:
-#                 if isinstance(value, (str, unicode)):
-#                     input_grp[key] = numpy.string_(value)
-#                 elif __len__ in dir(value) and
-#                 else:
-#                     input_grp[key] = value
-#             except TypeError:
-#                 logger.warning("Conversion error for %s: %s", key, value)
-        # If more speed is needed:
 
         entry["input"] = numpy.string_(json.dumps(self.input))
         entry["input"].attrs["format"] = 'json'
@@ -288,6 +327,11 @@ class IntegrateManyFrames(Plugin):
         logger.debug("IntegrateManyFrames.teardown")
         # Create some output data
         self.output["output_file"] = self.output_file
+        if self.save_raw:
+            self.raw_nxs.close()
+            self.output["output_raw"] = self.save_raw
+            self.raw_nxs = None
+            self.raw_ds = None
 
         # now clean up threads, empty pool of workers
         self.quit_event.set()
