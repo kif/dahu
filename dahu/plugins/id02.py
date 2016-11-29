@@ -427,7 +427,7 @@ Minimalistic example:
  "npt2_rad": 500,
  "DetectorName": "rayonix",
  "npt2_azim": 360,
- "to_save": "raw sub ave azim dist flat",
+ "to_save": "raw sub ave azim dist flat ave_log",
  "output_dir": "/nobackup/lid02gpu12/output",
  "WaveLength": 9.95058e-11,
  "image_file": "/nobackup/lid02gpu11/FRELON/test_laurent_saxs_0000.h5",
@@ -971,7 +971,7 @@ Possible values for to_save:
                 worker.dummy = self.dummy
                 worker.delta_dummy = self.delta_dummy
                 self.workers[ext] = worker
-            elif ext == "ave":
+            elif ext.startswith("ave"):
                 if "npt1_rad" in self.input:
                     self.npt1_rad = int(self.input["npt1_rad"])
                 else:
@@ -992,6 +992,8 @@ Possible values for to_save:
                     worker.correct_solid_angle = self.correct_solid_angle
                 worker.dummy = self.dummy
                 worker.delta_dummy = self.delta_dummy
+                if "_" in ext:
+                    worker.set_unit(ext.split("_", 1)[1])
                 self.workers[ext] = worker
             elif ext == "sub":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark,
@@ -1078,10 +1080,20 @@ Possible values for to_save:
                             ds.parent["chi"].attrs["unit"] = "deg"
                             ds.parent["chi"].attrs["axis"] = "2"
                             ds.parent["chi"].attrs["interpretation"] = "scalar"
-                elif meth == "ave":
+                elif meth.startswith("ave"):
                     res = self.workers[meth].process(data, I1 / self.scaling_factor)
                     if i == 0 and "q" not in ds.parent:
-                        ds.parent["q"] = numpy.ascontiguousarray(self.workers[meth].radial, dtype=numpy.float32)
+                        if "log(1+q.nm)" in meth:
+                            q = numpy.exp(self.workers[meth].radial) - 1.0
+                        elif "log(1+q.A)" in meth:
+                            q = (numpy.exp(self.workers[meth].radial) - 1.0) * 0.1
+                        elif "log(q.nm)" in meth:
+                            q = numpy.exp(self.workers[meth].radial)
+                        elif  "log10(q.m)" in meth:
+                            q = 10 ** (self.workers[meth].radial) * 1e-9
+                        else:
+                            q = self.workers[meth].radial
+                        ds.parent["q"] = numpy.ascontiguousarray(q, dtype=numpy.float32)
                         ds.parent["q"].attrs["unit"] = self.unit
                         ds.parent["q"].attrs["axis"] = "2"
                         ds.parent["q"].attrs["interpretation"] = "scalar"
