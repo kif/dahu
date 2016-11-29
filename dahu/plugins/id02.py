@@ -17,7 +17,7 @@ __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "27/10/2016"
 __status__ = "production"
-version = "0.5"
+version = "0.6"
 
 
 import PyTango
@@ -545,6 +545,7 @@ Possible values for to_save:
         self.dummy = None
         self.delta_dummy = None
         self.unit = "q_nm^-1"
+        self.polarization = None
 
     def setup(self, kwargs=None):
         """
@@ -658,7 +659,9 @@ Possible values for to_save:
         self.ai.deltaQ(shape)
         self.ai.deltaChi(shape)
         self.ai.solidAngleArray(shape)
-#         self.ai.cos
+        if self.input.get("do_polarization"):
+            self.polarization = self.ai.polarization(factor=self.input.get("polarization_factor"), 
+                                                     axis_offset=self.input.get("polarization_axis_offset", 0))
 
         # Read and Process dark
         if type(self.dark_filename) in StringTypes and os.path.exists(self.dark_filename):
@@ -934,6 +937,12 @@ Possible values for to_save:
                 grp.visititems(grpdeepcopy)
 
             shape = self.in_shape[:]
+            if self.npt1_rad is None and "npt1_rad" in self.input:
+                self.npt1_rad = int(self.input["npt1_rad"])
+            else:
+                qmax = self.ai.qArray(self.in_shape[-2:]).max()
+                dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
+                self.npt1_rad = int(qmax / dqmin)
 
             if ext == "azim":
                 if "npt2_rad" in self.input:
@@ -970,16 +979,19 @@ Possible values for to_save:
 
                 worker.dummy = self.dummy
                 worker.delta_dummy = self.delta_dummy
+                if self.input.get("do_polarization"):
+                    worker.polarization_factor = self.input.get("polarization_factor") 
+
                 self.workers[ext] = worker
             elif ext.startswith("ave"):
-                if "npt1_rad" in self.input:
-                    self.npt1_rad = int(self.input["npt1_rad"])
+                if "_" in ext:
+                    unit = ext.split("_", 1)[1]
+                    npt1_rad = self.input.get("npt1_rad_"+unit, self.npt1_rad)
                 else:
-                    qmax = self.ai.qArray(self.in_shape[-2:]).max()
-                    dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
-                    self.npt1_rad = int(qmax / dqmin)
-                shape = (self.in_shape[0], self.npt1_rad)
-                worker = pyFAI.worker.Worker(self.ai, self.in_shape[-2:], (1, self.npt1_rad), self.unit)
+                    unit = self.unit
+                    npt1_rad = self.npt1_rad
+                shape = (self.in_shape[0], npt1_rad)
+                worker = pyFAI.worker.Worker(self.ai, self.in_shape[-2:], (1, npt1_rad), unit=unit)
                 worker.output = "numpy"
                 if self.in_shape[0] < 5:
                     worker.method = "splitbbox"
@@ -992,8 +1004,8 @@ Possible values for to_save:
                     worker.correct_solid_angle = self.correct_solid_angle
                 worker.dummy = self.dummy
                 worker.delta_dummy = self.delta_dummy
-                if "_" in ext:
-                    worker.set_unit(ext.split("_", 1)[1])
+                if self.input.get("do_polarization"):
+                    worker.polarization_factor = True 
                 self.workers[ext] = worker
             elif ext == "sub":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark,
@@ -1007,17 +1019,17 @@ Possible values for to_save:
                 self.workers[ext] = worker
             elif ext == "solid":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle(),
-                                                      dummy=self.dummy, delta_dummy=self.delta_dummy,
+                                                      dummy=self.dummy, delta_dummy=self.delta_dummy, polarization=self.polarization
                                                       )
                 self.workers[ext] = worker
             elif ext == "dist":
                 worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle(),
-                                                       dummy=self.dummy, delta_dummy=self.delta_dummy,
+                                                       dummy=self.dummy, delta_dummy=self.delta_dummy, polarization=self.polarization,
                                                        detector=self.ai.detector)
                 self.workers[ext] = worker
             elif ext == "norm":
                 worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle(),
-                                                       dummy=self.dummy, delta_dummy=self.delta_dummy,
+                                                       dummy=self.dummy, delta_dummy=self.delta_dummy, polarization=self.polarization,
                                                        detector=self.ai.detector)
                 self.workers[ext] = worker
             else:
@@ -1056,7 +1068,7 @@ Possible values for to_save:
             I1s = numpy.ones_like(self.I1)
         for i, I1 in enumerate(I1s):
             data = self.images_ds[i]
-            # self.log_warning("I1=%s" % I1)
+            I1_corrected  = I1 / self.scaling_factor
             for meth in self.to_save:
                 if meth in ["raw", "dark"]:
                     continue
@@ -1066,9 +1078,9 @@ Possible values for to_save:
                 if meth in ("sub", "flat", "dist", "cor"):
                     res = self.workers[meth].process(data)
                 elif meth == "norm":
-                    res = self.workers[meth].process(data, I1 / self.scaling_factor)
+                    res = self.workers[meth].process(data, I1_corrected)
                 elif meth == "azim":
-                    res = self.workers[meth].process(data, I1 / self.scaling_factor)
+                    res = self.workers[meth].process(data, I1_corrected)
                     if i == 0:
                         if "q" not in ds.parent:
                             ds.parent["q"] = numpy.ascontiguousarray(self.workers[meth].radial, dtype=numpy.float32)
@@ -1081,7 +1093,7 @@ Possible values for to_save:
                             ds.parent["chi"].attrs["axis"] = "2"
                             ds.parent["chi"].attrs["interpretation"] = "scalar"
                 elif meth.startswith("ave"):
-                    res = self.workers[meth].process(data, I1 / self.scaling_factor)
+                    res = self.workers[meth].process(data, I1_corrected)
                     if i == 0 and "q" not in ds.parent:
                         if "log(1+q.nm)" in meth:
                             q = numpy.exp(self.workers[meth].radial) - 1.0
@@ -1129,5 +1141,6 @@ Possible values for to_save:
         for ds in self.output_ds.values():
             ds.file.close()
         self.ai = None
+        self.polarization = None
         self.output["files"] = self.output_hdf5
         Plugin.teardown(self)
