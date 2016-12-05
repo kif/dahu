@@ -15,7 +15,7 @@ __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "29/11/2016"
 __status__ = "development"
-version = "0.2.0"
+version = "0.3.0"
 
 import os
 import numpy
@@ -70,8 +70,50 @@ class Reader(Thread):
                 fimg = fimg.read(fname, check_MD5=False)
             except Exception as err:
                 logger.error(err)
-            self._queue_out.put((idx, fimg))
+            self._queue_out.put((idx, fimg.data))
             self._queue_in.task_done()
+            fimg = None
+
+    @classmethod
+    def build_pool(cls, args, size=1):
+        """Create a pool of worker of a given size. 
+        
+        :param args: arguments to be passed to each of the worker
+        :param size: size of the pool
+        :return: a list of worker 
+        """
+        workers = []
+        for _ in range(size):
+            w = cls(*args)
+            w.start()
+            workers.append(w)
+        return workers
+
+class RawSaver(Thread):
+    def __init__(self, queue, quit_event, dataset):
+        """Constructor of the class
+        
+        :param queue: input queue with (index, raw_data) as input
+        :param queue_out: output queue with (index, FabioImage) as output
+        :param quit_event: the event which tells the thread to end
+        :param dataset: the hdf5 dataset where to write 
+        """
+        Thread.__init__(self)
+        self._queue = queue
+        self._quit_event = quit_event
+        self._dataset = dataset
+
+    def run(self):
+        while not self._quit_event.is_set():
+            plop = self._queue.get()
+            if plop is None:
+                break
+            idx, data = plop
+            try:
+                self._dataset[idx] = data
+            except Exception as err:
+                logger.error(err)
+            self._queue.task_done()
 
 
 @register
@@ -85,6 +127,11 @@ class IntegrateManyFrames(Plugin):
      "npt": 2000,
      "unit": "2th_deg",
      "output_file": "/path/to/dest.h5",
+     "save_raw": "/path/to/hdf5/with/raw.h5",
+     "delete_incoming": False,
+     "do_SA":True,
+     }
+     Plus:
      "mask":
      "wavelength"
      "unit"
@@ -94,27 +141,12 @@ class IntegrateManyFrames(Plugin):
      "polarization_factor"
      "do_SA"
      "norm"
-     "save_raw": "/path/to/hdf5/with/raw.h5",
+     "raw_compression":  "bitshuffle",
     }
     """
     _ais = DataCache(10)  # key: poni-filename, value: ai
     pool_size = 6  # Default number of reader: needs to be tuned.
 
-    @staticmethod
-    def build_pool(worker, args, size=1):
-        """Create a pool of worker of a given size. 
-        
-        :param worker: class of the worker (deriving  from Thread) 
-        :param args: arguments to be passed to each of the worker
-        :param size: size of the pool
-        :return: a list of worker 
-        """
-        workers = []
-        for _ in range(size):
-            w = worker(*args)
-            w.start()
-            workers.append(w)
-        return workers
 
     def __init__(self):
         """
@@ -122,8 +154,10 @@ class IntegrateManyFrames(Plugin):
         Plugin.__init__(self)
         self.queue_in = Queue()
         self.queue_out = Queue()
+        self.queue_saver = None
         self.quit_event = Event()
         self.pool = []
+        self.raw_saver = None
 
         self.ai = None  # this is the azimuthal integrator to use
         self.npt = 2000
@@ -142,6 +176,7 @@ class IntegrateManyFrames(Plugin):
         self.save_raw = None
         self.raw_nxs = None
         self.raw_ds = None
+        self.raw_compression = None
 
     def setup(self, kwargs=None):
         """Perform the setup of the job.
@@ -153,8 +188,6 @@ class IntegrateManyFrames(Plugin):
         logger.debug("IntegrateManyFrames.setup")
         Plugin.setup(self, kwargs)
 
-        # create the pool of workers
-        self.pool = self.build_pool(Reader, (self.queue_in, self.queue_out, self.quit_event), self.pool_size)
 
         self.input_files = self.input.get("input_files")
         if not self.input_files:
@@ -192,8 +225,14 @@ class IntegrateManyFrames(Plugin):
         self.norm = self.input.get("norm", self.norm)
         self.method = self.input.get("method", self.method)
         self.save_raw = self.input.get("save_raw", self.save_raw)
+        self.raw_compression = self.input.get("raw_compression", self.raw_compression)
         if self.save_raw:
-            self.prepare_raw_hdf5()
+            dataset = self.prepare_raw_hdf5(self.raw_compression)
+            self.queue_saver = Queue()
+            self.raw_saver = RawSaver(self.queue_saver, self.quit_event, dataset)
+            self.raw_saver.start()
+        # create the pool of workers
+        self.pool = Reader.build_pool((self.queue_in, self.queue_out, self.quit_event), self.pool_size)
 
     def process(self):
         Plugin.process(self)
@@ -206,12 +245,14 @@ class IntegrateManyFrames(Plugin):
             sigma = numpy.zeros((len(self.input_files), self.npt), dtype=numpy.float32)  # numpy array for storing data
         for i in self.input_files:
             logger.debug("process %s", i)
-            idx, fimg = self.queue_out.get()
-            if fimg.data is None:
+            idx, data = self.queue_out.get()
+            if data is None:
                 self.log_error("Failed reading file: %s" % self.input_files[idx],
                                do_raise=False)
                 continue
-            out = self.ai.integrate1d(fimg.data, self.npt, method=self.method,
+            if self.save_raw:
+                self.queue_saver.put((idx, data))
+            out = self.ai.integrate1d(data, self.npt, method=self.method,
                                       unit=self.unit, safe=False,
                                       dummy=self.dummy, delta_dummy=self.delta_dummy,
                                       error_model=self.error_model,
@@ -223,12 +264,19 @@ class IntegrateManyFrames(Plugin):
             if self.error_model:
                 sigma[idx, :] = out.sigma
             self.queue_out.task_done()
-            if self.raw_ds is not None:
-                self.raw_ds[idx] = fimg.data
+            
         self.queue_in.join()
         self.queue_out.join()
+        if self.queue_saver is not None:
+            self.queue_saver.join()
 
         self.save_result(out, res, sigma)
+        if self.input.get("delete_incoming"):
+            for fname in self.input_files:
+                try:
+                    os.unlink(fname)
+                except IOError as err:
+                    self.log_warning(err) 
 
     def prepare_raw_hdf5(self, filter_=None):
         """Prepare an HDF5 output file for saving raw data
@@ -273,6 +321,7 @@ class IntegrateManyFrames(Plugin):
             self.raw_ds = coll.require_dataset(name="data", shape=stack_shape,
                                                dtype=fimg.data.dtype,
                                                chunks=(1,) + shape)
+        return self.raw_ds
 
     def save_result(self, out, I, sigma=None):
         """Save the result of the work as a HDF5 file
@@ -329,7 +378,7 @@ class IntegrateManyFrames(Plugin):
         self.output["output_file"] = self.output_file
         if self.save_raw:
             self.raw_nxs.close()
-            self.output["output_raw"] = self.save_raw
+            self.output["save_raw"] = self.save_raw
             self.raw_nxs = None
             self.raw_ds = None
 
@@ -337,6 +386,10 @@ class IntegrateManyFrames(Plugin):
         self.quit_event.set()
         for _ in self.pool:
             self.queue_in.put(None)
+        if self.queue_saver is not None:
+            self.queue_saver.put(None)
+            self.queue_saver = None
+            self.raw_saver = None
         self.pool = None
         self.queue_in = None
         self.queue_out = None
