@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "24/10/2016"
+__date__ = "06/12/2016"
 __status__ = "production"
 
 import os
@@ -19,6 +19,7 @@ import sys
 import imp
 import os.path as op
 import logging
+from collections import OrderedDict
 logger = logging.getLogger("dahu.factory")
 from threading import Semaphore
 from .utils import get_workdir, fully_qualified_name
@@ -30,9 +31,9 @@ class Factory(object):
     """
     This is a factory, it instanciates a plugin from it name
     """
-    registry = {}
-    modules = {}
-    plugin_dirs = {}  # key: directory name, value=list of modules
+    registry = OrderedDict()
+    modules = OrderedDict()
+    plugin_dirs = OrderedDict()  # key: directory name, value=list of modules
     reg_sem = Semaphore()
 
     def __init__(self, workdir=None, plugin_path=None):
