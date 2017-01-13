@@ -1,0 +1,8 @@
+#!/bin/sh
+#opid02    6187  0.4  0.1 306820 38764 pts/0    Sl   10:21   0:00 /usr/bin/python /usr/bin/dahu_server gpu1
+pid=$(ps aux |grep dahu_server |grep python | awk '{ print $2 }' )
+echo Killing dahu server process $pid
+if [ $pid ]
+then 
+    kill $pid
+fi
