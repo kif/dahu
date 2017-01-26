@@ -15,7 +15,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/10/2016"
+__date__ = "26/01/2017"
 __status__ = "production"
 version = "0.6"
 
@@ -660,7 +660,7 @@ Possible values for to_save:
         self.ai.deltaChi(shape)
         self.ai.solidAngleArray(shape)
         if self.input.get("do_polarization"):
-            self.polarization = self.ai.polarization(factor=self.input.get("polarization_factor"), 
+            self.polarization = self.ai.polarization(factor=self.input.get("polarization_factor"),
                                                      axis_offset=self.input.get("polarization_axis_offset", 0))
 
         # Read and Process dark
@@ -980,18 +980,20 @@ Possible values for to_save:
                 worker.dummy = self.dummy
                 worker.delta_dummy = self.delta_dummy
                 if self.input.get("do_polarization"):
-                    worker.polarization_factor = self.input.get("polarization_factor") 
+                    worker.polarization_factor = self.input.get("polarization_factor")
 
                 self.workers[ext] = worker
             elif ext.startswith("ave"):
                 if "_" in ext:
                     unit = ext.split("_", 1)[1]
-                    npt1_rad = self.input.get("npt1_rad_"+unit, self.npt1_rad)
+                    npt1_rad = self.input.get("npt1_rad_" + unit, self.npt1_rad)
+                    ai = self.ai.__deepcopy__()
                 else:
                     unit = self.unit
                     npt1_rad = self.npt1_rad
+                    ai = self.ai
                 shape = (self.in_shape[0], npt1_rad)
-                worker = pyFAI.worker.Worker(self.ai, self.in_shape[-2:], (1, npt1_rad), unit=unit)
+                worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (1, npt1_rad), unit=unit)
                 worker.output = "numpy"
                 if self.in_shape[0] < 5:
                     worker.method = "splitbbox"
@@ -1005,7 +1007,7 @@ Possible values for to_save:
                 worker.dummy = self.dummy
                 worker.delta_dummy = self.delta_dummy
                 if self.input.get("do_polarization"):
-                    worker.polarization_factor = True 
+                    worker.polarization_factor = True
                 self.workers[ext] = worker
             elif ext == "sub":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark,
@@ -1068,7 +1070,7 @@ Possible values for to_save:
             I1s = numpy.ones_like(self.I1)
         for i, I1 in enumerate(I1s):
             data = self.images_ds[i]
-            I1_corrected  = I1 / self.scaling_factor
+            I1_corrected = I1 / self.scaling_factor
             for meth in self.to_save:
                 if meth in ["raw", "dark"]:
                     continue
@@ -1101,7 +1103,7 @@ Possible values for to_save:
                             q = (numpy.exp(self.workers[meth].radial) - 1.0) * 0.1
                         elif "log(q.nm)" in meth:
                             q = numpy.exp(self.workers[meth].radial)
-                        elif  "log10(q.m)" in meth:
+                        elif "log10(q.m)" in meth:
                             q = 10 ** (self.workers[meth].radial) * 1e-9
                         else:
                             q = self.workers[meth].radial
