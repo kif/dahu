@@ -12,7 +12,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/10/2016"
+__date__ = "28/03/2017" 
 __status__ = "production"
 
 import os
@@ -58,14 +58,14 @@ class DataCache(dict):
         x.__setitem__(i, y) <==> x[i]=y
         """
         with self._sem:
-            logger.debug("DataCache.__setitem__: %s" % key)
+            logger.debug("DataCache.__setitem__: %s", key)
             self.dict[key] = value
             if key in self.ordered:
                 index = self.ordered.index(key)
                 self.ordered.pop(index)
             if len(self.ordered) > self.max_size:
                 firstKey = self.ordered.pop(0)
-                logger.debug("Removing from cache: %s" % firstKey)
+                logger.debug("Removing from cache: %s", firstKey)
                 self.dict.pop(firstKey)
             self.ordered.append(key)
 
@@ -74,7 +74,7 @@ class DataCache(dict):
         x.__getitem__(y) <==> x[y]
         """
         with self._sem:
-            logger.debug("DataCache.__setitem__: %s" % key)
+            logger.debug("DataCache.__setitem__: %s", key)
             index = self.ordered.index(key)
             self.ordered.pop(index)
             self.ordered.append(key)
@@ -115,7 +115,7 @@ class DataCache(dict):
         Remove a key for the dictionary and return it's value
         """
         with self._sem:
-            logger.debug("DataCache.pop %s" % key)
+            logger.debug("DataCache.pop %s", key)
             try:
                 index = self.ordered.index(key)
             except:
