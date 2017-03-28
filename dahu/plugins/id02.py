@@ -17,7 +17,7 @@ __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "26/01/2017"
 __status__ = "production"
-version = "0.6"
+version = "0.7"
 
 
 import PyTango
@@ -35,12 +35,16 @@ import shutil
 import sys
 import time
 import threading
+import copy
 import json
+from collections import namedtuple
 import dahu
 from dahu.factory import register
 from dahu.plugin import Plugin, plugin_from_function
 from dahu.utils import get_isotime
 from dahu.job import Job
+from dahu.cache import DataCache
+
 if sys.version_info < (3, 0):
     StringTypes = (str, unicode)
 else:
@@ -64,6 +68,8 @@ except:
 
 if "TANGO_HOST" not in os.environ:
     raise RuntimeError("No TANGO_HOST defined")
+
+CacheKey = namedtuple("CacheKey", ["ai", "mask", "shape"])
 
 
 def preproc(**d):
@@ -508,6 +514,7 @@ Possible values for to_save:
             "Rot_1", "Rot_2", "Rot_3",
             "RasterOrientation", "SampleDistance", "SaxsDataVersion", "Title", "WaveLength")
     TIMEOUT = 10
+    cache = DataCache(5)
 
     def __init__(self):
         Plugin.__init__(self)
@@ -546,6 +553,7 @@ Possible values for to_save:
         self.delta_dummy = None
         self.unit = "q_nm^-1"
         self.polarization = None
+        self.cachekey = None
 
     def setup(self, kwargs=None):
         """
@@ -620,6 +628,7 @@ Possible values for to_save:
 
     def process(self):
         self.metadata = self.parse_image_file()
+        self.mask_filename = self.input.get("regrouping_mask_filename")
         shape = self.in_shape[-2:]
         if self.I1 is None:
             self.I1 = numpy.ones(shape, dtype=float)
@@ -653,12 +662,19 @@ Possible values for to_save:
 
         self.log_warning("AI:%s" % self.ai)
 
-        # Initialize geometry:
-        self.ai.qArray(shape)
-        self.ai.chiArray(shape)
-        self.ai.deltaQ(shape)
-        self.ai.deltaChi(shape)
-        self.ai.solidAngleArray(shape)
+        self.cachekey = CacheKey(str(self.ai), self.mask_filename, shape)
+        
+        if  self.cachekey in self.cache:
+            self.ai._cached_array.update(self.cache.get(self.cachekey)) 
+        else:
+            # Initialize geometry:
+            self.ai.qArray(shape)
+            self.ai.chiArray(shape)
+            self.ai.deltaQ(shape)
+            self.ai.deltaChi(shape)
+            self.ai.solidAngleArray(shape)
+            self.cache.get(self.cachekey, {}).update(self.ai._cached_array)
+            
         if self.input.get("do_polarization"):
             self.polarization = self.ai.polarization(factor=self.input.get("polarization_factor"),
                                                      axis_offset=self.input.get("polarization_axis_offset", 0))
@@ -715,7 +731,6 @@ Possible values for to_save:
             self.ai.set_flatfield(self.flat)
 
         # Read and Process mask
-        self.mask_filename = self.input.get("regrouping_mask_filename")
         if type(self.mask_filename) in StringTypes and os.path.exists(self.mask_filename):
             try:
                 mask_fabio = fabio.open(self.mask_filename)
@@ -959,7 +974,7 @@ Possible values for to_save:
                     self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
                 shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
 
-                ai = self.ai.__deepcopy__()
+                ai = self.ai.__copy__()
                 worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), self.unit)
                 if self.flat is not None:
                     worker.ai.set_flatfield(self.flat)
@@ -987,7 +1002,7 @@ Possible values for to_save:
                 if "_" in ext:
                     unit = ext.split("_", 1)[1]
                     npt1_rad = self.input.get("npt1_rad_" + unit, self.npt1_rad)
-                    ai = self.ai.__deepcopy__()
+                    ai = self.ai.__copy__()
                 else:
                     unit = self.unit
                     npt1_rad = self.npt1_rad
@@ -1116,7 +1131,9 @@ Possible values for to_save:
                     self.log_warning("Unknown/supported method ... %s, skipping" % (meth))
                     continue
                 ds[i] = res
-
+                
+                
+                
     def read_data(self, filename):
         """read dark data from a file
 
@@ -1138,6 +1155,17 @@ Possible values for to_save:
         return self.absolute_solid_angle
 
     def teardown(self):
+        """Method for cleaning up stuff
+        """
+        #Finally update the cache:
+        to_cache = {}
+        for meth in self.to_save:
+            worker = self.workers[meth]
+            if "ai" in dir(worker):
+                to_cache.update(worker.ai._cached_array)
+        
+        self.cache.get(self.cachekey, {}).update(to_cache)
+        
         if self.images_ds:
             self.images_ds.file.close()
         for ds in self.output_ds.values():
