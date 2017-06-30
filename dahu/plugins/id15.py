@@ -13,9 +13,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "29/11/2016"
+__date__ = "30/06/2017"
 __status__ = "development"
-version = "0.3.0"
+version = "0.4.0"
 
 import os
 import numpy
@@ -89,6 +89,7 @@ class Reader(Thread):
             workers.append(w)
         return workers
 
+
 class RawSaver(Thread):
     def __init__(self, queue, quit_event, dataset):
         """Constructor of the class
@@ -125,6 +126,7 @@ class IntegrateManyFrames(Plugin):
      "input_files": ["/tmp/file1.cbf", "/tmp/file2.cbf"],
      "monitor_values": [1, 1.1],
      "npt": 2000,
+     "npt_azim": None, 
      "unit": "2th_deg",
      "output_file": "/path/to/dest.h5",
      "save_raw": "/path/to/hdf5/with/raw.h5",
@@ -142,11 +144,11 @@ class IntegrateManyFrames(Plugin):
      "do_SA"
      "norm"
      "raw_compression":  "bitshuffle",
-    }
+    
+    if npt_azim is not None, perform a 2D integration
     """
     _ais = DataCache(10)  # key: poni-filename, value: ai
     pool_size = 6  # Default number of reader: needs to be tuned.
-
 
     def __init__(self):
         """
@@ -213,6 +215,7 @@ class IntegrateManyFrames(Plugin):
             self.ai = copy.deepcopy(stored)
 
         self.npt = int(self.input.get("npt", self.npt))
+        self.npt_azim = self.input.get("npt_azim")
         self.unit = self.input.get("unit", self.unit)
         self.wavelength = self.input.get("wavelength", self.wavelength)
         if os.path.exists(self.input.get("mask", "")):
@@ -239,10 +242,16 @@ class IntegrateManyFrames(Plugin):
         logger.debug("IntegrateManyFrames.process")
         for idx, fname in enumerate(self.input_files):
             self.queue_in.put((idx, fname))
-        res = numpy.zeros((len(self.input_files), self.npt), dtype=numpy.float32)  # numpy array for storing data
+        if self.npt_azim is not None:
+            res = numpy.zeros((len(self.input_files), self.npt_azim, self.npt), dtype=numpy.float32)  # numpy array for storing data
+        else:
+            res = numpy.zeros((len(self.input_files), self.npt), dtype=numpy.float32)  # numpy array for storing data
         sigma = None
         if self.error_model:
-            sigma = numpy.zeros((len(self.input_files), self.npt), dtype=numpy.float32)  # numpy array for storing data
+            if self.npt_azim is not None:
+                sigma = numpy.zeros((len(self.input_files), self.npt_azim, self.npt), dtype=numpy.float32)  # numpy array for storing data
+            else:
+                sigma = numpy.zeros((len(self.input_files), self.npt), dtype=numpy.float32)  # numpy array for storing data
         for i in self.input_files:
             logger.debug("process %s", i)
             idx, data = self.queue_out.get()
@@ -260,11 +269,11 @@ class IntegrateManyFrames(Plugin):
                                       polarization_factor=self.polarization_factor,
                                       normalization_factor=self.norm,
                                       correctSolidAngle=self.do_SA)
-            res[idx, :] = out.intensity
+            res[idx] = out.intensity
             if self.error_model:
-                sigma[idx, :] = out.sigma
+                sigma[idx] = out.sigma
             self.queue_out.task_done()
-            
+
         self.queue_in.join()
         self.queue_out.join()
         if self.queue_saver is not None:
@@ -276,7 +285,7 @@ class IntegrateManyFrames(Plugin):
                 try:
                     os.unlink(fname)
                 except IOError as err:
-                    self.log_warning(err) 
+                    self.log_warning(err)
 
     def prepare_raw_hdf5(self, filter_=None):
         """Prepare an HDF5 output file for saving raw data
