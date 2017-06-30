@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "06/12/2016"
+__date__ = "08/12/2016"
 __status__ = "production"
 
 import os
@@ -31,8 +31,8 @@ class Factory(object):
     """
     This is a factory, it instanciates a plugin from it name
     """
-    registry = OrderedDict()
-    modules = OrderedDict()
+    registry = {}
+    modules = {}
     plugin_dirs = OrderedDict()  # key: directory name, value=list of modules
     reg_sem = Semaphore()
 
@@ -76,7 +76,7 @@ class Factory(object):
 
         for dirname, modules in self.plugin_dirs.iteritems():
             if module_name in modules and module_name not in self.modules:
-                print("load %s %s" % (module_name, os.path.join(dirname, module_name + ".py")))
+                print("load %s from %s" % (module_name, os.path.join(dirname, module_name + ".py")))
                 mod = imp.load_source(module_name, os.path.join(dirname, module_name + ".py"))
                 with self.reg_sem:
                     self.modules[module_name] = mod
