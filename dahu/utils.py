@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/10/2016"
+__date__ = "02/03/2018"
 __status__ = "production"
 
 
@@ -22,9 +22,9 @@ workdir = None
 
 def get_isotime(forceTime=None, for_path=False):
     """
-    @param forceTime: enforce a given time (current by default)
-    @type forceTime: float
-    @return: the current time as an ISO8601 string
+    :param forceTime: enforce a given time (current by default)
+    :type forceTime: float
+    :return: the current time as an ISO8601 string
     @rtype: string  
     """
     if forceTime is None:
@@ -45,8 +45,8 @@ def get_workdir(basedir=None):
     """
     Creates a working directory
     
-    @param basedir: temporary directory
-    @return: path of the working directory 
+    :param basedir: temporary directory
+    :return: path of the working directory 
     """
     workdir = globals()["workdir"]
     basedir = basedir or ''
@@ -70,8 +70,8 @@ def fully_qualified_name(obj):
     """
     Return the fully qualified name of an object
     
-    @param obj: any python object
-    @return: the full name as a string
+    :param obj: any python object
+    :return: the full name as a string
     """
     if "__module__" not in dir(obj):  # or "__name__" not in dir(obj):
         obj = obj.__class__

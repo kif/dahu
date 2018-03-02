@@ -12,7 +12,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "04/11/2016"
+__date__ = "02/03/2018"
 __status__ = "production"
 
 
@@ -21,7 +21,7 @@ import time
 import os
 import sys
 import gc
-import types
+import six
 import json
 import logging
 import traceback
@@ -29,6 +29,9 @@ logger = logging.getLogger("dahu.job")
 logger.setLevel(logging.DEBUG)
 from . import utils
 from .factory import plugin_factory
+
+# Python 2to3 compatibility
+StringTypes = (six.binary_type, six.text_type)
 
 
 class Job(Thread):
@@ -87,15 +90,16 @@ class Job(Thread):
         """
         Constructor of the class Job
 
-        @param name: name of the plugin to be instanciated
-        @param input_data: Should be a dictionary or a JSON string representing that dictionary
+        :param name: name of the plugin to be instanciated
+        :param input_data: Should be a dictionary or a JSON string representing that dictionary
         """
         Thread.__init__(self)
         self._status = Job.STATE_UNINITIALIZED
         self._name = name
-        if type(input_data) in types.StringTypes:
+        if isinstance(input_data, StringTypes):
             if os.path.isfile(input_data):
-                self._input_data = json.load(open(input_data))
+                with open(input_data) as f:
+                    self._input_data = json.load(f)
             else:
                 self._input_data = json.loads(input_data)
         else:
@@ -185,7 +189,7 @@ class Job(Thread):
         """
         run setup, process, teardown or abort ...
 
-        @param what: setup, process or teardown
+        :param what: setup, process or teardown
         @parma args: argument list to be passed to the method
 
         """
@@ -249,7 +253,7 @@ class Job(Thread):
 
     def connect_callback(self, method=None):
         """
-        @param method: function or method to be called - back
+        :param method: function or method to be called - back
         """
         if method:
             with self._sem:
@@ -262,8 +266,8 @@ class Job(Thread):
         """
         Frees the memory associated with the plugin
 
-        @param force: Force garbage collection after clean-up
-        @param wait: wait for job to be finished
+        :param force: Force garbage collection after clean-up
+        :param wait: wait for job to be finished
 
         """
         logger.debug("In clean %s" % (self._plugin))
@@ -296,7 +300,7 @@ class Job(Thread):
     @property
     def id(self):
         """
-        @return: JobId
+        :return: JobId
         @rtype: integer
         """
         return self._jobId
@@ -304,7 +308,7 @@ class Job(Thread):
     @property
     def plugin(self):
         """
-        @return: the processing instance
+        :return: the processing instance
         @rtype: python object
         """
         return self._plugin
@@ -312,7 +316,7 @@ class Job(Thread):
     @property
     def status(self):
         """
-        @return: status of the Job
+        :return: status of the Job
         @rtype: string
         """
         return self._status
@@ -332,8 +336,8 @@ class Job(Thread):
     def output_data(self):
         """
         Returns the job output data
-        @param _bWait: shall we wait for the plugin to finish to retrieve output data: Yes by default.
-        @type _bWait: boolean
+        :param _bWait: shall we wait for the plugin to finish to retrieve output data: Yes by default.
+        :type _bWait: boolean
         """
         with self._sem:
             if self._status in [self.STATE_SUCCESS, self.STATE_FAILURE, self.STATE_ABORTED]:
@@ -377,9 +381,9 @@ class Job(Thread):
         """
         Wait for all a specific jobs to finish.
 
-        @param jobId: identifier of the job ... intg
-        @param timeout: timeout in second to wait
-        @return: status of the job
+        :param jobId: identifier of the job ... intg
+        :param timeout: timeout in second to wait
+        :return: status of the job
         """
         logger.debug("Job.synchronize_job class method for id=%s (timeout=%s)" % (jobId, timeout))
         job = cls.getJobFromID(jobId)
@@ -397,9 +401,9 @@ class Job(Thread):
         """
         Retrieve the job (hence the plugin) status
 
-        @param jobId: the Job identification number
-        @type jobId: int
-        @return: the Job status
+        :param jobId: the Job identification number
+        :type jobId: int
+        :return: the Job status
         @rtype: string
         """
         if jobId < 0:
@@ -417,8 +421,8 @@ class Job(Thread):
         """
         Retrieve the job (hence the plugin)
 
-        @param jobId: the Job identification number
-        @return: the "Job instance", which contains the plugin and the status
+        :param jobId: the Job identification number
+        :return: the "Job instance", which contains the plugin and the status
         @rtype: a Python object, instance of Job.
         """
         if jobId < 0:
@@ -434,10 +438,10 @@ class Job(Thread):
         """
         Frees the memory associated with the top level plugin
 
-        @param jobId: the Job identification number
-        @type jobId: int
-        @param forceGC: Force garbage collection after clean-up
-        @type forceGC: boolean
+        :param jobId: the Job identification number
+        :type jobId: int
+        :param forceGC: Force garbage collection after clean-up
+        :type forceGC: boolean
         """
         if jobId < 0:
             jobId = len(cls._dictJobs) + jobId + 1
@@ -455,9 +459,9 @@ class Job(Thread):
     def getDataOutputFromId(cls, jobId, as_JSON=False):
         """
         Returns the Plugin Output Data
-        @param jobId: job idenfier
-        @type jobId: int
-        @return: Job.DataOutput JSON string
+        :param jobId: job idenfier
+        :type jobId: int
+        :return: Job.DataOutput JSON string
         """
         none = "" if as_JSON else {}
         output = None
@@ -487,9 +491,9 @@ class Job(Thread):
     def getDataInputFromId(cls, jobId, as_JSON=False):
         """
         Returns the Plugin Input Data
-        @param jobId: job idenfier
-        @type jobId: int
-        @return: Job.DataInput JSON string
+        :param jobId: job idenfier
+        :type jobId: int
+        :return: Job.DataInput JSON string
         """
         output = None
         none = "" if as_JSON else {}
@@ -519,9 +523,9 @@ class Job(Thread):
     def getErrorFromId(cls, jobId):
         """
         Returns the error messages from plugin
-        @param jobId: job idenfier
-        @type jobId: int
-        @return: error message as a string
+        :param jobId: job idenfier
+        :type jobId: int
+        :return: error message as a string
         """
         out = cls.getDataOutputFromId(jobId)
         return os.linesep.join(out.get("error", [])).encode("UTF-8")
