@@ -270,13 +270,13 @@ class IntegrateManyFrames(Plugin):
                         "safe": False,
                         "dummy": self.dummy,
                         "delta_dummy": self.delta_dummy,
-                        "error_model": self.error_model,
                         "mask": self.mask,
                         "polarization_factor": self.polarization_factor,
                         "normalization_factor": self.norm,
                         "correctSolidAngle": self.do_SA}
         if self.integration_method in ("integrate1d", "integrate_radial"):
             common_param["ntp"] = self.npt
+            common_param["error_model"] = self.error_model
         else:
             common_param["ntp_rad"] = self.npt
             common_param["ntp_azim"] = self.npt_azim
