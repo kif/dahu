@@ -11,18 +11,35 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "08/12/2016"
+__date__ = "02/03/2018"
 __status__ = "production"
 
 import os
 import sys
-import imp
 import os.path as op
 import logging
+import six
 from collections import OrderedDict
 logger = logging.getLogger("dahu.factory")
 from threading import Semaphore
 from .utils import get_workdir, fully_qualified_name
+
+if six.PY2:
+    import imp
+
+    def load_source(module_name, file_path):
+        "Plugin loader which does not pollute sys.module"
+        return imp.load_source(module_name, file_path)
+else:
+    import importlib.util
+
+    def load_source(module_name, file_path):
+        "Plugin loader which does not pollute sys.module"
+        spec = importlib.util.spec_from_file_location(module_name, file_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
 
 dahu_root = os.path.dirname(os.path.abspath(__file__))
 
@@ -74,10 +91,10 @@ class Factory(object):
         splitted = plugin_name.split(".")
         module_name = ".".join(splitted[:-1])
 
-        for dirname, modules in self.plugin_dirs.iteritems():
+        for dirname, modules in self.plugin_dirs.items():
             if module_name in modules and module_name not in self.modules:
                 print("load %s from %s" % (module_name, os.path.join(dirname, module_name + ".py")))
-                mod = imp.load_source(module_name, os.path.join(dirname, module_name + ".py"))
+                mod = load_source(module_name, os.path.join(dirname, module_name + ".py"))
                 with self.reg_sem:
                     self.modules[module_name] = mod
 

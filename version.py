@@ -1,16 +1,7 @@
 # coding: utf-8
 # Simple module to handle versions
 
-from __future__ import absolute_import, print_function, division, with_statement
-
-__author__ = "Jerome Kieffer"
-__contact__ = "Jerome.Kieffer@ESRF.eu"
-__license__ = "MIT"
-__copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/10/2016"
-__status__ = "producton"
-__docformat__ = 'restructuredtext'
-__doc__ = """
+"""
 
 Module for version handling:
 
@@ -36,6 +27,16 @@ Thus 2.1.0a3 is hexversion 0x020100a3.
 
 """
 
+
+from __future__ import absolute_import, print_function, division, with_statement
+
+__author__ = "Jerome Kieffer"
+__contact__ = "Jerome.Kieffer@ESRF.eu"
+__license__ = "MIT"
+__copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
+__date__ = "02/03/2018"
+__status__ = "producton"
+__docformat__ = 'restructuredtext'
 RELEASE_LEVEL_VALUE = {"dev": 0,
                        "alpha": 10,
                        "beta": 11,
@@ -44,7 +45,7 @@ RELEASE_LEVEL_VALUE = {"dev": 0,
                        "final": 15}
 
 MAJOR = 0
-MINOR = 5
+MINOR = 6
 MICRO = 0
 RELEV = "beta"  # <16
 SERIAL = 0  # <16
