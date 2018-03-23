@@ -13,7 +13,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "30/06/2017"
+__date__ = "23/03/2018"
 __status__ = "development"
 version = "0.4.0"
 
@@ -144,8 +144,10 @@ class IntegrateManyFrames(Plugin):
      "do_SA"
      "norm"
      "raw_compression":  "bitshuffle",
+     "integration_method": "integrate1d"
+     "sigma_clip_thresold":3
+     self.sigma_clip_max_iter: 5
     
-    if npt_azim is not None, perform a 2D integration
     """
     _ais = DataCache(10)  # key: poni-filename, value: ai
     pool_size = 6  # Default number of reader: needs to be tuned.
@@ -163,6 +165,7 @@ class IntegrateManyFrames(Plugin):
 
         self.ai = None  # this is the azimuthal integrator to use
         self.npt = 2000
+        self.npt_azim = 256
         self.input_files = []
         self.method = "full_ocl_csr"
         self.unit = "q_nm^-1"
@@ -179,6 +182,10 @@ class IntegrateManyFrames(Plugin):
         self.raw_nxs = None
         self.raw_ds = None
         self.raw_compression = None
+        self.integration_method = "integrate1d"
+        self.sigma_clip_thresold = 3
+        self.sigma_clip_max_iter = 5
+        self.medfilt1d_percentile = (10, 90)
 
     def setup(self, kwargs=None):
         """Perform the setup of the job.
@@ -189,7 +196,6 @@ class IntegrateManyFrames(Plugin):
         """
         logger.debug("IntegrateManyFrames.setup")
         Plugin.setup(self, kwargs)
-
 
         self.input_files = self.input.get("input_files")
         if not self.input_files:
@@ -215,7 +221,7 @@ class IntegrateManyFrames(Plugin):
             self.ai = copy.deepcopy(stored)
 
         self.npt = int(self.input.get("npt", self.npt))
-        self.npt_azim = self.input.get("npt_azim")
+        self.npt_azim = self.input.get("npt_azim", self.npt_azim)
         self.unit = self.input.get("unit", self.unit)
         self.wavelength = self.input.get("wavelength", self.wavelength)
         if os.path.exists(self.input.get("mask", "")):
@@ -228,6 +234,11 @@ class IntegrateManyFrames(Plugin):
         self.norm = self.input.get("norm", self.norm)
         self.method = self.input.get("method", self.method)
         self.save_raw = self.input.get("save_raw", self.save_raw)
+        self.integration_method = self.input.get("integration_method", self.integration_method)
+        self.sigma_clip_thresold = self.input.get("sigma_clip_thresold", self.sigma_clip_thresold)
+        self.sigma_clip_max_iter = self.input.get("sigma_clip_max_iter", self.sigma_clip_max_iter)
+        self.medfilt1d_percentile = self.input.get("medfilt1d_percentile", self.medfilt1d_percentile)
+
         self.raw_compression = self.input.get("raw_compression", self.raw_compression)
         if self.save_raw:
             dataset = self.prepare_raw_hdf5(self.raw_compression)
@@ -242,16 +253,39 @@ class IntegrateManyFrames(Plugin):
         logger.debug("IntegrateManyFrames.process")
         for idx, fname in enumerate(self.input_files):
             self.queue_in.put((idx, fname))
-        if self.npt_azim is not None:
+        if self.integration_method == "integrate2d":
             res = numpy.zeros((len(self.input_files), self.npt_azim, self.npt), dtype=numpy.float32)  # numpy array for storing data
         else:
             res = numpy.zeros((len(self.input_files), self.npt), dtype=numpy.float32)  # numpy array for storing data
         sigma = None
         if self.error_model:
-            if self.npt_azim is not None:
+            if self.integration_method == "integrate2d":
                 sigma = numpy.zeros((len(self.input_files), self.npt_azim, self.npt), dtype=numpy.float32)  # numpy array for storing data
             else:
                 sigma = numpy.zeros((len(self.input_files), self.npt), dtype=numpy.float32)  # numpy array for storing data
+
+        method = self.ai.__getattribute__(self.integration_method)
+        common_param = {"method": self.method,
+                        "unit": self.unit,
+                        "safe": False,
+                        "dummy": self.dummy,
+                        "delta_dummy": self.delta_dummy,
+                        "error_model": self.error_model,
+                        "mask": self.mask,
+                        "polarization_factor": self.polarization_factor,
+                        "normalization_factor": self.norm,
+                        "correctSolidAngle": self.do_SA}
+        if self.integration_method in ("integrate1d", "integrate_radial"):
+            common_param["ntp"] = self.npt
+        else:
+            common_param["ntp_rad"] = self.npt
+            common_param["ntp_azim"] = self.npt_azim
+        if self.integration_method == "sigma_clip":
+            common_param["thres"] = self.sigma_clip_thresold,
+            common_param["max_iter"] = self.sigma_clip_max_iter
+        if self.integration_method == "medfilt1d":
+            common_param["percentile"] = self.medfilt1d_percentile
+
         for i in self.input_files:
             logger.debug("process %s", i)
             idx, data = self.queue_out.get()
@@ -261,14 +295,8 @@ class IntegrateManyFrames(Plugin):
                 continue
             if self.save_raw:
                 self.queue_saver.put((idx, data))
-            out = self.ai.integrate1d(data, self.npt, method=self.method,
-                                      unit=self.unit, safe=False,
-                                      dummy=self.dummy, delta_dummy=self.delta_dummy,
-                                      error_model=self.error_model,
-                                      mask=self.mask,
-                                      polarization_factor=self.polarization_factor,
-                                      normalization_factor=self.norm,
-                                      correctSolidAngle=self.do_SA)
+
+            out = method(data, **common_param)
             res[idx] = out.intensity
             if self.error_model:
                 sigma[idx] = out.sigma
@@ -359,7 +387,7 @@ class IntegrateManyFrames(Plugin):
         subentry["program"] = numpy.string_("PyFAI")
         subentry["version"] = numpy.string_(pyFAI.version)
         subentry["date"] = isotime
-        subentry["processing_type"] = numpy.string_("integrate1d")
+        subentry["processing_type"] = numpy.string_(self.integration_method)
         coll = nxs.new_class(subentry, "process_integrate1d", class_type="NXdata")
         metadata_grp = coll.require_group("parameters")
         for key, value in self.ai.getPyFAI().items():
