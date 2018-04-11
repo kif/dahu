@@ -5,15 +5,13 @@
  
 """
 
-
 from __future__ import with_statement, print_function
-
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "23/03/2018"
+__date__ = "11/04/2018"
 __status__ = "development"
 version = "0.4.0"
 
@@ -21,13 +19,15 @@ import os
 import numpy
 import logging
 import copy
+import json
+import glob
 from dahu import version as dahu_version
 from dahu.plugin import Plugin
 from dahu.factory import register
 from dahu.cache import DataCache
 from dahu.utils import get_isotime
 from threading import Thread, Event
-import json
+
 logger = logging.getLogger("id15")
 
 try:
@@ -200,6 +200,8 @@ class IntegrateManyFrames(Plugin):
         self.input_files = self.input.get("input_files")
         if not self.input_files:
             self.log_error("InputError: input_files not in input.")
+        if not isinstance(self.input_files, list):
+            self.input_files = glob.glob(self.input_files)
 
         if "output_file" not in self.input:
             self.log_error("InputWarning: output_file not in input, save in input directory",
