@@ -296,7 +296,8 @@ class IntegrateManyFrames(Plugin):
         subentry["version"] = numpy.string_(pyFAI.version)
         subentry["date"] = isotime
         subentry["processing_type"] = numpy.string_(self.integration_method)
-        coll = nxs.new_class(subentry, "process_integrate1d", class_type="NXdata")
+        coll = nxs.new_class(subentry, "process_%s" % self.integration_method,
+                             class_type="NXdata")
         metadata_grp = coll.require_group("parameters")
         for key, value in self.ai.getPyFAI().items():
             metadata_grp[key] = numpy.string_(value)
@@ -326,4 +327,3 @@ class IntegrateManyFrames(Plugin):
             self.output["save_raw"] = self.save_raw
             self.raw_nxs = None
             self.raw_ds = None
-
