@@ -7,14 +7,14 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/06/2016"
+__date__ = "02/03/2018"
 __status__ = "development"
 
 import os
 import unittest
-import utilstest
-logger = utilstest.getLogger("test_job")
-import dahu.job
+from . import utilstest
+logger = utilstest.getLogger(__name__)
+from .. import job
 
 
 class TestJob(unittest.TestCase):
@@ -22,7 +22,7 @@ class TestJob(unittest.TestCase):
         self.called = False
         dico = {"plugin_name": "example.square",
                 "x": 5}
-        j = dahu.job.Job("example.square", dico)
+        j = job.Job("example.square", dico)
         j.connect_callback(self.callback)
         logger.info(j)
         j.start()

@@ -2,16 +2,14 @@
 # coding: utf-8
 from __future__ import with_statement, print_function, absolute_import, division
 
-__doc__ = """
-
-Data analysis Tango device server ... for UPBL09a
+""" Data analysis Tango device server ... for UPBL09a
 
 """
 __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/05/2015"
+__date__ = "02/03/2018"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
@@ -24,17 +22,17 @@ import time
 import types
 import multiprocessing
 import gc
-if sys.version > (3, 0):
-    from queue import Queue
-else:
+import six
+if six.PY2:
     from Queue import Queue
+else:
+    from queue import Queue
 
 logger = logging.getLogger("dahu.server")
 # set loglevel at least at INFO
 if logger.getEffectiveLevel() > logging.INFO:
     logger.setLevel(logging.INFO)
 
-import numpy
 import PyTango
 from .job import Job, plugin_factory
 
@@ -52,8 +50,8 @@ class DahuDS(PyTango.Device_4Impl):
     def __init__(self, cl, name):
         PyTango.Device_4Impl.__init__(self, cl, name)
         self.init_device()
-        self.job_queue = Queue() #queue containing jobs to process
-        self.event_queue = Queue() #queue containing finished jobs
+        self.job_queue = Queue()  # queue containing jobs to process
+        self.event_queue = Queue()  # queue containing finished jobs
         self.processing_lock = threading.Semaphore()
         self.stat_lock = threading.Semaphore()
         self.last_stats = "No statistics collected yet, please use the 'collectStatistics' method first"
@@ -61,7 +59,7 @@ class DahuDS(PyTango.Device_4Impl):
         self.last_success = -1
         self.statistics_threads = None
 #         self._ncpu_sem = threading.Semaphore(multiprocessing.cpu_count())
-        #start the two threads related to queues: process_job and event_queue
+        # start the two threads related to queues: process_job and event_queue
         t2 = threading.Thread(target=self.process_job)
         t2.start()
         t1 = threading.Thread(target=self.process_event)
@@ -114,7 +112,7 @@ class DahuDS(PyTango.Device_4Impl):
         res = ["List of all plugin currently loaded (use initPlugin to loaded additional plugins):"]
         plugins = list(plugin_factory.registry.keys())
         plugins.sort()
-        return os.linesep.join(res+[" %s : %s"%(i,plugin_factory.registry[i].__doc__.split("\n")[0]) for i in plugins])
+        return os.linesep.join(res + [" %s : %s" % (i, plugin_factory.registry[i].__doc__.split("\n")[0]) for i in plugins])
 
     def initPlugin(self, name):
         """
@@ -130,7 +128,7 @@ class DahuDS(PyTango.Device_4Impl):
         if plugin is None or err:
             return "Plugin not found: %s, err" % (name, err)
         else:
-            return "Plugin loaded: %s%s%s" % (name,os.linesep,plugin.__doc__)
+            return "Plugin loaded: %s%s%s" % (name, os.linesep, plugin.__doc__)
 
     def abort(self, jobId):
         """
@@ -189,20 +187,20 @@ class DahuDS(PyTango.Device_4Impl):
         self.job_queue.task_done()
         gc.collect()
         self.event_queue.put(job)
-        
+
     def process_event(self):
         """
         process finished jobs on the tango side (issue with tango locks)
         """
-        
+
         while True:
             job = self.event_queue.get()
             if job.status == job.STATE_SUCCESS:
                 self.push_change_event("jobSuccess", job.id)
             else:
                 self.push_change_event("jobFailure", job.id)
-        
-#TODO one day
+
+# TODO one day
 #    def getRunning(self):
 #        """
 #        retrieve the list of plugins currently under execution (with their plugin-Id)
@@ -282,10 +280,10 @@ class DahuDS(PyTango.Device_4Impl):
         """
         res = Job.synchronize_job(jobId)
         i = 0
-        while res == Job.STATE_UNINITIALIZED:            
-            if i>10:
+        while res == Job.STATE_UNINITIALIZED:
+            if i > 10:
                 break
-            i+=1
+            i += 1
             time.sleep(0.1)
             res = Job.synchronize_job(jobId)
         return res

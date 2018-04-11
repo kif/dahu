@@ -1,18 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 #
-from __future__ import with_statement, print_function, absolute_import, division
 
-
-
-__doc__ = """
+"""
 Data Analysis Highly tailored fror Upbl09a
 """
+from __future__ import with_statement, print_function, absolute_import, division
+
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/05/2015"
+__date__ = "02/03/2018"
 __status__ = "production"
 
 from .factory import plugin_factory, register
@@ -123,7 +122,7 @@ class PluginFromFunction(Plugin):
     """
     def __init__(self):
         """
-        @param funct: function to be wrapped
+        :param funct: function to be wrapped
         """
         Plugin.__init__(self)
 
@@ -152,8 +151,8 @@ def plugin_from_function(function):
     """
     Create a plugin class from a given function and registers it into the
 
-    @param function: any function
-    @return: plugin name to be used by the plugin_factory to get an instance
+    :param function: any function
+    :return: plugin name to be used by the plugin_factory to get an instance
     """
     logger.debug("creating plugin from function %s" % function.__name__)
     class_name = function.__module__ + "." + function.__name__
