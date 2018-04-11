@@ -24,97 +24,16 @@ import glob
 from dahu import version as dahu_version
 from dahu.plugin import Plugin
 from dahu.factory import register
-from dahu.cache import DataCache
 from dahu.utils import get_isotime
-from threading import Thread, Event
 
-logger = logging.getLogger("id15")
+logger = logging.getLogger("id15v2")
 
-try:
-    from queue import Queue
-except:
-    from Queue import Queue
-try:
-    import pyFAI
-except ImportError:
-    logger.error("Failed to import PyFAI: download and install it from pypi")
 try:
     import fabio
+    import pyFAI
+    from silx.opencl.codec.byte_offset import ByteOffset
 except ImportError:
-    logger.error("Failed to import Fabio: download and install it from pypi")
-
-
-class Reader(Thread):
-    """Reader with input and output queue 
-    """
-    def __init__(self, queue_in, queue_out, quit_event):
-        """Constructor of the class
-        
-        :param queue_in: input queue with (index, filename to read) as input
-        :param queue_out: output queue with (index, FabioImage) as output
-        :param quit_event: the event which tells the thread to end 
-        """
-        Thread.__init__(self)
-        self._queue_in = queue_in
-        self._queue_out = queue_out
-        self._quit_event = quit_event
-
-    def run(self):
-        while not self._quit_event.is_set():
-            plop = self._queue_in.get()
-            if plop is None:
-                break
-            idx, fname = plop
-            fimg = fabio.cbfimage.CbfImage()
-            try:
-                fimg = fimg.read(fname, check_MD5=False)
-            except Exception as err:
-                logger.error(err)
-            self._queue_out.put((idx, fimg.data))
-            self._queue_in.task_done()
-            fimg = None
-
-    @classmethod
-    def build_pool(cls, args, size=1):
-        """Create a pool of worker of a given size. 
-        
-        :param args: arguments to be passed to each of the worker
-        :param size: size of the pool
-        :return: a list of worker 
-        """
-        workers = []
-        for _ in range(size):
-            w = cls(*args)
-            w.start()
-            workers.append(w)
-        return workers
-
-
-class RawSaver(Thread):
-    def __init__(self, queue, quit_event, dataset):
-        """Constructor of the class
-        
-        :param queue: input queue with (index, raw_data) as input
-        :param queue_out: output queue with (index, FabioImage) as output
-        :param quit_event: the event which tells the thread to end
-        :param dataset: the hdf5 dataset where to write 
-        """
-        Thread.__init__(self)
-        self._queue = queue
-        self._quit_event = quit_event
-        self._dataset = dataset
-
-    def run(self):
-        while not self._quit_event.is_set():
-            plop = self._queue.get()
-            if plop is None:
-                break
-            idx, data = plop
-            try:
-                self._dataset[idx] = data
-            except Exception as err:
-                logger.error(err)
-            self._queue.task_done()
+    logger.error("Failed to import PyFAI, fabio or silx: download and install it from pypi")
 
 
 @register
@@ -149,25 +68,16 @@ class IntegrateManyFrames(Plugin):
      self.sigma_clip_max_iter: 5
     
     """
-    _ais = DataCache(3)  # key: poni-filename, value: ai
-    pool_size = 2  # Default number of reader: needs to be tuned.
 
     def __init__(self):
         """
         """
         Plugin.__init__(self)
-        self.queue_in = Queue()
-        self.queue_out = Queue()
-        self.queue_saver = None
-        self.quit_event = Event()
-        self.pool = []
-        self.raw_saver = None
-
         self.ai = None  # this is the azimuthal integrator to use
         self.npt = 2000
         self.npt_azim = 256
         self.input_files = []
-        self.method = "full_ocl_csr"
+        self.method = "ocl_nosplit_csr_gpu"
         self.unit = "q_nm^-1"
         self.output_file = None
         self.mask = None
@@ -243,24 +153,17 @@ class IntegrateManyFrames(Plugin):
 
         self.raw_compression = self.input.get("raw_compression", self.raw_compression)
         if self.save_raw:
-            dataset = self.prepare_raw_hdf5(self.raw_compression)
-            self.queue_saver = Queue()
-            self.raw_saver = RawSaver(self.queue_saver, self.quit_event, dataset)
-            self.raw_saver.start()
-        # create the pool of workers
-        self.pool = Reader.build_pool((self.queue_in, self.queue_out, self.quit_event), self.pool_size)
+            self.prepare_raw_hdf5(self.raw_compression)
 
     def process(self):
         Plugin.process(self)
         logger.debug("IntegrateManyFrames.process")
-        for idx, fname in enumerate(self.input_files):
-            self.queue_in.put((idx, fname))
         if self.integration_method == "integrate2d":
             res = numpy.zeros((len(self.input_files), self.npt_azim, self.npt), dtype=numpy.float32)  # numpy array for storing data
         else:
             res = numpy.zeros((len(self.input_files), self.npt), dtype=numpy.float32)  # numpy array for storing data
         sigma = None
-        if self.error_model:
+        if self.error_model or self.integration_method == "sigma_clip":
             if self.integration_method == "integrate2d":
                 sigma = numpy.zeros((len(self.input_files), self.npt_azim, self.npt), dtype=numpy.float32)  # numpy array for storing data
             else:
@@ -278,7 +181,7 @@ class IntegrateManyFrames(Plugin):
         if self.integration_method in ("integrate1d", "integrate_radial"):
             common_param["npt"] = self.npt
             common_param["error_model"] = self.error_model
-            common_param["safe"] = False,
+            common_param["safe"] = False
         else:
             common_param["npt_rad"] = self.npt
             common_param["npt_azim"] = self.npt_azim
@@ -288,26 +191,29 @@ class IntegrateManyFrames(Plugin):
         if self.integration_method == "medfilt1d":
             common_param["percentile"] = self.medfilt1d_percentile
 
-        for i in self.input_files:
-            logger.debug("process %s", i)
-            idx, data = self.queue_out.get()
+        # prepare some tools
+        cbf = fabio.open(self.input_files[0])
+        bo = ByteOffset(os.path.getsize(self.input_files[0]), cbf.data.size,
+                        devicetype="gpu")
+
+        for idx, fname in enumerate(self.input_files):
+            logger.debug("process %s: %s", idx, fname)
+            if fname.endswith("cbf"):
+                raw = cbf.read(fname, only_raw=True)
+                data = bo(raw, as_float=False).get()
+            else:
+                data = fabio.open(fname).data
             if data is None:
                 self.log_error("Failed reading file: %s" % self.input_files[idx],
                                do_raise=False)
                 continue
             if self.save_raw:
-                self.queue_saver.put((idx, data))
+                self.raw_ds[idx] = data
 
             out = method(data, **common_param)
             res[idx] = out.intensity
-            if self.error_model:
+            if self.error_model or self.integration_method == "sigma_clip":
                 sigma[idx] = out.sigma
-            self.queue_out.task_done()
-
-        self.queue_in.join()
-        self.queue_out.join()
-        if self.queue_saver is not None:
-            self.queue_saver.join()
 
         self.save_result(out, res, sigma)
         if self.input.get("delete_incoming"):
