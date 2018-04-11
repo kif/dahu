@@ -195,12 +195,12 @@ class IntegrateManyFrames(Plugin):
         cbf = fabio.open(self.input_files[0])
         bo = ByteOffset(os.path.getsize(self.input_files[0]), cbf.data.size,
                         devicetype="gpu")
-
+        shape = cbf.data.shape
         for idx, fname in enumerate(self.input_files):
             logger.debug("process %s: %s", idx, fname)
             if fname.endswith("cbf"):
                 raw = cbf.read(fname, only_raw=True)
-                data = bo(raw, as_float=False).get()
+                data = bo(raw, as_float=False).get().reshape(shape)
             else:
                 data = fabio.open(fname).data
             if data is None:
@@ -327,15 +327,3 @@ class IntegrateManyFrames(Plugin):
             self.raw_nxs = None
             self.raw_ds = None
 
-        # now clean up threads, empty pool of workers
-        self.quit_event.set()
-        for _ in self.pool:
-            self.queue_in.put(None)
-        if self.queue_saver is not None:
-            self.queue_saver.put(None)
-            self.queue_saver = None
-            self.raw_saver = None
-        self.pool = None
-        self.queue_in = None
-        self.queue_out = None
-        self.quit_event = None
