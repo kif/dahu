@@ -308,13 +308,13 @@ class IntegrateManyFrames(Plugin):
 
         coll["I"] = I.astype("float32")
         coll["I"].attrs["interpretation"] = "spectrum"
-        coll["I"].attrs["axes"] = ["t", scale]
         coll["I"].attrs["signal"] = "1"
+        coll.attrs["signal"] = "I"
+        coll.attrs["axes"] = [".", scale]
 
         if sigma is not None:
-            coll["sigma"] = sigma.astype("float32")
-            coll["sigma"].attrs["interpretation"] = "spectrum"
-            coll["sigma"].attrs["axes"] = ["t", scale]
+            coll["errors"] = sigma.astype("float32")
+            coll["errors"].attrs["interpretation"] = "spectrum"
         nxs.close()
 
     def teardown(self):
