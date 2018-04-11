@@ -125,12 +125,12 @@ class IntegrateManyFrames(Plugin):
         poni_file = self.input.get("poni_file")
         if not poni_file:
             self.log_error("InputError: poni_file not in input.")
-        ai = pyFAI.load(poni_file)
-        stored = self._ais.get(poni_file, ai)
-        if stored is ai:
-            self.ai = stored
-        else:
-            self.ai = copy.deepcopy(stored)
+        self.ai = pyFAI.load(poni_file)
+#         stored = self._ais.get(poni_file, ai)
+#         if stored is ai:
+#             self.ai = stored
+#         else:
+#             self.ai = copy.deepcopy(stored)
 
         self.npt = int(self.input.get("npt", self.npt))
         self.npt_azim = self.input.get("npt_azim", self.npt_azim)
