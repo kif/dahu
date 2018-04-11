@@ -278,7 +278,7 @@ class IntegrateManyFrames(Plugin):
         if self.integration_method in ("integrate1d", "integrate_radial"):
             common_param["npt"] = self.npt
             common_param["error_model"] = self.error_model
-            common_param["safe"] = False,
+            common_param["safe"] = False
         else:
             common_param["npt_rad"] = self.npt
             common_param["npt_azim"] = self.npt_azim
