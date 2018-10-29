@@ -1206,8 +1206,7 @@ Possible values for to_save:
         """
         # Finally update the cache:
         to_cache = {}
-        for meth in self.to_save:
-            worker = self.workers[meth]
+        for meth, worker in self.workers.items():
             if "ai" in dir(worker):
                 to_cache.update(worker.ai._cached_array)
 
