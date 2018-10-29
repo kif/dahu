@@ -15,9 +15,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "26/01/2017"
+__date__ = "29/10/2018"
 __status__ = "production"
-version = "0.7"
+version = "0.8"
 
 
 import PyTango
@@ -44,6 +44,7 @@ from dahu.plugin import Plugin, plugin_from_function
 from dahu.utils import get_isotime
 from dahu.job import Job
 from dahu.cache import DataCache
+import numexpr
 
 if sys.version_info < (3, 0):
     StringTypes = (str, unicode)
@@ -476,6 +477,7 @@ Optional parameters:
 "correct_solid_angle": True by default, set to 0/False to disable such correction 
 "correct_I1": True by default, set to false to deactivate scaling by Exposure time / transmitted intensity
 "unit": "q_nm^-1" can be changed to "log(q)_m" for log(q) units
+"variance_formula": calculate the variance from a formula like '0.1*(data-dark)+1.0' "
 
 Unused and automatically generated:
 "plugin_name':"id02.singledetector',
@@ -554,6 +556,8 @@ Possible values for to_save:
         self.unit = "q_nm^-1"
         self.polarization = None
         self.cachekey = None
+        self.variance_formula = None
+        self.variance_function = lambda data, dark: None
 
     def setup(self, kwargs=None):
         """
@@ -626,6 +630,14 @@ Possible values for to_save:
         self.correct_I1 = bool(self.input.get("correct_I1", True))
         self.I1, self.t = self.load_I1_t(c216_filename)
 
+        # Variance formula: calculation of the function
+        if "variance_formula" in self.input:
+            self.variance_formula = self.input.get("variance_formula")
+            if self.variance_formula:
+                self.variance_function = numexpr.NumExpr(self.variance_formula,
+                                                         [("data", float),
+                                                          ("dark", float)])
+
     def process(self):
         self.metadata = self.parse_image_file()
         self.mask_filename = self.input.get("regrouping_mask_filename")
@@ -663,9 +675,9 @@ Possible values for to_save:
         self.log_warning("AI:%s" % self.ai)
 
         self.cachekey = CacheKey(str(self.ai), self.mask_filename, shape)
-        
-        if  self.cachekey in self.cache:
-            self.ai._cached_array.update(self.cache.get(self.cachekey)) 
+
+        if self.cachekey in self.cache:
+            self.ai._cached_array.update(self.cache.get(self.cachekey))
         else:
             # Initialize geometry:
             self.ai.qArray(shape)
@@ -674,7 +686,7 @@ Possible values for to_save:
             self.ai.deltaChi(shape)
             self.ai.solidAngleArray(shape)
             self.cache.get(self.cachekey, {}).update(self.ai._cached_array)
-            
+
         if self.input.get("do_polarization"):
             self.polarization = self.ai.polarization(factor=self.input.get("polarization_factor"),
                                                      axis_offset=self.input.get("polarization_axis_offset", 0))
@@ -843,6 +855,10 @@ Possible values for to_save:
             self.log_error("Expected ONE deteector is expected in experiment, got %s in %s %s %s" %
                            (len(detector_grp), self.input_nxs, self.image_file, instrument))
         self.images_ds = detector_grp.get("data")
+        if isinstance(self.images_ds, h5py.Group):
+            if self.images_ds.attrs.get("NX_class") == "NXdata":
+                # this is an NXdata not a dataset: use the @signal
+                self.images_ds = self.images_ds.get(self.images_ds.attrs.get("signal"))
         self.in_shape = self.images_ds.shape
         if "detector_information" in detector_grp:
             detector_information = detector_grp["detector_information"]
@@ -1051,25 +1067,34 @@ Possible values for to_save:
                 self.workers[ext] = worker
             else:
                 self.log_warning("unknown treatment %s" % ext)
+
+            # TODO: manage compression here
+
             output_ds = coll.create_dataset("data", shape, "float32",
                                             chunks=(1,) + shape[1:],
                                             maxshape=(None,) + shape[1:])
+            coll.attrs["signal"] = "data"
+            output_ds.attrs["signal"] = "1"
+            if self.variance_formula is not None:
+                error_ds = coll.create_dataset("errors", shape, "float32",
+                                               chunks=(1,) + shape[1:],
+                                               maxshape=(None,) + shape[1:])
+                coll.attrs["uncertainties"] = "errors"
+                self.output_ds[ext + "_err"] = error_ds
             if self.t is not None:
                 coll["t"] = self.t
                 coll["t"].attrs["axis"] = "1"
                 coll["t"].attrs["interpretation"] = "scalar"
                 coll["t"].attrs["unit"] = "s"
 
-#             output_ds.attrs["NX_class"] = "NXdata" -> see group
-            output_ds.attrs["signal"] = "1"
             if ext == "azim":
-                output_ds.attrs["axes"] = ["t", "chi", "q"]
+                coll.attrs["axes"] = ["t", "chi", "q"]
                 output_ds.attrs["interpretation"] = "image"
             elif ext == "ave":
-                output_ds.attrs["axes"] = ["t", "q"]
+                coll.attrs["axes"] = ["t", "q"]
                 output_ds.attrs["interpretation"] = "spectrum"
             elif ext in ("sub", "flat", "solid", "dist"):
-                output_ds.attrs["axes"] = "t"
+                coll.attrs["axes"] = ["t", ".", "."]
                 output_ds.attrs["interpretation"] = "image"
             else:
                 output_ds.attrs["interpretation"] = "image"
@@ -1085,19 +1110,36 @@ Possible values for to_save:
             I1s = numpy.ones_like(self.I1)
         for i, I1 in enumerate(I1s):
             data = self.images_ds[i]
+            if self.variance_formula:
+                variance = self.variance_function(data, self.dark)
+            else:
+                variance = None
             I1_corrected = I1 / self.scaling_factor
             for meth in self.to_save:
                 if meth in ["raw", "dark"]:
                     continue
-                res = None
+                res = err = None
+
                 ds = self.output_ds[meth]
+                if variance is not None:
+                    err_ds = self.output_ds[meth + "_err"]
 
                 if meth in ("sub", "flat", "dist", "cor"):
-                    res = self.workers[meth].process(data)
+                    res = self.workers[meth].process(data, variance=variance)
+                    if variance is not None:
+                        res, err = res
                 elif meth == "norm":
-                    res = self.workers[meth].process(data, I1_corrected)
+                    res = self.workers[meth].process(data, variance=variance,
+                                                     normalization_factor=I1_corrected)
+                    if variance is not None:
+                        res, err = res
+
                 elif meth == "azim":
-                    res = self.workers[meth].process(data, I1_corrected)
+                    res = self.workers[meth].process(data, variance=variance,
+                                                     normalization_factor=I1_corrected)
+                    if variance is not None:
+                        res, err = res
+
                     if i == 0:
                         if "q" not in ds.parent:
                             ds.parent["q"] = numpy.ascontiguousarray(self.workers[meth].radial, dtype=numpy.float32)
@@ -1110,7 +1152,12 @@ Possible values for to_save:
                             ds.parent["chi"].attrs["axis"] = "2"
                             ds.parent["chi"].attrs["interpretation"] = "scalar"
                 elif meth.startswith("ave"):
-                    res = self.workers[meth].process(data, I1_corrected)
+                    res = self.workers[meth].process(data, variance=variance,
+                                                     normalization_factor=I1_corrected)
+                    if variance is not None:
+                        res, err = res
+
+                    # TODO: add other units
                     if i == 0 and "q" not in ds.parent:
                         if "log(1+q.nm)" in meth:
                             q = numpy.exp(self.workers[meth].radial) - 1.0
@@ -1131,9 +1178,9 @@ Possible values for to_save:
                     self.log_warning("Unknown/supported method ... %s, skipping" % (meth))
                     continue
                 ds[i] = res
-                
-                
-                
+                if err is not None:
+                    err_ds[i] = err
+
     def read_data(self, filename):
         """read dark data from a file
 
@@ -1157,15 +1204,15 @@ Possible values for to_save:
     def teardown(self):
         """Method for cleaning up stuff
         """
-        #Finally update the cache:
+        # Finally update the cache:
         to_cache = {}
         for meth in self.to_save:
             worker = self.workers[meth]
             if "ai" in dir(worker):
                 to_cache.update(worker.ai._cached_array)
-        
+
         self.cache.get(self.cachekey, {}).update(to_cache)
-        
+
         if self.images_ds:
             self.images_ds.file.close()
         for ds in self.output_ds.values():
