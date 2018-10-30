@@ -1199,8 +1199,12 @@ Possible values for to_save:
             for entry in nxs.get_entries():
                 for instrument in nxs.get_class(entry, "NXinstrument"):
                     for detector in nxs.get_class(instrument, "NXdetector"):
-                        if "data" in detector:
-                            return numpy.array(detector["data"])
+                        data = detector.get("data")
+                        if isinstance(data, h5py.Group):
+                            if data.attrs.get("NX_class") == "NXdata":
+                                # this is an NXdata not a dataset: use the @signal
+                                data = data.get(data.attrs.get("signal"))
+                        return numpy.array(data)
 
     def get_solid_angle(self):
         """ calculate the solid angle if needed and return it
