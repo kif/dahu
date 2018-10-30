@@ -1192,6 +1192,9 @@ Possible values for to_save:
         @param filename: HDF5 file containing dark frames
         @return: numpy array with dark
         """
+        if not os.path.exists(filename):
+            self.log_error("Unable to read dark data from filename %s" % filename,
+                           do_raise=True)
         with pyFAI.io.Nexus(filename, "r") as nxs:
             for entry in nxs.get_entries():
                 for instrument in nxs.get_class(entry, "NXinstrument"):
