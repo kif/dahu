@@ -27,6 +27,7 @@ import numpy
 import os
 import posixpath
 import pyFAI
+from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 import pyFAI.worker
 import pyFAI.io
 import pyFAI.utils
@@ -662,12 +663,16 @@ Possible values for to_save:
         self.dummy = self.metadata.get("Dummy", self.dummy)
         self.delta_dummy = self.metadata.get("DDummy", self.delta_dummy)
         # read detector distortion distortion_filename
-        self.ai = pyFAI.AzimuthalIntegrator()
+
+        self.log_warning("Metadata: " + str(self.metadata))
+        self.log_warning("forai: " + str(forai))
+
+        self.ai = AzimuthalIntegrator()
         self.ai.setSPD(**forai)
 
         self.distortion_filename = self.input.get("distortion_filename") or None
         if type(self.distortion_filename) in StringTypes:
-            detector = pyFAI.detectors.Detector(splineFile=self.distortion_filename)
+            detector = pyFAI.detector_factory("Frelon", {"splineFile": self.distortion_filename})
             if tuple(detector.shape) != shape:
                 self.log_warning("Binning needed for spline ? detector claims %s but image size is %s" % (detector.shape, shape))
                 detector.guess_binning(shape)
