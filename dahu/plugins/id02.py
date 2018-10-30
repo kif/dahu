@@ -895,9 +895,12 @@ Possible values for to_save:
             return {}
         if "parameters" in detector_grp:
             parameters_grp = detector_grp["parameters"]
+        elif "data" in detector_grp:
+            nxdata = detector_grp["data"]
+            if "header" in nxdata and isinstance(nxdata["header"], h5py.Group):
+                parameters_grp = nxdata["header"]
         else:
             return {}
-
         for key, value in parameters_grp.items():
             base = key.split("_")[0]
             conv = self.KEY_CONV.get(base, str)
