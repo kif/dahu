@@ -1055,27 +1055,41 @@ Possible values for to_save:
                 self.workers[ext] = worker
             elif ext == "sub":
                 worker = pyFAI.worker.PixelwiseWorker(dark=self.dark,
-                                                      dummy=self.dummy, delta_dummy=self.delta_dummy,
+                                                      dummy=self.dummy,
+                                                      delta_dummy=self.delta_dummy,
                                                       )
                 self.workers[ext] = worker
             elif ext == "flat":
-                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark, flat=self.flat,
+                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark,
+                                                      flat=self.flat,
                                                       dummy=self.dummy, delta_dummy=self.delta_dummy,
                                                       )
                 self.workers[ext] = worker
             elif ext == "solid":
-                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle(),
-                                                      dummy=self.dummy, delta_dummy=self.delta_dummy, polarization=self.polarization
+                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark,
+                                                      flat=self.flat,
+                                                      solidangle=self.get_solid_angle(),
+                                                      dummy=self.dummy,
+                                                      delta_dummy=self.delta_dummy,
+                                                      polarization=self.polarization
                                                       )
                 self.workers[ext] = worker
             elif ext == "dist":
-                worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle(),
-                                                       dummy=self.dummy, delta_dummy=self.delta_dummy, polarization=self.polarization,
+                worker = pyFAI.worker.DistortionWorker(dark=self.dark,
+                                                       flat=self.flat,
+                                                       solidangle=self.get_solid_angle(),
+                                                       dummy=self.dummy,
+                                                       delta_dummy=self.delta_dummy,
+                                                       polarization=self.polarization,
                                                        detector=self.ai.detector)
                 self.workers[ext] = worker
             elif ext == "norm":
-                worker = pyFAI.worker.DistortionWorker(dark=self.dark, flat=self.flat, solidangle=self.get_solid_angle(),
-                                                       dummy=self.dummy, delta_dummy=self.delta_dummy, polarization=self.polarization,
+                worker = pyFAI.worker.DistortionWorker(dark=self.dark,
+                                                       flat=self.flat,
+                                                       solidangle=self.get_solid_angle(),
+                                                       dummy=self.dummy,
+                                                       delta_dummy=self.delta_dummy,
+                                                       polarization=self.polarization,
                                                        detector=self.ai.detector)
                 self.workers[ext] = worker
             else:
