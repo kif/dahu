@@ -15,7 +15,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "29/10/2018"
+__date__ = "30/10/2018"
 __status__ = "production"
 version = "0.8"
 
@@ -589,6 +589,7 @@ Possible values for to_save:
         if not os.path.isdir(self.dest):
             os.makedirs(self.dest)
         c216_filename = os.path.abspath(self.input.get("c216_filename", ""))
+
         if (os.path.dirname(c216_filename) != self.dest) and (os.path.basename(c216_filename) not in os.listdir(self.dest)):
             self.output_hdf5["metadata"] = os.path.join(self.dest, os.path.basename(c216_filename))
             m = threading.Thread(target=shutil.copy, name="copy metadata", args=(c216_filename, self.dest))
@@ -805,6 +806,10 @@ Possible values for to_save:
         """
         if ("I1" in self.input):
             return numpy.array(self.input["I1"]), None
+
+        if not os.path.exists(mfile):
+            self.log_error("Metadata file %s does not exist" % mfile, do_raise=True)
+
         self.metadata_nxs = pyFAI.io.Nexus(mfile, "r")
         I1 = t = None
         if correct_shutter_closing_time:
