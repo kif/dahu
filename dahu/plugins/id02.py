@@ -1146,7 +1146,6 @@ Possible values for to_save:
                 self.output_ds[ext + "_err"] = error_ds
             if self.t is not None:
                 nxdata["t"] = self.t
-                nxdata["t"].attrs["axis"] = "1"
                 nxdata["t"].attrs["interpretation"] = "scalar"
                 nxdata["t"].attrs["unit"] = "s"
 
@@ -1157,9 +1156,6 @@ Possible values for to_save:
             elif ext == "ave":
                 nxdata.attrs["axes"] = [".", "q"]
                 output_ds.attrs["interpretation"] = "spectrum"
-            elif ext in ("sub", "flat", "solid", "dist"):
-                nxdata.attrs["axes"] = [".", ".", "."]
-                output_ds.attrs["interpretation"] = "image"
             else:
                 output_ds.attrs["interpretation"] = "image"
             self.output_ds[ext] = output_ds
