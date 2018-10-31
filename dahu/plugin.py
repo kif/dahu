@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/03/2018"
+__date__ = "31/10/2018"
 __status__ = "production"
 
 from .factory import plugin_factory, register
@@ -77,7 +77,7 @@ class Plugin(object):
         self.output["logging"] = self._logging
         if self.input.get("do_profiling"):
             self.__profiler.disable()
-            name = "%05i_%s.%s.profile" % (self.input.get("job_id"), self.__class__.__module__, self.__class__.__name__)
+            name = "%05i_%s.%s.profile" % (self.input.get("job_id", 0), self.__class__.__module__, self.__class__.__name__)
             profile_file = os.path.join(get_workdir(), name)
             self.log_error("Profiling information in %s" % profile_file, do_raise=False)
             self.__profiler.dump_stats(profile_file)

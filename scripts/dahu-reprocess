@@ -70,8 +70,8 @@ def process(args):
     """
     Process a set of arguments
     """
-    for fn in args:
-        print("Processing %s" % fn)
+    for idx, fn in enumerate(args):
+        print("Processing #%i: %s" % (idx, fn))
         if os.path.exists(fn):
             with open(fn, "r") as fp:
                 dico = json.load(fp)
@@ -79,6 +79,7 @@ def process(args):
             logging.warning("No such file: %s" % fn)
             continue
         plugin_name = dico["plugin_name"]
+        dico["jon_id"] = idx
         plugin = dahu.factory.plugin_factory(plugin_name)
         plugin.input = dico
         state = _run_(plugin, "setup")
