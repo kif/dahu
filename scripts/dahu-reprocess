@@ -91,7 +91,14 @@ def process(args):
             else:
                 state = STATE_FAILURE
         print("Finished with state: %s" % state)
-        print(json.dumps(plugin.output, indent=4))
+        dst_file = fn + ".out"
+        filecnt = len(glob.glob(dst_file + "*"))
+        if filecnt:
+            dst_file += str(filecnt)
+        result = json.dumps(plugin.output, indent=2)
+        with open(dst_file, "w") as fp:
+            fp.write(result)
+        print(result)
 
 if __name__ == "__main__":
     args = parse()
