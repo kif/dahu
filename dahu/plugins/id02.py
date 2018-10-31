@@ -681,7 +681,7 @@ Possible values for to_save:
                 detector.guess_binning(shape)
             self.ai.detector = detector
         else:
-            self.ai.detector.max_shape = self.in_shape[-2:]
+            self.ai.detector.shape = self.in_shape[-2:]
 
         self.log_warning("AI:%s" % self.ai)
 
