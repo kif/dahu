@@ -525,8 +525,7 @@ Possible values for to_save:
     def __init__(self):
         Plugin.__init__(self)
         self.ai = None
-        self.distotion_cor = None
-        self.distotion_norm = None
+        self.distortion = None
         self.workers = {}
         self.output_ds = {}  # output datasets
         self.dest = None  # output directory
@@ -559,7 +558,8 @@ Possible values for to_save:
         self.delta_dummy = None
         self.unit = "q_nm^-1"
         self.polarization = None
-        self.cachekey = None
+        self.cache_ai = None
+        self.cache_dis = None
         self.variance_formula = None
         self.variance_function = lambda data, dark: None
 
@@ -685,10 +685,10 @@ Possible values for to_save:
 
         self.log_warning("AI:%s" % self.ai)
 
-        self.cachekey = CacheKey(str(self.ai), self.mask_filename, shape)
+        self.cache_ai = CacheKey(str(self.ai), self.mask_filename, shape)
 
-        if self.cachekey in self.cache:
-            self.ai._cached_array.update(self.cache.get(self.cachekey))
+        if self.cache_ai in self.cache:
+            self.ai._cached_array.update(self.cache.get(self.cache_ai))
         else:
             # Initialize geometry:
             self.ai.qArray(shape)
@@ -696,7 +696,7 @@ Possible values for to_save:
             self.ai.deltaQ(shape)
             self.ai.deltaChi(shape)
             self.ai.solidAngleArray(shape)
-            self.cache.get(self.cachekey, {}).update(self.ai._cached_array)
+            self.cache.get(self.cache_ai, {}).update(self.ai._cached_array)
 
         if self.input.get("do_polarization"):
             self.polarization = self.ai.polarization(factor=self.input.get("polarization_factor"),
@@ -1088,6 +1088,17 @@ Possible values for to_save:
                                                        polarization=self.polarization,
                                                        detector=self.ai.detector)
                 self.workers[ext] = worker
+                if self.distortion is None:
+                    self.distortion = worker.distortion
+                    self.cache_dis = str(self.ai.detector)
+                    if self.cache_dis in self.cache:
+                        self.distortion.lut = self.cache[self.cache_dis]
+                    else:
+                        self.distortion.calc_LUT()
+                        self.cache[self.cache_dis] = self.distortion.lut
+                else:
+                    worker.distortion = self.distortion
+
             elif ext == "norm":
                 worker = pyFAI.worker.DistortionWorker(dark=self.dark,
                                                        flat=self.flat,
@@ -1097,6 +1108,16 @@ Possible values for to_save:
                                                        polarization=self.polarization,
                                                        detector=self.ai.detector)
                 self.workers[ext] = worker
+                if self.distortion is None:
+                    self.distortion = worker.distortion
+                    self.cache_dis = str(self.ai.detector)
+                    if self.cache_dis in self.cache:
+                        self.distortion.lut = self.cache[self.cache_dis]
+                    else:
+                        self.distortion.calc_LUT()
+                        self.cache[self.cache_dis] = self.distortion.lut
+                else:
+                    worker.distortion = self.distortion
             else:
                 self.log_warning("unknown treatment %s" % ext)
 
@@ -1260,7 +1281,7 @@ Possible values for to_save:
             if "ai" in dir(worker):
                 to_cache.update(worker.ai._cached_array)
 
-        self.cache.get(self.cachekey, {}).update(to_cache)
+        self.cache.get(self.cache_ai, {}).update(to_cache)
 
         if self.images_ds:
             self.images_ds.file.close()
