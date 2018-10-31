@@ -942,7 +942,6 @@ Possible values for to_save:
                 os.unlink(outfile)
                 nxs = pyFAI.io.Nexus(outfile)
             entry = nxs.new_entry("entry", program_name="dahu", title=self.image_file + ":" + self.images_ds.name)
-
             entry["program_name"].attrs["version"] = dahu.version
             entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
             entry["plugin_name"].attrs["version"] = version
@@ -957,7 +956,7 @@ Possible values for to_save:
             subentry["date"] = isotime
             subentry["processing_type"] = numpy.string_(ext)
             coll = nxs.new_class(subentry, "process_" + ext, class_type="NXdata")
-            metadata_grp = coll.require_group("parameters")
+            metadata_grp = subentry.require_group("parameters")
 
             for key, val in self.metadata.iteritems():
                 if type(val) in [str, unicode]:
@@ -969,11 +968,11 @@ Possible values for to_save:
             for grp in to_copy:
                 grp_name = posixpath.split(grp.name)[-1]
                 if grp_name not in coll:
-                    toplevel = coll.require_group(grp_name)
+                    toplevel = subentry.require_group(grp_name)
                     for k, v in grp.attrs.items():
                         toplevel.attrs[k] = v
                 else:
-                    toplevel = coll[grp_name]
+                    toplevel = subentry[grp_name]
 
                 def grpdeepcopy(name, obj):
                     nxs.deep_copy(name, obj, toplevel=toplevel, excluded=["data"])

@@ -6,6 +6,7 @@ Reprocess a job using the current
 import os, json, sys, logging
 from argparse import ArgumentParser
 import dahu.factory
+from dahu.utils import get_workdir
 logging.basicConfig()
 
 STATE_UNINITIALIZED = "uninitialized"
@@ -36,8 +37,8 @@ def _run_(plugin, what):
     """
     run setup, process, teardown or abort ...
 
+    @param plugin: plugin instance
     @param what: setup, process or teardown
-    @parma args: argument list to be passed to the method
     @return : execution code
     """
 
@@ -67,9 +68,11 @@ def _run_(plugin, what):
 
 
 def process(args):
+    """Process a set of arguments
+    
+    :param args: list of files to process
     """
-    Process a set of arguments
-    """
+    working_dir = get_workdir()
     for idx, fn in enumerate(args):
         print("Processing #%i: %s" % (idx, fn))
         if os.path.exists(fn):
@@ -79,7 +82,7 @@ def process(args):
             logging.warning("No such file: %s" % fn)
             continue
         plugin_name = dico["plugin_name"]
-        dico["jon_id"] = idx
+        dico["job_id"] = idx
         plugin = dahu.factory.plugin_factory(plugin_name)
         plugin.input = dico
         state = _run_(plugin, "setup")
@@ -91,12 +94,9 @@ def process(args):
             else:
                 state = STATE_FAILURE
         print("Finished with state: %s" % state)
-        dst_file = fn + ".out"
-        filecnt = len(glob.glob(dst_file + "*"))
-        if filecnt:
-            dst_file += str(filecnt)
         result = json.dumps(plugin.output, indent=2)
-        with open(dst_file, "w") as fp:
+        dst_file = os.path.splitext(os.path.basename(fn))[0] + ".out"
+        with open(os.path.join(working_dir, dst_file), "w") as fp:
             fp.write(result)
         print(result)
 
