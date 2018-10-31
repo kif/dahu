@@ -15,7 +15,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "30/10/2018"
+__date__ = "31/10/2018"
 __status__ = "production"
 version = "0.8"
 
@@ -664,8 +664,8 @@ Possible values for to_save:
         self.delta_dummy = self.metadata.get("DDummy", self.delta_dummy)
         # read detector distortion distortion_filename
 
-        self.log_warning("Metadata: " + str(self.metadata))
-        self.log_warning("forai: " + str(forai))
+        # self.log_warning("Metadata: " + str(self.metadata))
+        # self.log_warning("forai: " + str(forai))
 
         self.ai = AzimuthalIntegrator()
         self.ai.setSPD(**forai)
@@ -729,7 +729,7 @@ Possible values for to_save:
                 try:
                     dummy = float(dummy)
                 except:
-                    self.log_error("Dummy value in mask is unconsitent %s" % dummy)
+                    self.log_error("Dummy value in mask is unconsistent %s" % dummy)
                     dummy = None
 
             if flat.ndim == 3:
@@ -862,7 +862,7 @@ Possible values for to_save:
         elif len(detector_grp) == 0 and "detector" in instrument:
             detector_grp = instrument["detector"]
         else:
-            self.log_error("Expected ONE deteector is expected in experiment, got %s in %s %s %s" %
+            self.log_error("Expected ONE detector is expected in experiment, got %s in %s %s %s" %
                            (len(detector_grp), self.input_nxs, self.image_file, instrument))
         self.images_ds = detector_grp.get("data")
         if isinstance(self.images_ds, h5py.Group):
