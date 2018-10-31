@@ -27,6 +27,7 @@ import numpy
 import os
 import posixpath
 import pyFAI
+import bitshuffle
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 import pyFAI.worker
 import pyFAI.io
@@ -68,8 +69,6 @@ try:
 except:
     pass
 
-if "TANGO_HOST" not in os.environ:
-    raise RuntimeError("No TANGO_HOST defined")
 
 CacheKey = namedtuple("CacheKey", ["ai", "mask", "shape"])
 
@@ -187,6 +186,8 @@ input = {
         self.tfg_grp = None
         self.mcs_grp = None
         self.input2 = {}
+        if "TANGO_HOST" not in os.environ:
+            raise RuntimeError("No TANGO_HOST defined")
 
     def setup(self, kwargs=None):
         """
@@ -950,13 +951,14 @@ Possible values for to_save:
 
             entry["detector_name"] = numpy.string_(detector_name)
 
-            subentry = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
-            subentry["program"] = numpy.string_("PyFAI")
-            subentry["version"] = numpy.string_(pyFAI.version)
-            subentry["date"] = isotime
-            subentry["processing_type"] = numpy.string_(ext)
-            coll = nxs.new_class(subentry, "process_" + ext, class_type="NXdata")
-            metadata_grp = subentry.require_group("parameters")
+            nxprocess = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
+            nxprocess["program"] = numpy.string_("PyFAI")
+            nxprocess["version"] = numpy.string_(pyFAI.version)
+            nxprocess["date"] = isotime
+            nxprocess["processing_type"] = numpy.string_(ext)
+            nxdata = nxs.new_class(nxprocess, "result_" + ext, class_type="NXdata")
+            entry.attrs["default"] = nxdata.name
+            metadata_grp = nxprocess.require_group("parameters")
 
             for key, val in self.metadata.iteritems():
                 if type(val) in [str, unicode]:
@@ -967,12 +969,12 @@ Possible values for to_save:
             # copy metadata from other files:
             for grp in to_copy:
                 grp_name = posixpath.split(grp.name)[-1]
-                if grp_name not in coll:
-                    toplevel = subentry.require_group(grp_name)
+                if grp_name not in nxdata:
+                    toplevel = nxprocess.require_group(grp_name)
                     for k, v in grp.attrs.items():
                         toplevel.attrs[k] = v
                 else:
-                    toplevel = subentry[grp_name]
+                    toplevel = nxprocess[grp_name]
 
                 def grpdeepcopy(name, obj):
                     nxs.deep_copy(name, obj, toplevel=toplevel, excluded=["data"])
@@ -1094,33 +1096,44 @@ Possible values for to_save:
             else:
                 self.log_warning("unknown treatment %s" % ext)
 
-            # TODO: manage compression here
+            if len(shape) >= 3:
+                compression = {"compression":bitshuffle.h5.H5FILTER,
+                               "compression_opts": (0, bitshuffle.h5.H5_COMPRESS_LZ4)}
+            else:
+                compression = {}
 
-            output_ds = coll.create_dataset("data", shape, "float32",
-                                            chunks=(1,) + shape[1:],
-                                            maxshape=(None,) + shape[1:])
-            coll.attrs["signal"] = "data"
-            output_ds.attrs["signal"] = "1"
+            output_ds = nxdata.create_dataset("data",
+                                              shape,
+                                              dtype=numpy.float32,
+                                              chunks=(1,) + shape[1:],
+                                              maxshape=(None,) + shape[1:],
+                                              **compression)
+            nxdata.attrs["signal"] = "data"
+            # output_ds.attrs["signal"] = "1"
+            entry.attrs["default"] = nxdata.name
             if self.variance_formula is not None:
-                error_ds = coll.create_dataset("errors", shape, "float32",
-                                               chunks=(1,) + shape[1:],
-                                               maxshape=(None,) + shape[1:])
-                coll.attrs["uncertainties"] = "errors"
+                error_ds = nxdata.create_dataset("errors", shape,
+                                                 dtype=numpy.float32,
+                                                 chunks=(1,) + shape[1:],
+                                                 maxshape=(None,) + shape[1:],
+                                                 **compression)
+                nxdata.attrs["uncertainties"] = "errors"
                 self.output_ds[ext + "_err"] = error_ds
             if self.t is not None:
-                coll["t"] = self.t
-                coll["t"].attrs["axis"] = "1"
-                coll["t"].attrs["interpretation"] = "scalar"
-                coll["t"].attrs["unit"] = "s"
+                nxdata["t"] = self.t
+                nxdata["t"].attrs["axis"] = "1"
+                nxdata["t"].attrs["interpretation"] = "scalar"
+                nxdata["t"].attrs["unit"] = "s"
 
             if ext == "azim":
-                coll.attrs["axes"] = ["t", "chi", "q"]
+                nxdata.attrs["axes"] = ["t", "chi", "q"]
                 output_ds.attrs["interpretation"] = "image"
+
             elif ext == "ave":
-                coll.attrs["axes"] = ["t", "q"]
+                nxdata.attrs["axes"] = ["t", "q"]
                 output_ds.attrs["interpretation"] = "spectrum"
             elif ext in ("sub", "flat", "solid", "dist"):
-                coll.attrs["axes"] = ["t", ".", "."]
+                nxdata.attrs["axes"] = ["t", ".", "."]
                 output_ds.attrs["interpretation"] = "image"
             else:
                 output_ds.attrs["interpretation"] = "image"

@@ -83,6 +83,7 @@ def process(args):
             continue
         plugin_name = dico["plugin_name"]
         dico["job_id"] = idx
+
         plugin = dahu.factory.plugin_factory(plugin_name)
         plugin.input = dico
         state = _run_(plugin, "setup")
@@ -95,10 +96,12 @@ def process(args):
                 state = STATE_FAILURE
         print("Finished with state: %s" % state)
         result = json.dumps(plugin.output, indent=2)
+        print(result)
         dst_file = os.path.splitext(os.path.basename(fn))[0] + ".out"
         with open(os.path.join(working_dir, dst_file), "w") as fp:
             fp.write(result)
-        print(result)
+        with open(os.path.join(working_dir, os.path.basename(fn)), "w") as fp:
+            fp.write(json.dumps(plugin.input, indent=2))
 
 if __name__ == "__main__":
     args = parse()
