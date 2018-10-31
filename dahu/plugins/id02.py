@@ -1122,7 +1122,7 @@ Possible values for to_save:
                 self.log_warning("unknown treatment %s" % ext)
 
             if len(shape) >= 3:
-                compression = {"compression":bitshuffle.h5.H5FILTER,
+                compression = {"compression": bitshuffle.h5.H5FILTER,
                                "compression_opts": (0, bitshuffle.h5.H5_COMPRESS_LZ4)}
             else:
                 compression = {}
@@ -1151,14 +1151,14 @@ Possible values for to_save:
                 nxdata["t"].attrs["unit"] = "s"
 
             if ext == "azim":
-                nxdata.attrs["axes"] = ["t", "chi", "q"]
+                nxdata.attrs["axes"] = [".", "chi", "q"]
                 output_ds.attrs["interpretation"] = "image"
 
             elif ext == "ave":
-                nxdata.attrs["axes"] = ["t", "q"]
+                nxdata.attrs["axes"] = [".", "q"]
                 output_ds.attrs["interpretation"] = "spectrum"
             elif ext in ("sub", "flat", "solid", "dist"):
-                nxdata.attrs["axes"] = ["t", ".", "."]
+                nxdata.attrs["axes"] = [".", ".", "."]
                 output_ds.attrs["interpretation"] = "image"
             else:
                 output_ds.attrs["interpretation"] = "image"
