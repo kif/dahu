@@ -680,6 +680,8 @@ Possible values for to_save:
                 self.log_warning("Binning needed for spline ? detector claims %s but image size is %s" % (detector.shape, shape))
                 detector.guess_binning(shape)
             self.ai.detector = detector
+        else:
+            self.ai.detector.max_shape = self.in_shape[-2:]
 
         self.log_warning("AI:%s" % self.ai)
 
