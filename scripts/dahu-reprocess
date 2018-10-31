@@ -3,7 +3,7 @@
 """
 Reprocess a job using the current
 """
-import os, json, sys, logging
+import os, json, sys, logging, time
 from argparse import ArgumentParser
 import dahu.factory
 from dahu.utils import get_workdir
@@ -83,8 +83,8 @@ def process(args):
             continue
         plugin_name = dico["plugin_name"]
         dico["job_id"] = idx
-
         plugin = dahu.factory.plugin_factory(plugin_name)
+        start_time = time.time()
         plugin.input = dico
         state = _run_(plugin, "setup")
         if state == STATE_RUNNING:
@@ -95,6 +95,7 @@ def process(args):
             else:
                 state = STATE_FAILURE
         print("Finished with state: %s" % state)
+        plugin.output["job_runtime"] = time.time() - start_time
         result = json.dumps(plugin.output, indent=2)
         print(result)
         basename = os.path.join(working_dir, "%05i_%s" % (idx, plugin.get_name()))
