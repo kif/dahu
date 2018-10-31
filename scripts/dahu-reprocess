@@ -6,7 +6,7 @@ Reprocess a job using the current
 import os, json, sys, logging
 from argparse import ArgumentParser
 import dahu.factory
-from dahu.utils import get_workdir, fully_qualified_name
+from dahu.utils import get_workdir
 logging.basicConfig()
 
 STATE_UNINITIALIZED = "uninitialized"
@@ -97,7 +97,7 @@ def process(args):
         print("Finished with state: %s" % state)
         result = json.dumps(plugin.output, indent=2)
         print(result)
-        basename = os.path.join(working_dir, "%04i_%s" % (idx, fully_qualified_name(plugin)))
+        basename = os.path.join(working_dir, "%04i_%s" % (idx, plugin.get_name()))
         with open(basename + ".out", "w") as fp:
             fp.write(result)
         with open(basename + ".inp", "w") as fp:
