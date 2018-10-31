@@ -28,9 +28,11 @@ import os
 import posixpath
 import pyFAI
 import bitshuffle
+import bitshuffle.h5
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 import pyFAI.worker
 import pyFAI.io
+pyFAI.io.logger.setLevel(logging.ERROR)
 import pyFAI.utils
 import fabio
 import shutil
