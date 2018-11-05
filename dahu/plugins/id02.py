@@ -27,8 +27,11 @@ import numpy
 import os
 import posixpath
 import pyFAI
-import bitshuffle
-import bitshuffle.h5
+try:
+    import bitshuffle
+    import bitshuffle.h5
+except:
+    bitshuffle = None 
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 import pyFAI.worker
 import pyFAI.io
@@ -1121,7 +1124,7 @@ Possible values for to_save:
             else:
                 self.log_warning("unknown treatment %s" % ext)
 
-            if len(shape) >= 3:
+            if (len(shape) >= 3) and (bitshuffle is not None):
                 compression = {"compression": bitshuffle.h5.H5FILTER,
                                "compression_opts": (0, bitshuffle.h5.H5_COMPRESS_LZ4)}
             else:
