@@ -15,7 +15,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "31/10/2018"
+__date__ = "05/11/2018"
 __status__ = "production"
 version = "0.8"
 
@@ -31,7 +31,7 @@ try:
     import bitshuffle
     import bitshuffle.h5
 except:
-    bitshuffle = None 
+    bitshuffle = None
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 import pyFAI.worker
 import pyFAI.io
@@ -220,7 +220,7 @@ input = {
 
     def create_hdf5(self):
         """
-        Create a HDF5 file and datastructure
+        Create a HDF5 file and data-structure
         """
         try:
             self.hdf5 = h5py.File(self.hdf5_filename, 'a')
@@ -233,6 +233,14 @@ input = {
             self.entry += "_"
         entries = len([i.startswith(self.entry) for i in self.hdf5])
         self.entry = posixpath.join("", "%s%04d" % (self.entry, entries))
+
+        entry = self.hdf5.require_group(self.entry)
+        entry["program_name"].attrs["version"] = dahu.version
+        entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
+        entry["plugin_name"].attrs["version"] = version
+        entry["input"] = numpy.string_(json.dumps(self.input))
+        entry["input"].attrs["format"] = 'json'
+
         self.instrument = posixpath.join(self.entry, self.instrument)
         self.group = self.hdf5.require_group(self.instrument)
         self.group.parent.attrs["NX_class"] = "NXentry"
