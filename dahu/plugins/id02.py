@@ -1163,12 +1163,19 @@ Possible values for to_save:
             if ext == "azim":
                 nxdata.attrs["axes"] = [".", "chi", "q"]
                 output_ds.attrs["interpretation"] = "image"
+                if self.variance_formula is not None:
+                    error_ds.attrs["interpretation"] = "image"
 
             elif ext == "ave":
                 nxdata.attrs["axes"] = [".", "q"]
                 output_ds.attrs["interpretation"] = "spectrum"
+                if self.variance_formula is not None:
+                    error_ds.attrs["interpretation"] = "spectrum"
             else:
                 output_ds.attrs["interpretation"] = "image"
+                if self.variance_formula is not None:
+                    error_ds.attrs["interpretation"] = "image"
+
             self.output_ds[ext] = output_ds
 
     def process_images(self):
@@ -1209,7 +1216,7 @@ Possible values for to_save:
                     res = self.workers[meth].process(data, variance=variance,
                                                      normalization_factor=I1_corrected)
                     if (variance is not None):
-                        if  len(res) == 2:
+                        if len(res) == 2:
                             # TODO, disabled for now, fix in pyFAI.AzimuthalIntegrator.integrat2d where variance is not yet used
                             res, err = res
                         else:
