@@ -1203,13 +1203,17 @@ Possible values for to_save:
                     res = self.workers[meth].process(data, variance=variance,
                                                      normalization_factor=I1_corrected)
                     if variance is not None:
-                        res, err = res
+                        res, err, _ = res
 
                 elif meth == "azim":
                     res = self.workers[meth].process(data, variance=variance,
                                                      normalization_factor=I1_corrected)
-                    if variance is not None:
-                        res, err = res
+                    if (variance is not None):
+                        if  len(res) == 2:
+                            #TODO, disabled for now, fix in pyFAI.AzimuthalIntegrator.integrat2d where variance is not yet used
+                            res, err = res
+                        else:
+                            err = numpy.zeros_like(res) 
 
                     if i == 0:
                         if "q" not in ds.parent:
@@ -1225,8 +1229,6 @@ Possible values for to_save:
                 elif meth.startswith("ave"):
                     res = self.workers[meth].process(data, variance=variance,
                                                      normalization_factor=I1_corrected)
-                    if variance is not None:
-                        res, err = res
 
                     # TODO: add other units
                     if i == 0 and "q" not in ds.parent:
@@ -1244,6 +1246,11 @@ Possible values for to_save:
                         ds.parent["q"].attrs["unit"] = self.unit
                         ds.parent["q"].attrs["axis"] = "2"
                         ds.parent["q"].attrs["interpretation"] = "scalar"
+
+                    if (variance is not None) and (res.shape[1] == 3):
+                        err = res[:,2]
+                    else:
+                        err = None  
                     res = res[:, 1]
                 else:
                     self.log_warning("Unknown/supported method ... %s, skipping" % (meth))
