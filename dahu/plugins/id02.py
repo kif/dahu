@@ -15,7 +15,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "05/11/2018"
+__date__ = "06/11/2018"
 __status__ = "production"
 version = "0.8"
 
@@ -1148,12 +1148,12 @@ Possible values for to_save:
             # output_ds.attrs["signal"] = "1"
             entry.attrs["default"] = nxdata.name
             if self.variance_formula is not None:
-                error_ds = nxdata.create_dataset("errors", shape,
+                error_ds = nxdata.create_dataset("data_errors", shape,
                                                  dtype=numpy.float32,
                                                  chunks=(1,) + shape[1:],
                                                  maxshape=(None,) + shape[1:],
                                                  **compression)
-                nxdata.attrs["uncertainties"] = "errors"
+                # nxdata.attrs["uncertainties"] = "errors"
                 self.output_ds[ext + "_err"] = error_ds
             if self.t is not None:
                 nxdata["t"] = self.t
@@ -1210,10 +1210,10 @@ Possible values for to_save:
                                                      normalization_factor=I1_corrected)
                     if (variance is not None):
                         if  len(res) == 2:
-                            #TODO, disabled for now, fix in pyFAI.AzimuthalIntegrator.integrat2d where variance is not yet used
+                            # TODO, disabled for now, fix in pyFAI.AzimuthalIntegrator.integrat2d where variance is not yet used
                             res, err = res
                         else:
-                            err = numpy.zeros_like(res) 
+                            err = numpy.zeros_like(res)
 
                     if i == 0:
                         if "q" not in ds.parent:
@@ -1248,9 +1248,9 @@ Possible values for to_save:
                         ds.parent["q"].attrs["interpretation"] = "scalar"
 
                     if (variance is not None) and (res.shape[1] == 3):
-                        err = res[:,2]
+                        err = res[:, 2]
                     else:
-                        err = None  
+                        err = None
                     res = res[:, 1]
                 else:
                     self.log_warning("Unknown/supported method ... %s, skipping" % (meth))
