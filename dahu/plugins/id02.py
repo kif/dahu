@@ -183,7 +183,7 @@ input = {
         Plugin.__init__(self)
         self.cycle = None
         self.c216 = None
-        self.hdf5 = None
+        self.nxs = None
         self.hdf5_filename = None
         self.entry = None
         self.instrument = None
@@ -223,18 +223,14 @@ input = {
         Create a HDF5 file and data-structure
         """
         try:
-            self.hdf5 = h5py.File(self.hdf5_filename, 'a')
+            self.nxs = pyFAI.io.Nexus(self.hdf5_filename, "a")
         except IOError as error:
-            os.unlink(self.hdf5_filename)
             self.log_warning("Unable to open %s: %s. Removing file and starting from scratch" % (self.hdf5_filename, error))
-            self.hdf5 = h5py.File(self.hdf5_filename)
+            os.unlink(outfile)
+            self.nxs = pyFAI.io.Nexus(self.hdf5_filename)
 
-        if not self.entry.endswith("_"):
-            self.entry += "_"
-        entries = len([i.startswith(self.entry) for i in self.hdf5])
-        self.entry = posixpath.join("", "%s%04d" % (self.entry, entries))
-
-        entry = self.hdf5.require_group(self.entry)
+        entry = self.nxs.new_entry(self.entry, program_name="dahu")
+        #entry = self.hdf5.require_group(self.entry, program_name="dahu")
         entry["program_name"].attrs["version"] = dahu.version
         entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
         entry["plugin_name"].attrs["version"] = version
@@ -242,21 +238,21 @@ input = {
         entry["input"].attrs["format"] = 'json'
 
         self.instrument = posixpath.join(self.entry, self.instrument)
-        self.group = self.hdf5.require_group(self.instrument)
+        self.group = self.nxs.h5.require_group(self.instrument)
         self.group.parent.attrs["NX_class"] = "NXentry"
         self.group.attrs["NX_class"] = "NXinstrument"
         # TimeFrameGenerator
-        self.tfg_grp = self.hdf5.require_group(posixpath.join(self.instrument, "TFG"))
+        self.tfg_grp = self.nxs.h5.require_group(posixpath.join(self.instrument, "TFG"))
         self.tfg_grp.attrs["NX_class"] = "NXcollection"
         self.tfg_grp["device"] = numpy.string_(self.c216)
 
         # MultiCounterScaler
-        self.mcs_grp = self.hdf5.require_group(posixpath.join(self.instrument, "MCS"))
+        self.mcs_grp = self.nxs.h5.require_group(posixpath.join(self.instrument, "MCS"))
         self.mcs_grp.attrs["NX_class"] = "NXcollection"
         self.mcs_grp["device"] = numpy.string_(self.c216)
 
         # Static metadata
-        self.info_grp = self.hdf5.require_group(posixpath.join(self.instrument, "parameters"))
+        self.info_grp = self.nxs.h5.require_group(posixpath.join(self.instrument, "parameters"))
         self.info_grp.attrs["NX_class"] = "NXcollection"
 
         for field, value in self.input2.get("Info", {}).items():
@@ -430,8 +426,8 @@ input = {
         if self.group:
             self.output["c216_path"] = self.group.name
             self.group.parent["end_time"] = numpy.string_(get_isotime())
-        if self.hdf5:
-            self.hdf5.close()
+        if self.nxs:
+            self.nxs.close()
         Plugin.teardown(self)
 
 
@@ -1306,8 +1302,11 @@ Possible values for to_save:
 
         closed_files = []
         if self.images_ds:
-            filename = self.images_ds.file.filename
-            if filename not in closed_files:
+            try:
+                filename = self.images_ds.file.filename
+            except RuntimeError:
+                filename = None
+            if filename and filename not in closed_files:
                 try:
                     self.images_ds.file.close()
                 except RuntimeError:
@@ -1316,8 +1315,11 @@ Possible values for to_save:
                     closed_files.append(filename)
 
         for ds in self.output_ds.values():
-            filename = ds.file.filename
-            if filename not in closed_files:
+            try:
+                filename = ds.file.filename
+            except RuntimeError:
+                filename = None
+            if filename and filename not in closed_files:
                 try:
                     ds.file.close()
                 except RuntimeError:
