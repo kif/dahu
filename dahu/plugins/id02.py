@@ -15,7 +15,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "06/11/2018"
+__date__ = "13/11/2018"
 __status__ = "production"
 version = "0.8"
 
@@ -1304,10 +1304,27 @@ Possible values for to_save:
 
         self.cache.get(self.cache_ai, {}).update(to_cache)
 
+        closed_files = []
         if self.images_ds:
-            self.images_ds.file.close()
+            filename = self.images_ds.file.filename
+            if filename not in closed_files:
+                try:
+                    self.images_ds.file.close()
+                except RuntimeError:
+                    self.log_warning("Issue in closing file " + filename)
+                else:
+                    closed_files.append(filename)
+
         for ds in self.output_ds.values():
-            ds.file.close()
+            filename = ds.file.filename
+            if filename not in closed_files:
+                try:
+                    ds.file.close()
+                except RuntimeError:
+                    self.log_warning("Issue in closing file " + filename)
+                else:
+                    closed_files.append(filename)
+
         self.ai = None
         self.polarization = None
         self.output["files"] = self.output_hdf5
