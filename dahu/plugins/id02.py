@@ -229,7 +229,10 @@ input = {
             os.unlink(outfile)
             self.nxs = pyFAI.io.Nexus(self.hdf5_filename)
 
-        entry = self.nxs.new_entry(self.entry, program_name="dahu")
+        entry = self.nxs.new_entry(self.entry, program_name="Dahu", title="id02.metadata")
+        #self.group.parent["title"] = numpy.string_("id02.metadata")
+        #self.group.parent["program"] = numpy.string_("Dahu")
+        #self.group.parent["start_time"] = numpy.string_(start_time)
         self.entry = entry.name
         entry["program_name"].attrs["version"] = dahu.version
         entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
@@ -288,9 +291,6 @@ input = {
 
         if HS32N and HS32Z and HS32F:
             self.mcs_grp.require_group("interpreted")
-        self.group.parent["title"] = numpy.string_("id02.metadata")
-        self.group.parent["program"] = numpy.string_("Dahu")
-        self.group.parent["start_time"] = numpy.string_(start_time)
 
     def read_c216(self):
         """
@@ -425,7 +425,7 @@ input = {
         self.output["c216_filename"] = self.hdf5_filename
         if self.group:
             self.output["c216_path"] = self.group.name
-            self.group.parent["end_time"] = numpy.string_(get_isotime())
+            #self.group.parent["end_time"] = numpy.string_(get_isotime())
         if self.nxs:
             self.nxs.close()
         Plugin.teardown(self)
