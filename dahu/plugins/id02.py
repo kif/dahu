@@ -230,7 +230,7 @@ input = {
             self.nxs = pyFAI.io.Nexus(self.hdf5_filename)
 
         entry = self.nxs.new_entry(self.entry, program_name="dahu")
-        #entry = self.hdf5.require_group(self.entry, program_name="dahu")
+        self.entry = entry.name
         entry["program_name"].attrs["version"] = dahu.version
         entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
         entry["plugin_name"].attrs["version"] = version
