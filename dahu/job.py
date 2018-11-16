@@ -12,7 +12,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/03/2018"
+__date__ = "16/11/2018"
 __status__ = "production"
 
 
@@ -282,13 +282,19 @@ class Job(Thread):
                     if self._plugin.output:
                         self._output_data.update(self._plugin.output)
                     self._output_data["job_runtime"] = self._runtime
-                    base_path = os.path.join(utils.get_workdir(), "%05i_%s" % (self._jobId, self._name))
+                    dirname = os.path.join(utils.get_workdir(), "%04d" % (self._jobId // 1000))
+                    with self._semaphore:
+                        if not os.path.exists(dirname):
+                            os.mkdir(dirname)
+                    base_path = os.path.join(dirname, "%05d_%s" % (self._jobId, self._name))
                     with open(base_path + ".inp", "w") as infile:
                         json.dump(self._input_data, infile, indent=4)
                     with open(base_path + ".out", "w") as infile:
                         json.dump(self._output_data, infile, indent=4)
                     self._plugin = None
                     self.data_on_disk = base_path
+                    self._output_data = None
+                    self._input_data = None
         if force:
             gc.collect()
 
