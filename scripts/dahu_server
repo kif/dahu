@@ -23,6 +23,7 @@ import sys
 import os
 import tempfile
 import logging
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dahu_server")
 
 
@@ -32,11 +33,7 @@ from dahu.server import DahuDSClass, DahuDS
 # set loglevel at least at INFO
 if logger.getEffectiveLevel() > logging.INFO:
     logger.setLevel(logging.INFO)
-try:
-    from argparse import ArgumentParser
-except:
-    from pyFAI.argparse import ArgumentParser
-
+from argparse import ArgumentParser
 import PyTango
 
 if __name__ == '__main__':
@@ -70,8 +67,9 @@ if __name__ == '__main__':
 
     # Analyse arguments and options
     if options.debug:
-        logger.setLevel(logging.DEBUG)
         logger.debug("Switch logger to debug level")
+        logger.setLevel(logging.DEBUG)
+        logging.root.etLevel(logging.DEBUG)
 
     try:
         print(tangoParam)
