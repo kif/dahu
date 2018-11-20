@@ -51,7 +51,9 @@ from dahu.plugin import Plugin, plugin_from_function
 from dahu.utils import get_isotime
 from dahu.job import Job
 from dahu.cache import DataCache
+
 import numexpr
+numexpr.set_num_threads(8)
 
 if sys.version_info < (3, 0):
     StringTypes = (str, unicode)
@@ -62,7 +64,7 @@ logger = logging.getLogger("dahu.id02")
 # set loglevel at least at INFO
 if logger.getEffectiveLevel() > logging.INFO:
     logger.setLevel(logging.INFO)
-elif logger.getEffectiveLevel() < logging.root.level:
+if logger.getEffectiveLevel() < logging.root.level:
     logger.setLevel(logging.root.level)
 
 # silence non serious error messages, which are printed
