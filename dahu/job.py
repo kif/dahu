@@ -26,7 +26,7 @@ import json
 import logging
 import traceback
 logger = logging.getLogger("dahu.job")
-logger.setLevel(logging.DEBUG)
+#logger.setLevel(logging.DEBUG)
 from . import utils
 from .factory import plugin_factory
 
@@ -262,7 +262,7 @@ class Job(Thread):
                 else:
                     logger.error("Non callable callback method: %s" % method)
 
-    def clean(self, force=True, wait=True):
+    def clean(self, force=False, wait=True):
         """
         Frees the memory associated with the plugin
 
@@ -295,6 +295,7 @@ class Job(Thread):
                     self.data_on_disk = base_path
                     self._output_data = None
                     self._input_data = None
+                    logger.info("Finished job #%s, %s with %s in %.3fs", self._jobId, self._name, self._status, self._runtime)
         if force:
             gc.collect()
 
