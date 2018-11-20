@@ -21,7 +21,6 @@ import logging
 import time
 import types
 import multiprocessing
-import gc
 import six
 if six.PY2:
     from Queue import Queue
@@ -185,7 +184,6 @@ class DahuDS(PyTango.Device_4Impl):
             sys.stderr.flush()
             self.last_failure = job.id
         self.job_queue.task_done()
-        gc.collect()
         self.event_queue.put(job)
 
     def process_event(self):
