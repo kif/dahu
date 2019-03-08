@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "11/04/2018"
+__date__ = "08/03/2019"
 __status__ = "development"
-version = "0.4.0"
+version = "0.5.0"
 
 import os
 import numpy
@@ -31,6 +31,8 @@ logger = logging.getLogger("id15v2")
 try:
     import fabio
     import pyFAI
+    from pyFAI import azimuthalIntegrator
+    from pyFAI.method_registry import IntegrationMethod
     from silx.opencl.codec.byte_offset import ByteOffset
 except ImportError:
     logger.error("Failed to import PyFAI, fabio or silx: download and install it from pypi")
@@ -144,13 +146,21 @@ class IntegrateManyFrames(Plugin):
             self.polarization_factor = self.input.get("polarization_factor", self.polarization_factor)
         self.do_SA = self.input.get("do_SA", self.do_SA)
         self.norm = self.input.get("norm", self.norm)
-        self.method = self.input.get("method", self.method)
         self.save_raw = self.input.get("save_raw", self.save_raw)
         self.integration_method = self.input.get("integration_method", self.integration_method)
         self.sigma_clip_thresold = self.input.get("sigma_clip_thresold", self.sigma_clip_thresold)
         self.sigma_clip_max_iter = self.input.get("sigma_clip_max_iter", self.sigma_clip_max_iter)
         self.medfilt1d_percentile = self.input.get("medfilt1d_percentile", self.medfilt1d_percentile)
-
+        method = self.input.get("method", self.method)
+        if "1" in self.integration_method:
+            integration_dim = 1
+        else:
+            integration_dim = 2
+        if isinstance(method, (str, unicode)):
+            self.method = IntegrationMethod.select_old_method(integration_dim, method)
+        else:
+            self.method = IntegrationMethod.select_one_available(method, dim=integration_dim, degradable=True)
+        print(self.method)
         self.raw_compression = self.input.get("raw_compression", self.raw_compression)
         if self.save_raw:
             self.prepare_raw_hdf5(self.raw_compression)
