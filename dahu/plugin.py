@@ -1,9 +1,11 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 
 """
-Data Analysis Highly tailored fror Upbl09a
+Data Analysis RPC server over Tango: 
+
+Definiton of plugins
 """
 from __future__ import with_statement, print_function, absolute_import, division
 
@@ -11,7 +13,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "31/10/2018"
+__date__ = "07/02/2020"
 __status__ = "production"
 
 from .factory import plugin_factory, register

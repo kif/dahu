@@ -3,9 +3,10 @@
 #
 
 """
-Data Analysis RPC server over Tango 
+Data Analysis RPC server over Tango: 
+
+Factory for the loading of plugins
 """
-from __future__ import with_statement, print_function, absolute_import, division
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
@@ -23,16 +24,15 @@ logger = logging.getLogger("dahu.factory")
 from threading import Semaphore
 from .utils import get_workdir, fully_qualified_name
 
-import importlib, importlib.util
+import importlib.util
+
 
 def load_source(module_name, file_path):
     "Plugin loader which does not pollute sys.module"
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     #module = importlib.util.module_from_spec(spec)
-    #spec.loader.exec_module(module)
-    
+    #spec.loader.exec_module(module)    
     module = spec.loader.load_module(spec.name)
-    print(module)
     #Option: remove from sys.modules ...
     return module
 
@@ -74,7 +74,6 @@ class Factory(object):
         python_files = []
         for i in os.listdir(abs_dir):
             j = op.join(abs_dir, i)
-            print(i, j, op.isdir(j), op.exists(op.join(j, "__init__.py")))
             if op.isfile(j) and i.endswith(".py"):
                 python_files.append(i[:-3])
             if op.isdir(j) and op.exists(op.join(j, "__init__.py")):

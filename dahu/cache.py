@@ -1,8 +1,9 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 
-"""Dahu: Data analysis server controlled from Tango
+"""
+Data Analysis RPC server over Tango: 
 
 Class Cache for storing the data in a Borg  
 """
@@ -12,7 +13,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "28/03/2017" 
+__date__ = "07/02/2020" 
 __status__ = "production"
 
 import os
