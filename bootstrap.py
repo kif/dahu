@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 """
@@ -11,7 +11,7 @@ example: ./bootstrap.py ipython
 __authors__ = ["Frédéric-Emmanuel Picca", "Jérôme Kieffer"]
 __contact__ = "jerome.kieffer@esrf.eu"
 __license__ = "MIT"
-__date__ = "02/03/2018"
+__date__ = "06/02/2020"
 
 
 import sys
@@ -205,6 +205,9 @@ if build_rc == 0:
 else:
     logger.error("Build process ended with rc=%s", build_rc)
     sys.exit(-1)
+
+dahu_root = os.path.dirname(os.path.abspath(__file__))
+os.environ["DAHU_PLUGINS"] = os.path.join(dahu_root, "plugins")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:

@@ -8,4 +8,5 @@ include build-msi.bat
 include README.rst
 include CHANGELOG.txt
 include TODO.txt
-
+include run_tests.py
+recursive-include plugins *.py

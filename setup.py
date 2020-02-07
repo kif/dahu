@@ -33,7 +33,7 @@ __authors__ = ["Jérôme Kieffer", "Thomas Vincent"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/06/2016"
+__date__ = "06/02/2020"
 __status__ = "development"
 
 
@@ -281,7 +281,7 @@ setup_kwargs.update(name=PROJECT,
                     zip_safe=False,
                     packages=["dahu", "dahu.plugins", "dahu.test"],
                     package_dir={"dahu": "dahu",
-                                 "dahu.plugins": "dahu/plugins",
+                                 "dahu.plugins": "plugins",
                                  "dahu.test": "dahu/test"},
                     test_suite="test",
                     scripts=script_files,

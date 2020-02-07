@@ -1,5 +1,5 @@
-Dahu plugin launcher
-====================
+Dahu: Data Analysis RPC server over Tango
+=========================================
 
 Software chunks initially developped for ID02 upgrade program
 
