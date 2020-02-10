@@ -11,14 +11,16 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "07/02/2020"
+__date__ = "10/02/2020"
 __status__ = "development"
 version = "0.0.1"
 
 import os
 import numpy
+import json
 from dahu.plugin import Plugin
 from dahu.factory import register
+from .common import Sample, Ispyb
 import logging
 logger = logging.getLogger("plugin.bm29.integrate")
 
@@ -55,11 +57,23 @@ class IntegrateMultiframe(Plugin):
         "hplc": "column name and chromatography conditions",
         "storage_temp": 20,
         "exposure_temp": 20}, 
+      "ispyb": {
+        "server": "http://ispyb.esrf.fr:1234",
+        "login": "mx1234",
+        "passwd": "secret",
+        "pyarch_folder": "/data/pyarch/mx1234/1d", 
+       } 
     }
     """
     def __init__(self):
         Plugin.__init__(self)
+        self.sample = None
+        self.ispyb = None
 
     def setup(self, kwargs):
         logger.debug("Integrate.setup")
         Plugin.setup(self, kwargs)
+        
+        self.ispyb = Ispyb._fromdict(self.input.get("ispyb"))
+        self.sample = Sample._fromdict(self.input.get("sample"))
+    

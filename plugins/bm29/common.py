@@ -52,7 +52,7 @@ class Sample(NamedTuple):
     
         
 class Ispyb(NamedTuple):        
-    url: str
+    url: str=None
     login: str=None
     passwd: str=None
     pyarch: str=None
