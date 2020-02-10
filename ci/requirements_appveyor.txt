@@ -1,0 +1,13 @@
+#List of dependencies
+
+wheel
+numpy
+cython
+Pillow
+lxml
+h5py
+fabio
+scipy
+matplotlib
+numexpr
+silx
