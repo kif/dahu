@@ -66,6 +66,7 @@ class EquivalentFrames(NamedTuple):
     start: int=0
     end: int=-1
 
+
 def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
     """This function return the start and end index of a set of equivalent data:
     Note the end-index is excluded...
