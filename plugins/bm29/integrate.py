@@ -33,7 +33,7 @@ cmp = Bitshuffle()
 from .common import Sample, Ispyb
 from .nexus import Nexus, get_isotime
 
-KeyCache = namedtuple("KeyCache", "npt unit poni mask")
+KeyCache = namedtuple("KeyCache", "npt unit poni mask wavelength")
 
 @register
 class IntegrateMultiframe(Plugin):
@@ -58,6 +58,7 @@ class IntegrateMultiframe(Plugin):
       "mask_file": "/tmp/mask.edf",
       "npt": 1000,
       "unit": "q_nm^-1", # optional
+      "wavelength": 1 #Angstrom
       "fidelity_abs": 0.1,
       "fidelity_rel": 0.5
       "sample": {
@@ -66,8 +67,9 @@ class IntegrateMultiframe(Plugin):
         "buffer": "description of buffer, pH, ...",
         "concentration": 0,
         "hplc": "column name and chromatography conditions",
-        "storage_temp": 20,
-        "exposure_temp": 20}, 
+        "storage_temp": 20, #degC
+        "exposure_temp": 20 #degC
+        }, 
       "ispyb": {
         "server": "http://ispyb.esrf.fr:1234",
         "login": "mx1234",
@@ -90,6 +92,7 @@ class IntegrateMultiframe(Plugin):
         self.npt = 1000
         self.unit = "q_nm^-1"
         self.poni = self.mask = None
+        self.wavelength = 1
 
     def setup(self, kwargs):
         logger.debug("IntegrateMultiframe.setup")
@@ -114,7 +117,7 @@ class IntegrateMultiframe(Plugin):
         if self.poni is None:
             self.log_error("No poni-file provided! aborting", do_raise=True)
         self.mask = self.input.get("mask")
-        
+        self.wavelength = self.input.get("wavelength", self.wavelength)
         
     def teardown(self):
         Plugin.teardown(self)
@@ -134,7 +137,7 @@ class IntegrateMultiframe(Plugin):
 
     def create_integrator(self):
         "use a cache if needed ... and return the integrator"
-        key = KeyCache(self.npt self.unit self.poni self.mask)
+        key = KeyCache(self.npt self.unit self.poni self.mask, self.wavelength)
         if key in self.cache:
             ai = self.cache[key]
         else:
@@ -142,6 +145,7 @@ class IntegrateMultiframe(Plugin):
             if self.mask:
                 mask = numpy.logical_or(fabio.open(self.mask).data, ai.detector.mask).astype("int8")
                 ai.detector.mask = mask
+                ai.wavelength = self.wavelength*1e-10
             self.cache[key] = ai
         return ai
 
@@ -159,7 +163,7 @@ class IntegrateMultiframe(Plugin):
         source_grp = nxs.new_class(instrument_grp, "ESRF", "NXsource")
         source_grp["type"] = "Synchrotron X-ray source"
         source_grp["name"] = "European Synchrotron Radiation Facility"
-        source_grp["probe"] = "x-ray"
+        source_grp["probe"] = "X-ray"
         current_ds = source_grp.require_dataset("current", 
                                                (self.nb_frames,), 
                                                 dtype=numpy.float32)
@@ -297,7 +301,7 @@ class IntegrateMultiframe(Plugin):
         ai2_grp["version"] = "0.16"
         ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
         ai2_data.attrs["signal"] = "I"
-        ai2_data.attrs["signal"] = "I"
+#        ai2_data.attrs["signal"] = "I"
         ai2_q_ds = ai2_data.require_dataset("q",(npt,), dtype=numpy.float32)
         ai2_q_ds.attrs["unit"] = "nm^-1"
         ai2_int_ds = ai2_data.require_dataset("I", (npt,), dtype=numpy.float32)
