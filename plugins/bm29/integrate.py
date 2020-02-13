@@ -36,6 +36,7 @@ from .common import Sample, Ispyb, get_equivalent_frames
 from .nexus import Nexus, get_isotime
 
 KeyCache = namedtuple("KeyCache", "npt unit poni mask wavelength")
+Integration1Result = namedtuple("Integration1Result", "radial signal error")
 CormapResult = namedtuple("CormapResult", "probability count tomerge")
 
 @register
@@ -53,7 +54,7 @@ class IntegrateMultiframe(Plugin):
       "output_file": "/tmp/file1.h5", # optional
       "max_frame": 1000,
       "frame_ids": [101, 102],
-      "time_stamps": [1580985678.47, 1580985678.58],
+      "timestamps": [1580985678.47, 1580985678.58],
       "monitor_values": [1, 1.1],
       "exposure_time": 0.1, 
       "normalisation_factor": 1.0,
@@ -63,16 +64,15 @@ class IntegrateMultiframe(Plugin):
       "unit": "q_nm^-1", # optional
       "wavelength": 1 #Angstrom
       "fidelity_abs": 0.1,
-      "fidelity_rel": 0.5
+      "fidelity_rel": 0.5,
       "sample": {
         "name": "bsa",
         "description": "protein description like Bovine Serum Albumin",
         "buffer": "description of buffer, pH, ...",
         "concentration": 0,
         "hplc": "column name and chromatography conditions",
-        "storage_temp": 20, #degC
-        "exposure_temp": 20 #degC
-        }, 
+        "temperature": 20,
+        "temperature_env": 20},  
       "ispyb": {
         "server": "http://ispyb.esrf.fr:1234",
         "login": "mx1234",
@@ -82,6 +82,7 @@ class IntegrateMultiframe(Plugin):
     }
     """
     cache = DataCache(5)
+    COPY_IMAGES=False
     
     def __init__(self):
         Plugin.__init__(self)
@@ -98,8 +99,7 @@ class IntegrateMultiframe(Plugin):
         self.poni = self.mask = None
         self.wavelength = 1
         self.method = IntegrationMethod.select_method(1, "no", "csr", "opencl")[0]
-        self.output_datasets = {}
-
+        self.monitor_values = None
 
     def setup(self, kwargs):
         logger.debug("IntegrateMultiframe.setup")
@@ -125,6 +125,7 @@ class IntegrateMultiframe(Plugin):
             self.log_error("No poni-file provided! aborting", do_raise=True)
         self.mask = self.input.get("mask")
         self.wavelength = self.input.get("wavelength", self.wavelength)
+        self.monitor_values = numpy.array(self.input.get("monitor_values", 1), dtype=numpy.float64)
         
     def teardown(self):
         Plugin.teardown(self)
@@ -138,6 +139,7 @@ class IntegrateMultiframe(Plugin):
         # clean cache
         if self._input_frames is not None:
             self._input_frames = None
+        self.monitor_values = None
 
     @property
     def input_frames(self):
@@ -146,7 +148,7 @@ class IntegrateMultiframe(Plugin):
             try:
                 with Nexus(self.input_file, "r") as nxs:
                     entry = nxs.get_entries()[0]
-                    measurement = nxs.get_class(self, entry, class_type="NXmeasurement")
+                    measurement = nxs.get_class(entry, class_type="NXmeasurement")[0]
                     self._input_frames = measurement["data"][...]
             except Exception as err:
                 self.log_error("%s: %s"%(type(err),str(err)), do_raise=True)
@@ -212,7 +214,7 @@ class IntegrateMultiframe(Plugin):
         monochromator_grp["wavelength"] = self.ai.wavelength*1e10
         monochromator_grp["wavelength"].attrs["unit"] = "Ångström" 
         monochromator_grp["wavelength"].attrs["resolution"] = 0.01
-        monochromator_grp["wavelength"].attrs["type"] = "multilayer"
+        monochromator_grp["wavelength"].attrs["monochromator"] = "multilayer"
         
         #create links
         #instrument_grp["wavelength"] = monochromator_grp["wavelength"]
@@ -241,19 +243,31 @@ class IntegrateMultiframe(Plugin):
         detector_grp["count_time"] = self.input.get("exposure_time")
         detector_grp["count_time"].attrs["unit"] = "s"
         time_ds = detector_grp.require_dataset("timestamps",
+                                               data=self.input.get("timestamps") 
                                                (self.nb_frames,), 
-                                               dtype=numpy.float32)
-        frames_ds = detector_grp.require_dataset("frames",
-                                                 (self.nb_frames,)+self.ai.detector.shape,
-                                                 dtype="int32",
-                                                 chunks=(1,)+self.ai.detector.shape,
-                                                 **cmp)
-        frames_ds.attrs["interpretation"] = "image"
+                                               dtype=numpy.float64)
+        if self.COPY_IMAGES:
+            data = self.input_frames
+            frames_ds = detector_grp.require_dataset("frames",
+                                                     data.shape,
+                                                     dtype=data.dtype,
+                                                     chunks=(1,)+data.shape[-2:],
+                                                     data=data
+                                                     **cmp)
+            frames_ds.attrs["interpretation"] = "image"
+        else: #use external links
+            with Nexus(self.input_file, "r") as nxs:
+                entry = nxs.get_entries()[0]
+                measurement = nxs.get_class(entry, class_type="NXmeasurement")[0]
+                h5path = measurement["data"].name
+            detector_grp["frames"] = h5py.ExternalLink(self.input_file, h5path)
+            
         
         diode_grp = nxs.new_class(instrument_grp, "beamstop_diode", "NXdetector")
         diode_ds = diode_grp.create_dataset("diode", 
                                             (self.nb_frames,),
-                                             dtype=numpy.float32)
+                                            data = self.monitor_values,
+                                            dtype=numpy.float32)
         diode_grp["normalization_factor"] = self.input.get("normalization_factor")
     
         # Process 1: pyFAI
@@ -264,6 +278,10 @@ class IntegrateMultiframe(Plugin):
         integration_grp["date"] = get_isotime()
         integration_data = nxs.new_class(integration_grp, "results", "NXdata")
         integration_data.attrs["signal"] = "I"
+        
+        # Stage 1 processing: Integration frame per frame
+        #TODO
+        
         radial_unit, unit_name = str(self.unit).split("_", 1)
         q_ds = integration_data.require_dataset(radial_unit,(self.npt,), dtype=numpy.float32)
         q_ds.attrs["unit"] = unit_name
@@ -273,6 +291,7 @@ class IntegrateMultiframe(Plugin):
         integration_data.attrs["axes"] = [".", radial_unit]
         int_ds.attrs["interpretation"] ="spectrum" 
         std_ds.attrs["interpretation"] ="spectrum" 
+        
         
          
         # Process 2: Freesas: 
@@ -446,45 +465,37 @@ class IntegrateMultiframe(Plugin):
         #Finally declare the default entry and default dataset ...
         entry_grp.attrs["default"] = ai2_data.name
     
-    def process_1_integration(self):
-        "First step of the processing, integrate all frames, return the "
-        integrated = numpy.zeros((self.nb_frames, self.npt), dtype=numpy.float32)
+    def process1_integration(self):
+        "First step of the processing, integrate all frames, return the Integration1Result"
+        logger.debug("in process1_integration")
+        signal = numpy.zeros((self.nb_frames, self.npt), dtype=numpy.float32)
+        errors = numpy.zeros((self.nb_frames, self.npt), dtype=numpy.float32)
 
-        for frame in self.
-            e = XmlParser(x)
-            fimg = fabio.open(x[:-4]+".edf")
-            idx = int(fimg.header.get("acq_frame_nb", 0))
-            time_ds[idx] = float(fimg.header.get("time_of_day", 0))
-            current_ds[idx] = e.extract("machineCurrent", float)
-            print("set frame %i"%idx)
-            frames_ds[idx] = fimg.data
-            i1 = e.extract("beamStopDiode", float)
-            diode_ds[idx] = e.extract("beamStopDiode", float)
-            print("integrate frame %i"%idx)
-            res = self.ai._integrate1d_ng(fimg.data, self.npt, 
-                                          normalization_factor=i1/self.normalization_factor,
+        for idx, frame in enumerate(self.input_frames):
+            i1 = self.monitor_values[idx]/self.normalization_factor
+            res = self.ai._integrate1d_ng(frame, self.npt, 
+                                          normalization_factor=i1,
                                           error_model="poisson",
                                           polarization_factor=self.polarization_factor,
                                           unit=self.unit,
                                           safe=False,
-                                          method=self.method,
-                                          )
-            int_ds[idx] = res[1]
-            std_ds[idx] = res[2]
-            integrated[idx] = res[1]
-        q_ds[:] = res[0]
+                                          method=self.method)
+            signal[idx] = res[1]
+            errors[idx] = res[2]
+        return Integration1Result(res.radial, signal, errors)
 
     def process2_cormap(self, curves):
         "Take the integrated data as input, returns a namedtuple"
+        logger.debug("in process2_cormap")
         count = numpy.empty((self.nb_frames, self.nb_frames), dtype=numpy.uint8)
         proba = numpy.empty((self.nb_frames, self.nb_frames), dtype=numpy.float32)
         for i in range(self.nb_frames):
             proba[i, i] = 1.0
             count[i, i] = 0
             for j in range(i):
-                res = cormap.gof(curves[i], curves[j])
+                res = freesas.cormap.gof(curves[i], curves[j])
                 proba[i,j] = proba[j,i] = res.P
                 count[i,j] = count[j,i] = res.c
-        tomerge = get_equivalent_frames(proba, absolute=0.1, relative=0.2)
+        tomerge = get_equivalent_frames(proba, self.input.get("fidelity_abs", 0), self.input.get("fidelity_rel", 0))
         return CormapResult(proba, count, tomerge)
         
