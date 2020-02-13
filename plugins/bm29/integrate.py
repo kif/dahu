@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "12/02/2020"
+__date__ = "13/02/2020"
 __status__ = "development"
 version = "0.0.1"
 
@@ -24,16 +24,19 @@ from dahu.factory import register
 from dahu.cache import DataCache
 import logging
 logger = logging.getLogger("plugin.bm29.integrate")
+import h5py
 import fabio
-import pyFAI
+import pyFAI, pyFAI.azimuthalIntegrator
+from pyFAI.method_registry import IntegrationMethod
 from hdf5plugin import Bitshuffle
 import freesas
 cmp = Bitshuffle()
 #from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
-from .common import Sample, Ispyb
+from .common import Sample, Ispyb, get_equivalent_frames
 from .nexus import Nexus, get_isotime
 
 KeyCache = namedtuple("KeyCache", "npt unit poni mask wavelength")
+CormapResult = namedtuple("CormapResult", "probability count tomerge")
 
 @register
 class IntegrateMultiframe(Plugin):
@@ -85,6 +88,7 @@ class IntegrateMultiframe(Plugin):
         self.sample = None
         self.ispyb = None
         self.input_file = None
+        self._input_frames = None
         self.output_file = None
         self.nxs = None 
         self.nb_frames = None
@@ -93,6 +97,9 @@ class IntegrateMultiframe(Plugin):
         self.unit = "q_nm^-1"
         self.poni = self.mask = None
         self.wavelength = 1
+        self.method = IntegrationMethod.select_method(1, "no", "csr", "opencl")[0]
+        self.output_datasets = {}
+
 
     def setup(self, kwargs):
         logger.debug("IntegrateMultiframe.setup")
@@ -128,6 +135,22 @@ class IntegrateMultiframe(Plugin):
             self.nxs.close()
         if self.ai is not None:
             self.ai = None
+        # clean cache
+        if self._input_frames is not None:
+            self._input_frames = None
+
+    @property
+    def input_frames(self):
+        "For performance reasons, all frames are read in one bloc and cached, this returns a 3D numpy array"
+        if self._input_frames is None:
+            try:
+                with Nexus(self.input_file, "r") as nxs:
+                    entry = nxs.get_entries()[0]
+                    measurement = nxs.get_class(self, entry, class_type="NXmeasurement")
+                    self._input_frames = measurement["data"][...]
+            except Exception as err:
+                self.log_error("%s: %s"%(type(err),str(err)), do_raise=True)
+        return self._input_frames
 
     def process(self):
         "does the integration of a set of frames"
@@ -142,10 +165,10 @@ class IntegrateMultiframe(Plugin):
             ai = self.cache[key]
         else:
             ai = pyFAI.load(self.poni)
+            ai.wavelength = self.wavelength*1e-10
             if self.mask:
                 mask = numpy.logical_or(fabio.open(self.mask).data, ai.detector.mask).astype("int8")
                 ai.detector.mask = mask
-                ai.wavelength = self.wavelength*1e-10
             self.cache[key] = ai
         return ai
 
@@ -241,13 +264,13 @@ class IntegrateMultiframe(Plugin):
         integration_grp["date"] = get_isotime()
         integration_data = nxs.new_class(integration_grp, "results", "NXdata")
         integration_data.attrs["signal"] = "I"
-        radial, unit_name = str(self.unit).split("_", 1)
-        q_ds = integration_data.require_dataset(radial,(self.npt,), dtype=numpy.float32)
+        radial_unit, unit_name = str(self.unit).split("_", 1)
+        q_ds = integration_data.require_dataset(radial_unit,(self.npt,), dtype=numpy.float32)
         q_ds.attrs["unit"] = unit_name
         int_ds = integration_data.require_dataset("I", (self.nb_frames, self.npt), dtype=numpy.float32)
         std_ds = integration_data.require_dataset("errors", (self.nb_frames, self.npt), dtype=numpy.float32)
         integration_data.attrs["signal"] = "I"
-        integration_data.attrs["axes"] = [".", radial]
+        integration_data.attrs["axes"] = [".", radial_unit]
         int_ds.attrs["interpretation"] ="spectrum" 
         std_ds.attrs["interpretation"] ="spectrum" 
         
@@ -259,17 +282,25 @@ class IntegrateMultiframe(Plugin):
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
         cormap_data = nxs.new_class(cormap_grp, "results", "NXdata")
-        cormap_data.attrs["signal"] = "P"
-        cormap_ds =  cormap_data.require_dataset("P", 
+        
+        cormap_results = self.process2_cormap(curves)
+        
+        cormap_data.attrs["signal"] = "probability"
+        cormap_ds =  cormap_data.require_dataset("probability", 
                                                  shape=(self.nb_frames, self.nb_frames), 
                                                  dtype=numpy.float32)
         cormap_ds.attrs["interpretation"] = "image"
         cormap_ds.attrs["unit"] = "probability"
-        count_ds =  cormap_data.require_dataset("C", 
+        cormap_ds[...] = cormap_results.probability
+        
+        count_ds =  cormap_data.require_dataset("count", 
                                                 shape=(self.nb_frames, self.nb_frames),
-                                                dtype=numpy.uint16)
+                                                dtype=numpy.uint8)
         count_ds.attrs["interpretation"] = "image"
         count_ds.attrs["unit"] = "number of data-point"
+        count_ds[...] = cormap_results.count
+
+        cormap_data["to_merge"] = numpy.arange(cormap_results.tomerge)
         
         # process 3: time average and standard deviation
         average_grp = nxs.new_class(entry_grp, "3_time_average", "NXprocess")
@@ -302,12 +333,12 @@ class IntegrateMultiframe(Plugin):
         ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
         ai2_data.attrs["signal"] = "I"
 #        ai2_data.attrs["signal"] = "I"
-        ai2_q_ds = ai2_data.require_dataset("q",(npt,), dtype=numpy.float32)
+        ai2_q_ds = ai2_data.require_dataset(radial_unit,(self.npt,), dtype=numpy.float32)
         ai2_q_ds.attrs["unit"] = "nm^-1"
-        ai2_int_ds = ai2_data.require_dataset("I", (npt,), dtype=numpy.float32)
-        ai2_std_ds = ai2_data.require_dataset("errors", (npt,), dtype=numpy.float32)
+        ai2_int_ds = ai2_data.require_dataset("I", (self.npt,), dtype=numpy.float32)
+        ai2_std_ds = ai2_data.require_dataset("errors", (self.npt,), dtype=numpy.float32)
         ai2_data.attrs["signal"] = "I"
-        ai2_data.attrs["axes"] = ["q"]
+        ai2_data.attrs["axes"] = [radial_unit]
         ai2_data.attrs["interpretation"] ="spectrum" 
     
         #Measurement group ...
@@ -319,21 +350,19 @@ class IntegrateMultiframe(Plugin):
         measurement_grp["timestamps"] = time_ds
         measurement_grp["ring_curent"] = current_ds
     
-        det = pyFAI.detector_factory(detector+"1M")
-        det.mask = numpy.logical_or(det.mask, fabio.open(pixel_mask_file).data)
-        print(det)
-        ai = pyFAI.azimuthalIntegrator.AzimuthalIntegrator(distance, 
-                                                           beam_center_y*y_pixel_size,
-                                                           beam_center_x*x_pixel_size,
-                                                           detector=det,
-                                                           wavelength=wavelength)
-        print(ai)
-        integration_grp["configuration"] = json.dumps(ai.get_config())
+        integration_grp["configuration"] = json.dumps(self.ai.get_config())
         integration_grp["configuration"].attrs["format"] = "json"
+       
+        # Stage 1: Integration 
+        
+        q_ds[:] = res[0]
+        int_ds = res[1]
+        std_ds = res[2]
+        integrated = res[1]
         
         
-        integrated = numpy.zeros((nframes, npt), dtype=numpy.float32)
-        #deviation = numpy.zeros((nframes, npt), dtype=numpy.float32)
+        integrated = numpy.zeros((self.nb_frames, self.npt), dtype=numpy.float32)
+        for frame in 
         for x in xml:
             e = XmlParser(x)
             fimg = fabio.open(x[:-4]+".edf")
@@ -417,3 +446,45 @@ class IntegrateMultiframe(Plugin):
         #Finally declare the default entry and default dataset ...
         entry_grp.attrs["default"] = ai2_data.name
     
+    def process_1_integration(self):
+        "First step of the processing, integrate all frames, return the "
+        integrated = numpy.zeros((self.nb_frames, self.npt), dtype=numpy.float32)
+
+        for frame in self.
+            e = XmlParser(x)
+            fimg = fabio.open(x[:-4]+".edf")
+            idx = int(fimg.header.get("acq_frame_nb", 0))
+            time_ds[idx] = float(fimg.header.get("time_of_day", 0))
+            current_ds[idx] = e.extract("machineCurrent", float)
+            print("set frame %i"%idx)
+            frames_ds[idx] = fimg.data
+            i1 = e.extract("beamStopDiode", float)
+            diode_ds[idx] = e.extract("beamStopDiode", float)
+            print("integrate frame %i"%idx)
+            res = self.ai._integrate1d_ng(fimg.data, self.npt, 
+                                          normalization_factor=i1/self.normalization_factor,
+                                          error_model="poisson",
+                                          polarization_factor=self.polarization_factor,
+                                          unit=self.unit,
+                                          safe=False,
+                                          method=self.method,
+                                          )
+            int_ds[idx] = res[1]
+            std_ds[idx] = res[2]
+            integrated[idx] = res[1]
+        q_ds[:] = res[0]
+
+    def process2_cormap(self, curves):
+        "Take the integrated data as input, returns a namedtuple"
+        count = numpy.empty((self.nb_frames, self.nb_frames), dtype=numpy.uint8)
+        proba = numpy.empty((self.nb_frames, self.nb_frames), dtype=numpy.float32)
+        for i in range(self.nb_frames):
+            proba[i, i] = 1.0
+            count[i, i] = 0
+            for j in range(i):
+                res = cormap.gof(curves[i], curves[j])
+                proba[i,j] = proba[j,i] = res.P
+                count[i,j] = count[j,i] = res.c
+        tomerge = get_equivalent_frames(proba, absolute=0.1, relative=0.2)
+        return CormapResult(proba, count, tomerge)
+        
