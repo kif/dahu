@@ -34,7 +34,7 @@ __author__ = "Jerome Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "06/02/2020"
+__date__ = "14/02/2020"
 __status__ = "producton"
 __docformat__ = 'restructuredtext'
 RELEASE_LEVEL_VALUE = {"dev": 0,
@@ -47,7 +47,7 @@ RELEASE_LEVEL_VALUE = {"dev": 0,
 MAJOR = 0
 MINOR = 7
 MICRO = 0
-RELEV = "beta"  # <16
+RELEV = "rc"  # <16
 SERIAL = 0  # <16
 
 date = __date__
