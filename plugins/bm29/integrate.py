@@ -13,7 +13,7 @@ __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "14/02/2020"
 __status__ = "development"
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 import os
 import json
@@ -34,7 +34,7 @@ import fabio
 import pyFAI, pyFAI.azimuthalIntegrator
 from pyFAI.method_registry import IntegrationMethod
 from hdf5plugin import Bitshuffle
-import freesas
+import freesas, freesas.cormap
 cmp = Bitshuffle()
 #from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import Sample, Ispyb, get_equivalent_frames
@@ -69,7 +69,7 @@ class IntegrateMultiframe(Plugin):
       "poni_file": "/tmp/example.poni",
       "mask_file": "/tmp/mask.edf",
       "npt": 1000,
-      "wavelength": 1 #Angstrom
+      "wavelength": 1e-10 #m
       "fidelity_abs": 0.1,
       "fidelity_rel": 0.5,
       "sample": {
@@ -106,11 +106,12 @@ class IntegrateMultiframe(Plugin):
         self.unit_alt = pyFAI.units.to_unit("q_A^-1")
         self.polarization_factor = 0.9
         self.poni = self.mask = None
-        self.wavelength = 1
+        self.wavelength = 1e-10 #A
         self.method = IntegrationMethod.select_method(1, "no", "csr", "opencl")[0]
         self.monitor_values = None
+        self.normalization_factor = None
 
-    def setup(self, kwargs):
+    def setup(self, kwargs=None):
         logger.debug("IntegrateMultiframe.setup")
         Plugin.setup(self, kwargs)
         
@@ -129,12 +130,13 @@ class IntegrateMultiframe(Plugin):
         self.nb_frames = len(self.input.get("frame_ids", []))
         self.npt = self.input.get("npt", self.npt)
         self.unit = self.input.get("unit", self.unit)
-        self.poni = self.input.get("poni")
+        self.poni = self.input.get("poni_file")
         if self.poni is None:
             self.log_error("No poni-file provided! aborting", do_raise=True)
-        self.mask = self.input.get("mask")
+        self.mask = self.input.get("mask_file")
         self.wavelength = self.input.get("wavelength", self.wavelength)
         self.monitor_values = numpy.array(self.input.get("monitor_values", 1), dtype=numpy.float64)
+        self.normalization_factor = float(self.input.get("normalization_factor", 1))
         
     def teardown(self):
         Plugin.teardown(self)
@@ -149,6 +151,7 @@ class IntegrateMultiframe(Plugin):
         if self._input_frames is not None:
             self._input_frames = None
         self.monitor_values = None
+        
 
     @property
     def input_frames(self):
@@ -168,15 +171,16 @@ class IntegrateMultiframe(Plugin):
         logger.debug("IntegrateMultiframe.process")
         self.ai = self.create_integrator()
         self.create_nexus()
+        #Send to ispyb
 
     def create_integrator(self):
         "use a cache if needed ... and return the integrator"
-        key = KeyCache(self.npt self.unit self.poni self.mask, self.wavelength)
+        key = KeyCache(self.npt, self.unit, self.poni, self.mask, self.wavelength)
         if key in self.cache:
             ai = self.cache[key]
         else:
             ai = pyFAI.load(self.poni)
-            ai.wavelength = self.wavelength*1e-10
+            ai.wavelength = self.wavelength
             if self.mask:
                 mask = numpy.logical_or(fabio.open(self.mask).data, ai.detector.mask).astype("int8")
                 ai.detector.mask = mask
@@ -187,10 +191,13 @@ class IntegrateMultiframe(Plugin):
         creation_time = os.stat(self.input_file).st_ctime
         nxs = self.nxs = Nexus(self.output_file, mode="w")
         
-        entry_grp = nxs.new_entry("entry", 'dahu', 
-                              title='BioSaxs Multiframe integration', 
+        entry_grp = nxs.new_entry("entry", self.input.get("plugin_name", "dahu"), 
+                              title='BioSaxs multiframe integration', 
                               force_time=get_isotime(creation_time))
         nxs.h5.attrs["default"] = entry_grp.name
+        #Process 0: Measurement group
+        measurement_grp = nxs.new_class(entry_grp, "0_measurement", "NXdata")
+        
         #Instrument
         instrument_grp = nxs.new_instrument(entry_grp, "BM29")
         instrument_grp["name"] = "BioSaxs"
@@ -198,7 +205,7 @@ class IntegrateMultiframe(Plugin):
         source_grp["type"] = "Synchrotron X-ray source"
         source_grp["name"] = "European Synchrotron Radiation Facility"
         source_grp["probe"] = "X-ray"
-        current = numpy.ascontiguousarray(self.input.get("storage_ring_current", [], dtype=numpy.float32)
+        current = numpy.ascontiguousarray(self.input.get("storage_ring_current", []), dtype=numpy.float32)
         current_ds = source_grp.create_dataset("current", 
                                                data=current)
         current_ds.attrs["unit"] = "mA"
@@ -206,19 +213,25 @@ class IntegrateMultiframe(Plugin):
     
         #Sample:
         sample_grp = nxs.new_class(entry_grp, self.sample.name, "NXsample")
-        sample_grp["description"] = self.sample.description
-        sample_grp["concentration"] = self.sample.concentration
-        sample_grp["concentration"].attrs["unit"] = "mg/mL"
-        sample_grp["buffer"] = self.sample.buffer
-        sample_grp["buffer"].attrs["comment"] = "Buffer description"
-        sample_grp["hplc"] =  self.sample.hplc
-        sample_grp["hplc"].attrs["comment"] = "Conditions for HPLC experiment"
-        sample_grp["temperature_env"] = self.sample.temperature_env
-        sample_grp["temperature_env"].attrs["unit"] = "°C"
-        sample_grp["temperature_env"].attrs["comment"] = "Storage temperature"
-        sample_grp["temperature"] = self.sample.temperature
-        sample_grp["temperature"].attrs["unit"] = "°C"
-        sample_grp["temperature"].attrs["comment"] = "Exposure temperature"
+        if self.sample.description is not None:
+            sample_grp["description"] = self.sample.description
+        if self.sample.concentration is not None:
+            sample_grp["concentration"] = self.sample.concentration
+            sample_grp["concentration"].attrs["unit"] = "mg/mL"
+        if self.sample.buffer is not None:
+            sample_grp["buffer"] = self.sample.buffer
+            sample_grp["buffer"].attrs["comment"] = "Buffer description"
+        if self.sample.hplc:
+            sample_grp["hplc"] =  self.sample.hplc
+            sample_grp["hplc"].attrs["comment"] = "Conditions for HPLC experiment"
+        if self.sample.temperature is not None:
+            sample_grp["temperature"] = self.sample.temperature
+            sample_grp["temperature"].attrs["unit"] = "°C"
+            sample_grp["temperature"].attrs["comment"] = "Exposure temperature"
+        if self.sample.temperature_env is not None:
+            sample_grp["temperature_env"] = self.sample.temperature_env
+            sample_grp["temperature_env"].attrs["unit"] = "°C"
+            sample_grp["temperature_env"].attrs["comment"] = "Storage temperature"
         
         monochromator_grp = nxs.new_class(instrument_grp, "monochromator", "NXmonochromator")
         monochromator_grp["wavelength"] = self.ai.wavelength*1e10
@@ -226,10 +239,6 @@ class IntegrateMultiframe(Plugin):
         monochromator_grp["wavelength"].attrs["resolution"] = 0.01
         monochromator_grp["wavelength"].attrs["monochromator"] = "multilayer"
         
-        #create links
-        #instrument_grp["wavelength"] = monochromator_grp["wavelength"]
-        #instrument_grp["normalization_factor"] = normalization_factor
-    
         detector_grp = nxs.new_class(instrument_grp, str(self.ai.detector), "NXdetector")
         detector_grp["distance"] = self.ai.dist
         detector_grp["distance"].attrs["unit"] = "m"
@@ -259,13 +268,15 @@ class IntegrateMultiframe(Plugin):
                                                      chunks=(1,)+data.shape[-2:],
                                                      **cmp)
             frames_ds.attrs["interpretation"] = "image"
+            measurement_grp["images"] = frames_ds
         else: #use external links
             with Nexus(self.input_file, "r") as nxs:
                 entry = nxs.get_entries()[0]
                 measurement = nxs.get_class(entry, class_type="NXmeasurement")[0]
                 h5path = measurement["data"].name
-            detector_grp["frames"] = h5py.ExternalLink(self.input_file, h5path)            
-            frames_ds = detector_grp["frames"]
+            measurement_grp["images"] = detector_grp["frames"] = h5py.ExternalLink(self.input_file, h5path)            
+            
+        measurement_grp.attrs["signal"] = "images"
         
         diode_grp = nxs.new_class(instrument_grp, "beamstop_diode", "NXdetector")
         diode_ds = diode_grp.create_dataset("diode", 
@@ -273,13 +284,12 @@ class IntegrateMultiframe(Plugin):
         diode_ds.attrs["interpretation"] = "spectrum"
         diode_ds.attrs["comment"] = "I1 = raw flux (I0) multiplied with the absorption of the sample"
         diode_grp["normalization_factor"] = self.input.get("normalization_factor")
-        diode_grp["normalization_factor"].attr["comment"] = "used to convert in abolute scattering"
+        diode_grp["normalization_factor"].attrs["comment"] = "used to convert in abolute scattering"
     
-    #Process 0: Measurement group
-        measurement_grp = nxs.new_class(entry_grp, "0_measurement", "NXdata")
-        measurement_grp.attrs["signal"] = "images"
+
+        
         measurement_grp["diode"] = diode_ds
-        measurement_grp["images"] = frames_ds
+ 
         measurement_grp["timestamps"] = time_ds
         measurement_grp["ring_curent"] = current_ds
     
@@ -303,11 +313,10 @@ class IntegrateMultiframe(Plugin):
         q_ds = integration_data.create_dataset(radial_unit,
                                                 data=numpy.ascontiguousarray(integrate1_results.radial, numpy.float32))
         q_ds.attrs["unit"] = unit_name
-
-        radial_unit_alt, unit_name_alt = str(self.unit_alt).split("_", 1)
-        qalt_ds = integration_data.create_dataset(radial_unit_alt,(self.npt,), 
-                                                  data=numpy.ascontiguousarray(integrate1_results.radial*self.unit_alt.scale, dtype=numpy.float32))
-        qalt_ds.attrs["unit"] = unit_name_alt
+#        radial_unit_alt, unit_name_alt = str(self.unit_alt).split("_", 1)
+#        qalt_ds = integration_data.create_dataset(radial_unit_alt+,(self.npt,), 
+#                                                  data=numpy.ascontiguousarray(integrate1_results.radial*self.unit_alt.scale, dtype=numpy.float32))
+#        qalt_ds.attrs["unit"] = unit_name_alt
 
         int_ds = integration_data.create_dataset("I", 
                                                  data=numpy.ascontiguousarray(integrate1_results.intensity, dtype=numpy.float32))
@@ -335,35 +344,36 @@ class IntegrateMultiframe(Plugin):
         cormap_results = self.process2_cormap(integrate1_results.intensity)
         
         cormap_data.attrs["signal"] = "probability"
-        cormap_ds =  cormap_data.require_dataset("probability", 
-                                                 cormap_results.probability)
+        cormap_ds =  cormap_data.create_dataset("probability", 
+                                                data=cormap_results.probability)
         cormap_ds.attrs["interpretation"] = "image"
         cormap_ds.attrs["unit"] = "probability"
-        cormap_ds[...] = 
         
         count_ds = cormap_data.create_dataset("count", 
-                                              cormap_results.count)
+                                              data=cormap_results.count)
         count_ds.attrs["interpretation"] = "image"
         count_ds.attrs["unit"] = "longest sequence where curves do not cross"
 
-        cormap_data["to_merge"] = numpy.arange(cormap_results.tomerge, dtype=numpy.uint16)
+        cormap_grp["to_merge"] = numpy.arange(*cormap_results.tomerge, dtype=numpy.uint16)
+        cormap_grp["fidelity_abs"] = self.input.get("fidelity_abs", 0)
+        cormap_grp["fidelity_rel"] = self.input.get("fidelity_rel", 0)
         
     # Process 3: time average and standard deviation
         average_grp = nxs.new_class(entry_grp, "3_time_average", "NXprocess")
         average_grp["sequence_index"] = 3
-        average_grp["program"] = "Numpy implementation of weighted frame averaging: bm29.integrate"
+        average_grp["program"] = "Weighted frame average"
         average_grp["version"] = __version__
         average_data = nxs.new_class(average_grp, "results", "NXdata")
         average_data.attrs["signal"] = "intensity_normed"
     
     # Stage 3 processing
-        res3 = self.process3_average(cormap_results.tomerge):    
-        int_avg_ds =  average_data.create_dataset("intensity_avg", 
+        res3 = self.process3_average(cormap_results.tomerge)    
+        int_avg_ds =  average_data.create_dataset("intensity_normed", 
                                                   data=numpy.ascontiguousarray(res3.average, dtype=numpy.float32),
                                                   **cmp)
         int_avg_ds.attrs["interpretation"] = "image"
         int_avg_ds.attrs["formula"] = "sum_i(signal_i))/sum_i(normalization_i)"
-        int_std_ds =  average_data.require_dataset("intensity_std", 
+        int_std_ds =  average_data.create_dataset("intensity_std", 
                                                    data=numpy.ascontiguousarray(res3.deviation, dtype=numpy.float32),
                                                    **cmp)
         int_std_ds.attrs["interpretation"] = "image"    
@@ -382,11 +392,12 @@ class IntegrateMultiframe(Plugin):
         ai2_grp["polarization_factor"] = integration_grp["polarization_factor"]
 
     # Stage 4 processing
+        intensity_std = res3.deviation
         if numexpr is None:
             variance = intensity_std*intensity_std
         else:
             variance = numexpr.evaluate("intensity_std**2")
-        res2 = self.ai._integrate1d_ng(intensity_avg, self.npt, 
+        res2 = self.ai._integrate1d_ng(res3.average, self.npt, 
                                        variance=variance,
                                        polarization_factor=self.polarization_factor,
                                        unit=self.unit,
@@ -424,7 +435,7 @@ class IntegrateMultiframe(Plugin):
                                           method=self.method)
             intensity[idx] = res.intensity
             sigma[idx] = res.sigma
-        return IntegrationResult(res.radial, sigma, sigma)
+        return IntegrationResult(res.radial, intensity, sigma)
 
     def process2_cormap(self, curves):
         "Take the integrated data as input, returns a CormapResult namedtuple"
@@ -444,14 +455,14 @@ class IntegrateMultiframe(Plugin):
     def process3_average(self, tomerge):
         "Average out the valid frames and return an AverageResult namedtuple"
         logger.debug("in process3_average")
-        valid_slice = slice(tomerge)
+        valid_slice = slice(*tomerge)
         mask = self.ai.detector.mask
-        sum_data = self.input_frames[valid_slice].sum(axis=0)
+        sum_data = (self.input_frames[valid_slice]).sum(axis=0)
         sum_norm = (numpy.array(self.monitor_values)[valid_slice]).sum()/self.normalization_factor
         if numexpr is not None:
             #Numexpr is many-times faster than numpy when it comes to element-wise operations
-            intensity_avg = numexpr.evaluate("where(mask, 0.0, sum_data/sum_norm)")
-            intensity_std = numexpr.evaluate("where(mask, 0.0, sqrt(sum_data)/sum_norm")
+            intensity_avg = numexpr.evaluate("where(mask==0, sum_data/sum_norm, 0.0)")
+            intensity_std = numexpr.evaluate("where(mask==0, sqrt(sum_data)/sum_norm, 0.0)")
         else:            
             intensity_avg = sum_data/sum_norm
             intensity_std = numpy.sqrt(sum_data)/sum_norm
