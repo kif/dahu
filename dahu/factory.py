@@ -1,44 +1,40 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 
 """
-Data Analysis Highly tailored for Upbl09a 
+Data Analysis RPC server over Tango: 
+
+Factory for the loading of plugins
 """
-from __future__ import with_statement, print_function, absolute_import, division
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/03/2018"
+__date__ = "07/02/2020"
 __status__ = "production"
 
 import os
 import sys
 import os.path as op
 import logging
-import six
 from collections import OrderedDict
 logger = logging.getLogger("dahu.factory")
 from threading import Semaphore
 from .utils import get_workdir, fully_qualified_name
 
-if six.PY2:
-    import imp
+import importlib.util
 
-    def load_source(module_name, file_path):
-        "Plugin loader which does not pollute sys.module"
-        return imp.load_source(module_name, file_path)
-else:
-    import importlib.util
 
-    def load_source(module_name, file_path):
-        "Plugin loader which does not pollute sys.module"
-        spec = importlib.util.spec_from_file_location(module_name, file_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        return module
+def load_source(module_name, file_path):
+    "Plugin loader which does not pollute sys.module"
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    #module = importlib.util.module_from_spec(spec)
+    #spec.loader.exec_module(module)    
+    module = spec.loader.load_module(spec.name)
+    #Option: remove from sys.modules ...
+    return module
 
 
 dahu_root = os.path.dirname(os.path.abspath(__file__))
@@ -75,8 +71,15 @@ class Factory(object):
         if not os.path.isdir(directory):
             logger.warning("No such directory: %s" % directory)
             return
-        python_files = [i[:-3] for i in os.listdir(abs_dir)
-                        if op.isfile(op.join(abs_dir, i)) and i.endswith(".py")]
+        python_files = []
+        for i in os.listdir(abs_dir):
+            j = op.join(abs_dir, i)
+            if op.isfile(j) and i.endswith(".py"):
+                python_files.append(i[:-3])
+            if op.isdir(j) and op.exists(op.join(j, "__init__.py")):
+                python_files.append(i)
+                                         
+        logger.warning(" ".join(python_files))
         with self._sem:
             self.plugin_dirs[abs_dir] = python_files
 
@@ -93,8 +96,15 @@ class Factory(object):
 
         for dirname, modules in self.plugin_dirs.items():
             if module_name in modules and module_name not in self.modules:
-                print("load %s from %s" % (module_name, os.path.join(dirname, module_name + ".py")))
-                mod = load_source(module_name, os.path.join(dirname, module_name + ".py"))
+                dst = op.join(dirname, module_name)
+                if op.isdir(dst):
+                    fname = op.join(dst, "__init__.py")
+                elif op.isfile(dst+".py"):
+                    fname = dst+".py"
+                else:
+                    raise RuntimeError("Unable to find module source for %s in %s"%(module_name, dirname))
+                logger.info("load %s from %s",module_name, fname)
+                mod = load_source(module_name, os.path.join(dirname, fname))
                 with self.reg_sem:
                     self.modules[module_name] = mod
 

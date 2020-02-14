@@ -22,13 +22,12 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 #
-from __future__ import print_function, division, absolute_import, with_statement
-__doc__ = "bunch of utility function/static classes to handle testing environment"
+"bunch of utility function/static classes to handle testing environment"
 __author__ = "Jérôme Kieffer"
 __contact__ = "jerome.kieffer@esrf.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "11/04/2016"
+__date__ = "07/02/2020"
 
 PACKAGE = "dahu"
 DATA_KEY = "DAHU_DATA"

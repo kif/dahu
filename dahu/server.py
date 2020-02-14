@@ -1,15 +1,17 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # coding: utf-8
 from __future__ import with_statement, print_function, absolute_import, division
 
-""" Data analysis Tango device server ... for UPBL09a
+"""
+Data Analysis RPC server over Tango: 
 
+Tango device server
 """
 __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/03/2018"
+__date__ = "07/02/2020"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 

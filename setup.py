@@ -33,7 +33,7 @@ __authors__ = ["Jérôme Kieffer", "Thomas Vincent"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/06/2016"
+__date__ = "14/02/2020"
 __status__ = "development"
 
 
@@ -263,13 +263,26 @@ script_files = glob.glob("scripts/*")
 install_requires = ["numpy"]
 setup_requires = ["numpy"]
 
+plugins = ["dahu.plugins"]
+plugin_dir = {"dahu": "dahu",
+              "dahu.test": "dahu/test",
+              "dahu.plugins": "plugins"}
+for root, dirs, files in os.walk("plugins", topdown=True):
+    for name in dirs:
+        base = os.path.join(root, name)
+        if not os.path.isfile(os.path.join(base, "__init__.py")):
+            continue 
+        fqn = "dahu."+base.replace(os.sep, ".")
+        plugins.append(fqn)
+        plugin_dir[fqn] = base
+        
 setup_kwargs.update(name=PROJECT,
                     version=get_version(),
                     url="https://github.com/kif/dahu",
                     author="Jérôme Kieffer",
                     author_email="silx@esrf.fr",
                     classifiers=classifiers,
-                    description="Python lightweight, plugin based, data analysis",
+                    description="Python lightweight, plugin based, data analysis engine",
                     long_description=get_readme(),
                     install_requires=install_requires,
                     setup_requires=setup_requires,
@@ -279,10 +292,8 @@ setup_kwargs.update(name=PROJECT,
                         'gui/icons/*.png',
                         ]},
                     zip_safe=False,
-                    packages=["dahu", "dahu.plugins", "dahu.test"],
-                    package_dir={"dahu": "dahu",
-                                 "dahu.plugins": "dahu/plugins",
-                                 "dahu.test": "dahu/test"},
+                    packages=["dahu", "dahu.test"]+plugins,
+                    package_dir=plugin_dir,
                     test_suite="test",
                     scripts=script_files,
                     )

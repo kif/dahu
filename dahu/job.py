@@ -1,7 +1,10 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-"""Contains the Job class which handles jobs.
+"""
+Data Analysis RPC server over Tango: 
+
+Contains the Job class which handles jobs.
 A static part of the class contains statistics of the class
 """
 
@@ -12,7 +15,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/11/2018"
+__date__ = "07/02/2020"
 __status__ = "production"
 
 
