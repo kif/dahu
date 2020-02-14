@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "13/02/2020"
+__date__ = "14/02/2020"
 __status__ = "development"
 version = "0.0.1"
 
@@ -23,7 +23,7 @@ from dahu.plugin import Plugin
 from dahu.factory import register
 from dahu.cache import DataCache
 import logging
-logger = logging.getLogger("plugin.bm29.integrate")
+logger = logging.getLogger("bm29.integrate")
 import h5py
 import fabio
 import pyFAI, pyFAI.azimuthalIntegrator
@@ -38,6 +38,7 @@ from .nexus import Nexus, get_isotime
 KeyCache = namedtuple("KeyCache", "npt unit poni mask wavelength")
 Integration1Result = namedtuple("Integration1Result", "radial signal error")
 CormapResult = namedtuple("CormapResult", "probability count tomerge")
+
 
 @register
 class IntegrateMultiframe(Plugin):
@@ -61,7 +62,6 @@ class IntegrateMultiframe(Plugin):
       "poni_file": "/tmp/example.poni",
       "mask_file": "/tmp/mask.edf",
       "npt": 1000,
-      "unit": "q_nm^-1", # optional
       "wavelength": 1 #Angstrom
       "fidelity_abs": 0.1,
       "fidelity_rel": 0.5,
@@ -95,7 +95,9 @@ class IntegrateMultiframe(Plugin):
         self.nb_frames = None
         self.ai = None
         self.npt = 1000
-        self.unit = "q_nm^-1"
+        self.unit = pyFAI.units.to_unit("q_nm^-1")
+        self.unit_alt = pyFAI.units.to_unit("q_A^-1")
+        self.polarization_factor = 0.9
         self.poni = self.mask = None
         self.wavelength = 1
         self.method = IntegrationMethod.select_method(1, "no", "csr", "opencl")[0]
@@ -280,11 +282,21 @@ class IntegrateMultiframe(Plugin):
         integration_data.attrs["signal"] = "I"
         
         # Stage 1 processing: Integration frame per frame
-        #TODO
+        integrate1_results = self.process1_integration(self.input_frames)
         
         radial_unit, unit_name = str(self.unit).split("_", 1)
-        q_ds = integration_data.require_dataset(radial_unit,(self.npt,), dtype=numpy.float32)
+        q_ds = integration_data.create_dataset(radial_unit,(self.npt,), 
+                                                data=integrate1_results.radial,
+                                                dtype=numpy.float32)
         q_ds.attrs["unit"] = unit_name
+
+        radial_unit_alt, unit_name_alt = str(self.unit_alt).split("_", 1)
+        qalt_ds = integration_data.create_dataset(radial_unit_alt,(self.npt,), 
+                                                  data=integrate1_results.radial*self.unit_alt.scale,
+                                                  dtype=numpy.float32)
+        qalt_ds.attrs["unit"] = unit_name_alt
+
+
         int_ds = integration_data.require_dataset("I", (self.nb_frames, self.npt), dtype=numpy.float32)
         std_ds = integration_data.require_dataset("errors", (self.nb_frames, self.npt), dtype=numpy.float32)
         integration_data.attrs["signal"] = "I"
@@ -465,13 +477,13 @@ class IntegrateMultiframe(Plugin):
         #Finally declare the default entry and default dataset ...
         entry_grp.attrs["default"] = ai2_data.name
     
-    def process1_integration(self):
+    def process1_integration(self, data):
         "First step of the processing, integrate all frames, return the Integration1Result"
         logger.debug("in process1_integration")
-        signal = numpy.zeros((self.nb_frames, self.npt), dtype=numpy.float32)
-        errors = numpy.zeros((self.nb_frames, self.npt), dtype=numpy.float32)
+        signal = numpy.empty((self.nb_frames, self.npt), dtype=numpy.float32)
+        errors = numpy.empty((self.nb_frames, self.npt), dtype=numpy.float32)
 
-        for idx, frame in enumerate(self.input_frames):
+        for idx, frame in enumerate(data):
             i1 = self.monitor_values[idx]/self.normalization_factor
             res = self.ai._integrate1d_ng(frame, self.npt, 
                                           normalization_factor=i1,
@@ -480,8 +492,8 @@ class IntegrateMultiframe(Plugin):
                                           unit=self.unit,
                                           safe=False,
                                           method=self.method)
-            signal[idx] = res[1]
-            errors[idx] = res[2]
+            signal[idx] = res.intensity
+            errors[idx] = res.sigma
         return Integration1Result(res.radial, signal, errors)
 
     def process2_cormap(self, curves):
