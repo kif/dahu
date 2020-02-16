@@ -82,19 +82,21 @@ def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
     size = len(proba)
     diag = numpy.diagonal(proba, 1) >= relative
     "diag is the true if this a start point worth to be considered"
-    for start, valid in enumerate(diag):
-        if not valid:
-            continue
-        # searching for the end-point which is the first invalid
-        invalid = proba[start, :] < absolute
-        invalid[:start] = False  # only search for greater indices
-        wend = numpy.where(invalid)[0]
-        end = wend[0] if len(wend) else size
-        for real_end in range(start+1, min(end+1, size)):
-            if proba[real_end -1, real_end]<relative:
-                break
-        sizes.append(real_end-start)
-        res.append(EquivalentFrames(start, real_end))
+    ext_diag = numpy.concatenate(dia.astype(int), [0]) # at the end, it becomes false
+    delta = numpy.empty_like(ext_diag)
+    delta[0] = diag[0]
+    delta[1:] = ext_diag[1:] - ext_diag[:-1]
+    start = numpy.where(delta>0)[0]
+    end = numpy.where(delta<0)[0]
+    for start_i, end_i in zip(start, end):
+        for start_j in range(start_i, end_i):
+            # searching for the end-point which is the first invalid
+            invalid = proba[start_j, :] < absolute
+            invalid[:start_j] = False  # only search for greater indices
+            wend = numpy.where(invalid)[0]
+            end_j = min(end_i, wend[0] if len(wend) else size)
+            sizes.append(end_j - start_j)
+            res.append(EquivalentFrames(start_j, end_j))
     return res[numpy.argmax(sizes)]
 
         
