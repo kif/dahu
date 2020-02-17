@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "14/02/2020"
+__date__ = "17/02/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -208,7 +208,7 @@ class IntegrateMultiframe(Plugin):
         current = numpy.ascontiguousarray(self.input.get("storage_ring_current", []), dtype=numpy.float32)
         current_ds = source_grp.create_dataset("current", 
                                                data=current)
-        current_ds.attrs["unit"] = "mA"
+        current_ds.attrs["units"] = "mA"
         current_ds.attrs["interpretation"] = "spectrum"
     
         #Sample:
@@ -217,7 +217,7 @@ class IntegrateMultiframe(Plugin):
             sample_grp["description"] = self.sample.description
         if self.sample.concentration is not None:
             sample_grp["concentration"] = self.sample.concentration
-            sample_grp["concentration"].attrs["unit"] = "mg/mL"
+            sample_grp["concentration"].attrs["units"] = "mg/mL"
         if self.sample.buffer is not None:
             sample_grp["buffer"] = self.sample.buffer
             sample_grp["buffer"].attrs["comment"] = "Buffer description"
@@ -226,29 +226,29 @@ class IntegrateMultiframe(Plugin):
             sample_grp["hplc"].attrs["comment"] = "Conditions for HPLC experiment"
         if self.sample.temperature is not None:
             sample_grp["temperature"] = self.sample.temperature
-            sample_grp["temperature"].attrs["unit"] = "°C"
+            sample_grp["temperature"].attrs["units"] = "°C"
             sample_grp["temperature"].attrs["comment"] = "Exposure temperature"
         if self.sample.temperature_env is not None:
             sample_grp["temperature_env"] = self.sample.temperature_env
-            sample_grp["temperature_env"].attrs["unit"] = "°C"
+            sample_grp["temperature_env"].attrs["units"] = "°C"
             sample_grp["temperature_env"].attrs["comment"] = "Storage temperature"
         
         monochromator_grp = nxs.new_class(instrument_grp, "monochromator", "NXmonochromator")
         monochromator_grp["wavelength"] = self.ai.wavelength*1e10
-        monochromator_grp["wavelength"].attrs["unit"] = "Ångström" 
+        monochromator_grp["wavelength"].attrs["units"] = "Ångström" 
         monochromator_grp["wavelength"].attrs["resolution"] = 0.01
         monochromator_grp["wavelength"].attrs["monochromator"] = "multilayer"
         
         detector_grp = nxs.new_class(instrument_grp, str(self.ai.detector), "NXdetector")
         detector_grp["distance"] = self.ai.dist
-        detector_grp["distance"].attrs["unit"] = "m"
+        detector_grp["distance"].attrs["units"] = "m"
         detector_grp["x_pixel_size"] = self.ai.pixel2
-        detector_grp["x_pixel_size"].attrs["unit"] = "m"
+        detector_grp["x_pixel_size"].attrs["units"] = "m"
         detector_grp["y_pixel_size"] = self.ai.pixel1
-        detector_grp["y_pixel_size"].attrs["unit"] ="m"
+        detector_grp["y_pixel_size"].attrs["units"] ="m"
         f2d = self.ai.getFit2D()
         detector_grp["beam_center_x"] = f2d["centerX"]
-        detector_grp["beam_center_x"].attrs["unit"] = "pixel"
+        detector_grp["beam_center_x"].attrs["units"] = "pixel"
         detector_grp["beam_center_y"] = f2d["centerY"]
         detector_grp["beam_center_y"].attrs["units"] = "pixel"
         mask = self.ai.detector.mask
@@ -257,7 +257,7 @@ class IntegrateMultiframe(Plugin):
                                                **cmp)
         mask_ds.attrs["filename"] = self.input.get("mask_file")
         detector_grp["count_time"] = self.input.get("exposure_time")
-        detector_grp["count_time"].attrs["unit"] = "s"
+        detector_grp["count_time"].attrs["units"] = "s"
         time_ds = detector_grp.create_dataset("timestamps",
                                               data=numpy.ascontiguousarray(self.input.get("timestamps", []), dtype=numpy.float64))
         time_ds.attrs["interpretation"] = "spectrum"
@@ -312,11 +312,11 @@ class IntegrateMultiframe(Plugin):
         radial_unit, unit_name = str(self.unit).split("_", 1)
         q_ds = integration_data.create_dataset(radial_unit,
                                                 data=numpy.ascontiguousarray(integrate1_results.radial, numpy.float32))
-        q_ds.attrs["unit"] = unit_name
+        q_ds.attrs["units"] = unit_name
 #        radial_unit_alt, unit_name_alt = str(self.unit_alt).split("_", 1)
 #        qalt_ds = integration_data.create_dataset(radial_unit_alt+,(self.npt,), 
 #                                                  data=numpy.ascontiguousarray(integrate1_results.radial*self.unit_alt.scale, dtype=numpy.float32))
-#        qalt_ds.attrs["unit"] = unit_name_alt
+#        qalt_ds.attrs["units"] = unit_name_alt
 
         int_ds = integration_data.create_dataset("I", 
                                                  data=numpy.ascontiguousarray(integrate1_results.intensity, dtype=numpy.float32))
@@ -347,12 +347,12 @@ class IntegrateMultiframe(Plugin):
         cormap_ds =  cormap_data.create_dataset("probability", 
                                                 data=cormap_results.probability)
         cormap_ds.attrs["interpretation"] = "image"
-        cormap_ds.attrs["unit"] = "probability"
+        cormap_ds.attrs["units"] = "probability"
         
         count_ds = cormap_data.create_dataset("count", 
                                               data=cormap_results.count)
         count_ds.attrs["interpretation"] = "image"
-        count_ds.attrs["unit"] = "longest sequence where curves do not cross"
+        count_ds.attrs["units"] = "longest sequence where curves do not cross"
 
         cormap_grp["to_merge"] = numpy.arange(*cormap_results.tomerge, dtype=numpy.uint16)
         cormap_grp["fidelity_abs"] = self.input.get("fidelity_abs", 0)
@@ -406,7 +406,7 @@ class IntegrateMultiframe(Plugin):
 
         ai2_q_ds = ai2_data.create_dataset(radial_unit,
                                            data=numpy.ascontiguousarray(res2.radial, dtype=numpy.float32))
-        ai2_q_ds.attrs["unit"] = unit_name
+        ai2_q_ds.attrs["units"] = unit_name
         ai2_int_ds = ai2_data.create_dataset("I", 
                                              data=numpy.ascontiguousarray(res2.intensity, dtype=numpy.float32))
         ai2_std_ds = ai2_data.create_dataset("errors", 
