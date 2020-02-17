@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "14/02/2020"
+__date__ = "17/02/2020"
 __status__ = "development"
 version = "0.0.1"
 
@@ -80,11 +80,11 @@ def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
     res = []
     sizes = []
     size = len(proba)
-    diag = numpy.diagonal(proba, 1) >= relative
-    "diag is the true if this a start point worth to be considered"
-    ext_diag = numpy.concatenate(dia.astype(int), [0]) # at the end, it becomes false
-    delta = numpy.empty_like(ext_diag)
-    delta[0] = diag[0]
+    ext_diag = numpy.zeros(size+1, dtype=numpy.int16)
+    delta = numpy.zeros(size+1, dtype=numpy.int16)
+    ext_diag[0] = 1
+    ext_diag[1:-1] = numpy.diagonal(proba, 1) >= relative
+    delta[0] = ext_diag[1]
     delta[1:] = ext_diag[1:] - ext_diag[:-1]
     start = numpy.where(delta>0)[0]
     end = numpy.where(delta<0)[0]
@@ -96,8 +96,5 @@ def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
             wend = numpy.where(invalid)[0]
             end_j = min(end_i, wend[0] if len(wend) else size)
             sizes.append(end_j - start_j)
-            res.append(EquivalentFrames(start_j, end_j))
+            res.append((start_j, end_j))
     return res[numpy.argmax(sizes)]
-
-        
-            
