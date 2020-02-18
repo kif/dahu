@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/02/2020"
+__date__ = "18/02/2020"
 __status__ = "development"
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 import os
 import json
@@ -40,7 +40,7 @@ cmp = Bitshuffle()
 from .common import Sample, Ispyb, get_equivalent_frames
 from .nexus import Nexus, get_isotime
 
-KeyCache = namedtuple("KeyCache", "npt unit poni mask wavelength")
+KeyCache = namedtuple("KeyCache", "npt unit poni mask energy")
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
 CormapResult = namedtuple("CormapResult", "probability count tomerge")
 AverageResult = namedtuple("AverageResult", "average deviation")
@@ -69,7 +69,7 @@ class IntegrateMultiframe(Plugin):
       "poni_file": "/tmp/example.poni",
       "mask_file": "/tmp/mask.edf",
       "npt": 1000,
-      "wavelength": 1e-10 #m
+      "energy": 12.0 #keV
       "fidelity_abs": 0.1,
       "fidelity_rel": 0.5,
       "sample": {
@@ -106,7 +106,7 @@ class IntegrateMultiframe(Plugin):
         self.unit_alt = pyFAI.units.to_unit("q_A^-1")
         self.polarization_factor = 0.9
         self.poni = self.mask = None
-        self.wavelength = 1e-10 #A
+        self.energy = None 
         self.method = IntegrationMethod.select_method(1, "no", "csr", "opencl")[0]
         self.monitor_values = None
         self.normalization_factor = None
@@ -134,7 +134,9 @@ class IntegrateMultiframe(Plugin):
         if self.poni is None:
             self.log_error("No poni-file provided! aborting", do_raise=True)
         self.mask = self.input.get("mask_file")
-        self.wavelength = self.input.get("wavelength", self.wavelength)
+        self.energy = self.input.get("energy")
+        if self.energy is None:
+            self.log_error("No energy provided! aborting", do_raise=True)
         self.monitor_values = numpy.array(self.input.get("monitor_values", 1), dtype=numpy.float64)
         self.normalization_factor = float(self.input.get("normalization_factor", 1))
         
@@ -175,12 +177,12 @@ class IntegrateMultiframe(Plugin):
 
     def create_integrator(self):
         "use a cache if needed ... and return the integrator"
-        key = KeyCache(self.npt, self.unit, self.poni, self.mask, self.wavelength)
+        key = KeyCache(self.npt, self.unit, self.poni, self.mask, self.energy)
         if key in self.cache:
             ai = self.cache[key]
         else:
             ai = pyFAI.load(self.poni)
-            ai.wavelength = self.wavelength
+            ai.wavelength = 1e-10 * pyFAI.units.hc / self.energy
             if self.mask:
                 mask = numpy.logical_or(fabio.open(self.mask).data, ai.detector.mask).astype("int8")
                 ai.detector.mask = mask
@@ -235,8 +237,8 @@ class IntegrateMultiframe(Plugin):
         
         monochromator_grp = nxs.new_class(instrument_grp, "monochromator", "NXmonochromator")
         monochromator_grp["wavelength"] = self.ai.wavelength*1e10
-        monochromator_grp["wavelength"].attrs["units"] = "Ångström" 
-        monochromator_grp["wavelength"].attrs["resolution"] = 0.01
+        monochromator_grp["wavelength"].attrs["units"] = "Å" 
+        monochromator_grp["wavelength"].attrs["resolution"] = 0.014
         monochromator_grp["wavelength"].attrs["monochromator"] = "multilayer"
         
         detector_grp = nxs.new_class(instrument_grp, str(self.ai.detector), "NXdetector")
@@ -304,31 +306,34 @@ class IntegrateMultiframe(Plugin):
         integration_grp["polarization_factor"] = self.polarization_factor
         integration_grp["polarization_factor"].attrs["comment"] = "Between -1 and +1, 0 for circular"
         integration_data = nxs.new_class(integration_grp, "results", "NXdata")
-        integration_data.attrs["signal"] = "I"
+        integration_grp.attrs["default"] = integration_data.name
+        
         
     # Stage 1 processing: Integration frame per frame
         integrate1_results = self.process1_integration(self.input_frames)
         
         radial_unit, unit_name = str(self.unit).split("_", 1)
-        q_ds = integration_data.create_dataset(radial_unit,
-                                                data=numpy.ascontiguousarray(integrate1_results.radial, numpy.float32))
+        q_ds = integration_data.create_dataset(radial_unit, data=numpy.ascontiguousarray(integrate1_results.radial, numpy.float32))
         q_ds.attrs["units"] = unit_name
+        q_ds.attrs["long_name"] = "Scattering vector q (nm^-1)"
 #        radial_unit_alt, unit_name_alt = str(self.unit_alt).split("_", 1)
 #        qalt_ds = integration_data.create_dataset(radial_unit_alt+,(self.npt,), 
 #                                                  data=numpy.ascontiguousarray(integrate1_results.radial*self.unit_alt.scale, dtype=numpy.float32))
 #        qalt_ds.attrs["units"] = unit_name_alt
 
-        int_ds = integration_data.create_dataset("I", 
-                                                 data=numpy.ascontiguousarray(integrate1_results.intensity, dtype=numpy.float32))
-        std_ds = integration_data.create_dataset("errors", 
-                                                 data=numpy.ascontiguousarray(integrate1_results.sigma, dtype=numpy.float32))
+        int_ds = integration_data.create_dataset("I", data=numpy.ascontiguousarray(integrate1_results.intensity, dtype=numpy.float32))
+        std_ds = integration_data.create_dataset("errors", data=numpy.ascontiguousarray(integrate1_results.sigma, dtype=numpy.float32))
         integration_data.attrs["signal"] = "I"
         integration_data.attrs["axes"] = [".", radial_unit]
+        
         int_ds.attrs["interpretation"] = "spectrum" 
+        int_ds.attrs["units"] = "arbitrary"
+        int_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
+        #int_ds.attrs["uncertainties"] = "errors" This does not work
+        int_ds.attrs["scale"] = "log"
         std_ds.attrs["interpretation"] = "spectrum"
 
-        sum_ds = integration_data.create_dataset("sum", 
-                                                 data=numpy.ascontiguousarray(integrate1_results.intensity.sum(axis=-1), dtype=numpy.float32))
+        sum_ds = integration_data.create_dataset("sum", data=numpy.ascontiguousarray(integrate1_results.intensity.sum(axis=-1), dtype=numpy.float32))
         sum_ds.attrs["interpretation"] = "spectrum" 
 
         
@@ -357,7 +362,7 @@ class IntegrateMultiframe(Plugin):
         cormap_grp["to_merge"] = numpy.arange(*cormap_results.tomerge, dtype=numpy.uint16)
         cormap_grp["fidelity_abs"] = self.input.get("fidelity_abs", 0)
         cormap_grp["fidelity_rel"] = self.input.get("fidelity_rel", 0)
-        
+        cormap_grp.attrs["default"] = cormap_data.name
     # Process 3: time average and standard deviation
         average_grp = nxs.new_class(entry_grp, "3_time_average", "NXprocess")
         average_grp["sequence_index"] = 3
@@ -365,7 +370,7 @@ class IntegrateMultiframe(Plugin):
         average_grp["version"] = __version__
         average_data = nxs.new_class(average_grp, "results", "NXdata")
         average_data.attrs["signal"] = "intensity_normed"
-    
+        
     # Stage 3 processing
         res3 = self.process3_average(cormap_results.tomerge)    
         int_avg_ds =  average_data.create_dataset("intensity_normed", 
@@ -379,7 +384,7 @@ class IntegrateMultiframe(Plugin):
         int_std_ds.attrs["interpretation"] = "image"    
         int_std_ds.attrs["formula"] = "sqrt(sum_i(variance_i))/sum(normalization_i)"
         int_std_ds.attrs["method"] = "Propagated error from weighted mean assuming poissonian behavour of every data-point"
-    
+        average_grp.attrs["default"] = average_data.name
     # Process 4: Azimuthal integration of the time average image
         ai2_grp = nxs.new_class(entry_grp, "4_azimuthal_integration", "NXprocess")
         ai2_grp["sequence_index"] = 4
@@ -388,8 +393,11 @@ class IntegrateMultiframe(Plugin):
         ai2_grp["date"] = get_isotime()
         ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
         ai2_data.attrs["signal"] = "I"
+        ai2_data.attrs["axes"] = radial_unit
+
         ai2_grp["configuration"]=integration_grp["configuration"]
         ai2_grp["polarization_factor"] = integration_grp["polarization_factor"]
+        ai2_grp.attrs["default"] = ai2_data.name
 
     # Stage 4 processing
         intensity_std = res3.deviation
@@ -407,14 +415,19 @@ class IntegrateMultiframe(Plugin):
         ai2_q_ds = ai2_data.create_dataset(radial_unit,
                                            data=numpy.ascontiguousarray(res2.radial, dtype=numpy.float32))
         ai2_q_ds.attrs["units"] = unit_name
-        ai2_int_ds = ai2_data.create_dataset("I", 
-                                             data=numpy.ascontiguousarray(res2.intensity, dtype=numpy.float32))
+        ai2_q_ds.attrs["long_name"] = "Scattering vector q (nm^-1)"
+        
+        ai2_int_ds = ai2_data.create_dataset("I", data=numpy.ascontiguousarray(res2.intensity, dtype=numpy.float32))
         ai2_std_ds = ai2_data.create_dataset("errors", 
                                              data=numpy.ascontiguousarray(res2.sigma, dtype=numpy.float32))
-        ai2_data.attrs["signal"] = "I"
-        ai2_data.attrs["axes"] = [radial_unit]
-        ai2_data.attrs["interpretation"] ="spectrum"     
-    
+        
+        
+        ai2_int_ds.attrs["interpretation"] ="spectrum"     
+        ai2_int_ds.attrs["units"] = "arbitrary"
+        ai2_int_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
+        #ai2_int_ds.attrs["uncertainties"] = "errors" #this does not work
+        ai2_std_ds.attrs["interpretation"] ="spectrum"
+        ai2_int_ds.attrs["units"] = "arbitrary"
         #Finally declare the default entry and default dataset ...
         entry_grp.attrs["default"] = ai2_data.name
     
