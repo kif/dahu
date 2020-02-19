@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "18/02/2020"
+__date__ = "19/02/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -315,7 +315,7 @@ class IntegrateMultiframe(Plugin):
         radial_unit, unit_name = str(self.unit).split("_", 1)
         q_ds = integration_data.create_dataset(radial_unit, data=numpy.ascontiguousarray(integrate1_results.radial, numpy.float32))
         q_ds.attrs["units"] = unit_name
-        q_ds.attrs["long_name"] = "Scattering vector q (nm^-1)"
+        q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
 #        radial_unit_alt, unit_name_alt = str(self.unit_alt).split("_", 1)
 #        qalt_ds = integration_data.create_dataset(radial_unit_alt+,(self.npt,), 
 #                                                  data=numpy.ascontiguousarray(integrate1_results.radial*self.unit_alt.scale, dtype=numpy.float32))
@@ -415,7 +415,7 @@ class IntegrateMultiframe(Plugin):
         ai2_q_ds = ai2_data.create_dataset(radial_unit,
                                            data=numpy.ascontiguousarray(res2.radial, dtype=numpy.float32))
         ai2_q_ds.attrs["units"] = unit_name
-        ai2_q_ds.attrs["long_name"] = "Scattering vector q (nm^-1)"
+        ai2_q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
         
         ai2_int_ds = ai2_data.create_dataset("I", data=numpy.ascontiguousarray(res2.intensity, dtype=numpy.float32))
         ai2_std_ds = ai2_data.create_dataset("errors", 
