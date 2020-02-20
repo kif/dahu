@@ -20,6 +20,7 @@ import json
 from collections import namedtuple
 from dahu.plugin import Plugin
 from dahu.factory import register
+from dahu.utils import fully_qualified_name
 import logging
 logger = logging.getLogger("bm29.integrate")
 import numpy
@@ -292,6 +293,7 @@ class IntegrateMultiframe(Plugin):
         cfg_ds.attrs["poni_file"] = self.poni
         pol_ds = integration_grp.create_dataset("polarization_factor", data=self.polarization_factor)
         pol_ds.attrs["comment"] = "Between -1 and +1, 0 for circular"
+        integration_grp.create_dataset("integration_method", data=json.dumps(self.method.method._asdict()))
         integration_data = nxs.new_class(integration_grp, "results", "NXdata")
         integration_grp.attrs["default"] = integration_data.name
         
@@ -347,7 +349,7 @@ class IntegrateMultiframe(Plugin):
     # Process 3: time average and standard deviation
         average_grp = nxs.new_class(entry_grp, "3_time_average", "NXprocess")
         average_grp["sequence_index"] = 3
-        average_grp["program"] = "Weighted frame average"
+        average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
         average_data = nxs.new_class(average_grp, "results", "NXdata")
         average_data.attrs["signal"] = "intensity_normed"
@@ -378,6 +380,7 @@ class IntegrateMultiframe(Plugin):
 
         ai2_grp["configuration"]=integration_grp["configuration"]
         ai2_grp["polarization_factor"] = integration_grp["polarization_factor"]
+        ai2_grp["integration_method"] = integration_grp["integration_method"]
         ai2_grp.attrs["default"] = ai2_data.name
 
     # Stage 4 processing
