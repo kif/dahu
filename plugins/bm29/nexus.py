@@ -4,7 +4,7 @@ __author__ = "Jerome Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "11/02/2020"
+__date__ = "20/02/2020"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
@@ -257,16 +257,16 @@ class Nexus(object):
                 self.get_attr(grp[name], "NX_class") == class_type]
         return coll
 
-    def get_data(self, grp, class_type="NXdata"):
-        """
-        return all dataset of the the NeXus class NXdata
+    def get_data(self, grp, attr=None, value=None):
+        """return all dataset of the the NeXus class NXdata
 
         :param grp: HDF5 group
-        :param class_type: name of the NeXus class
+        :param attr: name of an attribute
+        :param value: requested value
         """
         coll = [grp[name] for name in grp
                 if isinstance(grp[name], h5py.Dataset) and
-                self.get_attr(grp[name], "NX_class") == class_type]
+                self.get_attr(grp[name], attr) == value]
         return coll
 
     def deep_copy(self, name, obj, where="/", toplevel=None, excluded=None, overwrite=False):
