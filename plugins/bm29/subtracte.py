@@ -218,7 +218,7 @@ class SubtractBuffer(Plugin):
         key_cache = KeyCache(self.sample_juice.npt, self.sample_juice.unit, self.sample_juice.poni, self.sample_juice.mask, self.sample_juice.energy)
         ai = get_integrator(key_cache)
         ai2_grp.create_dataset("configuration", data=json.dumps(ai.get_config()))
-        radial_unit = str(key_cache.unit).split("_")[0]
+        radial_unit, unit_name = str(key_cache.unit).split("_", 1)
         ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
         ai2_data.attrs["signal"] = "I"
         ai2_data.attrs["axes"] = radial_unit
