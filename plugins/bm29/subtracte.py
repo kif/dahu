@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/02/2020"
+__date__ = "21/02/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -37,7 +37,7 @@ import pyFAI, pyFAI.azimuthalIntegrator
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
-from .common import Sample, Ispyb, get_equivalent_frames, cmp, get_integrator, KeyCache
+from .common import Sample, Ispyb, get_equivalent_frames, cmp, get_integrator, KeyCache, polarization_factor, method
 from .nexus import Nexus, get_isotime
 
 NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I poni mask energy polarization signal2d error2d buffer concentration")
@@ -64,11 +64,9 @@ class SubtractBuffer(Plugin):
         self.output_file = None
         self.ai = None
         self.npt = None
-        self.unit = None
         self.poni = None
         self.mask = None
         self.energy = None
-        self.polarization_factor = None
         self.sample_juice = None
         self.buffer_juices = []
            
@@ -192,18 +190,29 @@ class SubtractBuffer(Plugin):
         average_data = nxs.new_class(average_grp, "results", "NXdata")
         average_data.attrs["signal"] = "intensity_normed"
         # Stage 2 
-        buffer_average = numpy.mean((self.buffer_juices[i].signal2d for i in range(*tomerge)), axis=0)
-        buffer_variance = numpy.sum(((self.buffer_juices[i].error2d)**2 for i in range(*tomerge)), axis=0) / (tomerge[1] - tomerge[0])**2
+
+        #Nota: formula probably wrong ! Take into account the number of readings !
+        #TODO implement those math using numexpr:
+        #  avg = Σdata / Σnorm
+        #  var = Σdata / (Σnorm)²
+        #  Σnorm = avg / var
+        #  Σdata = avg² / var
+        # The propagate the error based on the number of frames in each buffer with quadratic summation
+        # 
+        buffer_average = numpy.mean([self.buffer_juices[i].signal2d for i in range(*tomerge)], axis=0)
+        buffer_variance = numpy.sum([(self.buffer_juices[i].error2d)**2 for i in range(*tomerge)], axis=0) / (tomerge[1] - tomerge[0])**2
         sub_average = self.sample_juice.signal2d - buffer_average
         sub_variance = self.sample_juice.error2d**2 + buffer_variance
         sub_std = numpy.sqrt(sub_variance)
+        
+        
         int_avg_ds =  average_data.create_dataset("intensity_normed", 
                                                   data=numpy.ascontiguousarray(sub_average, dtype=numpy.float32),
                                                   **cmp)
         int_avg_ds.attrs["interpretation"] = "image"
         int_avg_ds.attrs["formula"] = "sample_signal - mean(buffer_signal_i)"
         int_std_ds =  average_data.create_dataset("intensity_std", 
-                                                   data=numpy.ascontiguousarray(sub_std.deviation, dtype=numpy.float32),
+                                                   data=numpy.ascontiguousarray(sub_std, dtype=numpy.float32),
                                                    **cmp)
         int_std_ds.attrs["interpretation"] = "image"    
         int_std_ds.attrs["formula"] = "sqrt( sample_variance + (sum(buffer_variance)/n_buffer**2 ))"
@@ -225,13 +234,13 @@ class SubtractBuffer(Plugin):
         ai2_grp["polarization_factor"] = self.sample_juice.polarization
         ai2_grp.attrs["default"] = ai2_data.name
 
-    # Stage 4 processing
-        res2 = self.ai._integrate1d_ng(sub_average, key_cache.npt, 
-                                       variance=sub_variance,
-                                       polarization_factor=self.sample_juice.polarization,
-                                       unit=key_cache.unit,
-                                       safe=False,
-                                       method=self.method)
+    # Stage 3 processing: azimuthal integration
+        res2 = ai._integrate1d_ng(sub_average, key_cache.npt, 
+                                  variance=sub_variance,
+                                  polarization_factor=self.sample_juice.polarization,
+                                  unit=key_cache.unit,
+                                  safe=False,
+                                  method=method)
 
         ai2_q_ds = ai2_data.create_dataset(radial_unit,
                                            data=numpy.ascontiguousarray(res2.radial, dtype=numpy.float32))
@@ -249,6 +258,12 @@ class SubtractBuffer(Plugin):
         #ai2_int_ds.attrs["uncertainties"] = "errors" #this does not work
         ai2_std_ds.attrs["interpretation"] ="spectrum"
         ai2_int_ds.attrs["units"] = "arbitrary"
+    
+    #TODO:
+    # Stage 4 processing: AutoRg --> available in FreeSAS
+    # Stage 5 processing Kratky plot  --> copy from former EDNA
+    # stage 6 Pair distribution function    --> Needs to implemented 
+        
         #Finally declare the default entry and default dataset ...
         entry_grp.attrs["default"] = ai2_data.name
 
@@ -273,10 +288,10 @@ class SubtractBuffer(Plugin):
             detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]
             mask = detector_grp["pixel_mask"].attrs["filename"]
             mono_grp = nxsr.get_class(instrument_grp, class_type="NXmonochromator")[0]
-            energy = mono_grp["energy"]
+            energy = mono_grp["energy"][()]
             img_grp = nxsr.get_class(entry_grp["3_time_average"], class_type="NXdata")[0]
-            image2d = img_grp["intensity_normed"]
-            error2d = img_grp["intensity_std"]
+            image2d = img_grp["intensity_normed"][()]
+            error2d = img_grp["intensity_std"][()]
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
             buffer = sample_grp["buffer"]
             concentration = sample_grp["concentration"]

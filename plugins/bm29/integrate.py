@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/02/2020"
+__date__ = "21/02/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -32,12 +32,12 @@ except ImportError:
 import h5py
 import fabio
 import pyFAI, pyFAI.azimuthalIntegrator
-from pyFAI.method_registry import IntegrationMethod
 from hdf5plugin import Bitshuffle
 import freesas, freesas.cormap
 
 #from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
-from .common import Sample, Ispyb, get_equivalent_frames, cmp, get_integrator, KeyCache
+from .common import Sample, Ispyb, get_equivalent_frames, cmp, get_integrator, KeyCache,\
+                    method, polarization_factor
 from .nexus import Nexus, get_isotime
 
 
@@ -101,11 +101,11 @@ class IntegrateMultiframe(Plugin):
         self.nb_frames = None
         self.ai = None
         self.npt = 1000
-        self.unit = pyFAI.units.to_unit("q_nm^-1")
-        self.polarization_factor = 0.9
+        self.unit = pyFAI.units.to_unit("q_nm^-1") 
+        # self.polarization_factor = 0.9 --> constant
         self.poni = self.mask = None
         self.energy = None 
-        self.method = IntegrationMethod.select_method(1, "no", "csr", "opencl")[0]
+        #self.method = IntegrationMethod.select_method(1, "no", "csr", "opencl")[0] -> constant
         self.monitor_values = None
         self.normalization_factor = None
 
@@ -127,7 +127,7 @@ class IntegrateMultiframe(Plugin):
             self.log_warning(f"No output file provided, using: {self.output_file}")
         self.nb_frames = len(self.input.get("frame_ids", []))
         self.npt = self.input.get("npt", self.npt)
-        self.unit = self.input.get("unit", self.unit)
+        self.unit = pyFAI.units.to_unit(self.input.get("unit", self.unit))
         self.poni = self.input.get("poni_file")
         if self.poni is None:
             self.log_error("No poni-file provided! aborting", do_raise=True)
@@ -291,9 +291,9 @@ class IntegrateMultiframe(Plugin):
         cfg_ds = integration_grp.create_dataset("configuration", data=json.dumps(self.ai.get_config()))
         cfg_ds.attrs["format"] = "json"
         cfg_ds.attrs["poni_file"] = self.poni
-        pol_ds = integration_grp.create_dataset("polarization_factor", data=self.polarization_factor)
+        pol_ds = integration_grp.create_dataset("polarization_factor", data=polarization_factor)
         pol_ds.attrs["comment"] = "Between -1 and +1, 0 for circular"
-        integration_grp.create_dataset("integration_method", data=json.dumps(self.method.method._asdict()))
+        integration_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
         integration_data = nxs.new_class(integration_grp, "results", "NXdata")
         integration_grp.attrs["default"] = integration_data.name
         
@@ -391,10 +391,10 @@ class IntegrateMultiframe(Plugin):
             variance = numexpr.evaluate("intensity_std**2")
         res2 = self.ai._integrate1d_ng(res3.average, self.npt, 
                                        variance=variance,
-                                       polarization_factor=self.polarization_factor,
+                                       polarization_factor=polarization_factor,
                                        unit=self.unit,
                                        safe=False,
-                                       method=self.method)
+                                       method=method)
 
         ai2_q_ds = ai2_data.create_dataset(radial_unit,
                                            data=numpy.ascontiguousarray(res2.radial, dtype=numpy.float32))
@@ -426,10 +426,10 @@ class IntegrateMultiframe(Plugin):
             res = self.ai._integrate1d_ng(frame, self.npt, 
                                           normalization_factor=i1,
                                           error_model="poisson",
-                                          polarization_factor=self.polarization_factor,
+                                          polarization_factor=polarization_factor,
                                           unit=self.unit,
                                           safe=False,
-                                          method=self.method)
+                                          method=method)
             intensity[idx] = res.intensity
             sigma[idx] = res.sigma
         return IntegrationResult(res.radial, intensity, sigma)

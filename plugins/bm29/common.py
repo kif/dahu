@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/02/2020"
+__date__ = "21/02/2020"
 __status__ = "development"
 version = "0.0.1"
 
@@ -23,10 +23,15 @@ import numpy
 from dahu.cache import DataCache
 from hdf5plugin import Bitshuffle
 import pyFAI, pyFAI.units
+from pyFAI.method_registry import IntegrationMethod
 import fabio
 
 #cmp contains the compression options, shared by all plugins. Used mainly for images 
 cmp = Bitshuffle()
+
+# Constants associated to the azimuthal integrator to be used in all plugins:
+polarization_factor = 0.9
+method = IntegrationMethod.select_method(1, "no", "csr", "opencl")[0]
 
 #This cache contains azimuthal integrators shared between the different plugins
 KeyCache = namedtuple("KeyCache", "npt unit poni mask energy")
