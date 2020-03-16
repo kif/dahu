@@ -11,7 +11,10 @@ __status__ = "development"
 __version__ = "1.0.0"
 
 import sys
+import logging
 import h5py
+import pyFAI.io
+pyFAI.io.logger.setLevel(logging.ERROR)
 from pyFAI.io import Nexus
 
 # silence non serious error messages, which are printed
@@ -64,8 +67,6 @@ except:
     bitshuffle = None
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 import pyFAI.worker
-import pyFAI.io
-pyFAI.io.logger.setLevel(logging.ERROR)
 import pyFAI.utils
 import fabio
 import shutil
@@ -82,8 +83,6 @@ from dahu.plugin import Plugin, plugin_from_function
 from dahu.job import Job
 from dahu.cache import DataCache
 
-import numexpr
-numexpr.set_num_threads(8)
 
 if sys.version_info[0] < 3:
     StringTypes = (str, unicode)

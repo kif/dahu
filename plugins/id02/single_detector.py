@@ -12,21 +12,37 @@ __status__ = "development"
 __version__ = "0.9.0"
 
 import os
-import sys
 import time
 import threading
 import shutil
 import posixpath
 from collections import namedtuple
+import json
 import logging
 logger = logging.getLogger("id02.single_detector")
-
+import numpy
+import numexpr
+import h5py
+from dahu import version as dahu_version
 from dahu.plugin import Plugin
 from dahu.utils import get_isotime
 from dahu.job import Job
 from dahu.cache import DataCache
-
+import fabio
+import pyFAI
+import pyFAI.utils
+from pyFAI.worker import Worker, DistortionWorker, PixelwiseWorker
+from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import StringTypes, Nexus
+try:
+    import hdf5plugin
+except ImportError:
+    COMPRESSION = {}
+else:
+    COMPRESSION = hdf5plugin.Bitshuffle()
+
+numexpr.set_num_threads(8)
+
 CacheKey = namedtuple("CacheKey", ["ai", "mask", "shape"])
 
 
@@ -422,7 +438,7 @@ Possible values for to_save:
         if not os.path.exists(mfile):
             self.log_error("Metadata file %s does not exist" % mfile, do_raise=True)
 
-        self.metadata_nxs = pyFAI.io.Nexus(mfile, "r")
+        self.metadata_nxs = Nexus(mfile, "r")
         I1 = t = None
         if correct_shutter_closing_time:
             key = "Intensity1ShutCor"
@@ -447,12 +463,22 @@ Possible values for to_save:
         return I1, t
 
     def parse_image_file(self):
-        """
+        self.input_nxs = Nexus(self.image_file, "r")
+        creator = self.input_nxs.h5.attrs.get("creator")
+        if creator is None:
+            return self.parse_image_file_old()
+        elif creator.startswith("LIMA-"):
+            version = creator.split("-")[1]
+            # maybe in the future, test on version of lima
+            return self.parse_image_file_lima()
+
+    def parse_image_file_old(self):
+        """Historical version, works with former LIMA version
+        
         @return: dict with interpreted metadata
         """
         metadata = {}
 
-        self.input_nxs = pyFAI.io.Nexus(self.image_file, "r")
         if "entry" in self.input:
             self.entry = self.input_nxs.get_entry(self.input["entry"])
         else:
@@ -515,6 +541,54 @@ Possible values for to_save:
             metadata[key] = conv(value.value)
         return metadata
 
+    def parse_image_file_lima(self):
+        """LIMA version working with LIMA-1.9.3
+        
+        @return: dict with interpreted metadata
+        """
+        metadata = {}
+
+        if "entry" in self.input:
+            self.entry = self.input_nxs.get_entry(self.input["entry"])
+        else:
+            self.entry = self.input_nxs.get_entries()[0]  # take the last entry
+        instrument = self.input_nxs.get_class(self.entry, class_type="NXinstrument")
+        if len(instrument) == 1:
+            instrument = instrument[0]
+        else:
+            self.log_error("Expected ONE instrument is expected in entry, got %s in %s %s" %
+                           (len(instrument), self.image_file, self.entry))
+        detector_grp = self.input_nxs.get_class(instrument, class_type="NXdetector")
+        if len(detector_grp) == 1:
+            detector_grp = detector_grp[0]
+        elif len(detector_grp) == 0 and "detector" in instrument:
+            detector_grp = instrument["detector"]
+        else:
+            self.log_error("Expected ONE detector is expected in experiment, got %s in %s %s %s" %
+                           (len(detector_grp), self.input_nxs, self.image_file, instrument))
+        self.images_ds = detector_grp.get("data")
+        if isinstance(self.images_ds, h5py.Group):
+            if self.images_ds.attrs.get("NX_class") == "NXdata":
+                # this is an NXdata not a dataset: use the @signal
+                self.images_ds = self.images_ds.get(self.images_ds.attrs.get("signal"))
+        self.in_shape = self.images_ds.shape
+        if "detector_information" in detector_grp:
+            detector_information = detector_grp["detector_information"]
+            if "model" in detector_information:
+                metadata["DetectorName"] = str(detector_information["model"])
+        # now read an interpret all static metadata.
+        # metadata are on the entry/instrument/detector/collection
+        collections = self.input_nxs.get_class(detector_grp, class_type="NXcollection")
+        headers = [grp for grp in collections if posixpath.basename(grp.name) == "header"]
+        if len(headers) != 1:
+            self.log_error("Expected a 'header' NXcollection in detector")
+        parameters_grp = headers[0]
+        for key, value in parameters_grp.items():
+            base = key.split("_")[0]
+            conv = self.KEY_CONV.get(base, str)
+            metadata[key] = conv(value[()])
+        return metadata
+
     def create_hdf5(self):
         """
         Create one HDF5 file per output
@@ -524,7 +598,7 @@ Possible values for to_save:
         if basename.endswith("_raw"):
             basename = basename[:-4]
         json_config = json.dumps(self.input)
-        isotime = numpy.string_(get_isotime())
+        isotime = str(get_isotime())
         detector_grp = self.input_nxs.find_detector(all=True)
         detector_name = "undefined"
         for grp in detector_grp:
@@ -544,32 +618,32 @@ Possible values for to_save:
             outfile = os.path.join(self.dest, "%s_%s.h5" % (basename, ext))
             self.output_hdf5[ext] = outfile
             try:
-                nxs = pyFAI.io.Nexus(outfile, "a")
+                nxs = Nexus(outfile, "a")
             except IOError as error:
                 self.log_warning("invalid HDF5 file %s: remove and re-create!\n%s" % (outfile, error))
                 os.unlink(outfile)
-                nxs = pyFAI.io.Nexus(outfile)
+                nxs = Nexus(outfile)
             entry = nxs.new_entry("entry", program_name="dahu", title=self.image_file + ":" + self.images_ds.name)
-            entry["program_name"].attrs["version"] = dahu.version
-            entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
-            entry["plugin_name"].attrs["version"] = version
-            entry["input"] = numpy.string_(json_config)
+            entry["program_name"].attrs["version"] = dahu_version
+            entry["plugin_name"] = str(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
+            entry["plugin_name"].attrs["version"] = __version__
+            entry["input"] = str(json_config)
             entry["input"].attrs["format"] = 'json'
 
-            entry["detector_name"] = numpy.string_(detector_name)
+            entry["detector_name"] = str(detector_name)
 
             nxprocess = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
-            nxprocess["program"] = numpy.string_("PyFAI")
-            nxprocess["version"] = numpy.string_(pyFAI.version)
+            nxprocess["program"] = str("PyFAI")
+            nxprocess["version"] = str(pyFAI.version)
             nxprocess["date"] = isotime
-            nxprocess["processing_type"] = numpy.string_(ext)
+            nxprocess["processing_type"] = str(ext)
             nxdata = nxs.new_class(nxprocess, "result_" + ext, class_type="NXdata")
             entry.attrs["default"] = nxdata.name
             metadata_grp = nxprocess.require_group("parameters")
 
-            for key, val in self.metadata.iteritems():
-                if type(val) in [str, unicode]:
-                    metadata_grp[key] = numpy.string_(val)
+            for key, val in self.metadata.items():
+                if type(val) in StringTypes:
+                    metadata_grp[key] = str(val)
                 else:
                     metadata_grp[key] = val
 
@@ -612,7 +686,7 @@ Possible values for to_save:
                 shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
 
                 ai = self.ai.__copy__()
-                worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), self.unit)
+                worker = Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), self.unit)
                 if self.flat is not None:
                     worker.ai.set_flatfield(self.flat)
                 if self.dark is not None:
@@ -645,7 +719,7 @@ Possible values for to_save:
                     npt1_rad = self.npt1_rad
                     ai = self.ai
                 shape = (self.in_shape[0], npt1_rad)
-                worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (1, npt1_rad), unit=unit)
+                worker = Worker(ai, self.in_shape[-2:], (1, npt1_rad), unit=unit)
                 worker.output = "numpy"
                 if self.in_shape[0] < 5:
                     worker.method = "splitbbox"
@@ -662,34 +736,34 @@ Possible values for to_save:
                     worker.polarization_factor = True
                 self.workers[ext] = worker
             elif ext == "sub":
-                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark,
-                                                      dummy=self.dummy,
-                                                      delta_dummy=self.delta_dummy,
-                                                      )
+                worker = PixelwiseWorker(dark=self.dark,
+                                         dummy=self.dummy,
+                                         delta_dummy=self.delta_dummy,
+                                         )
                 self.workers[ext] = worker
             elif ext == "flat":
-                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark,
-                                                      flat=self.flat,
-                                                      dummy=self.dummy, delta_dummy=self.delta_dummy,
-                                                      )
+                worker = PixelwiseWorker(dark=self.dark,
+                                         flat=self.flat,
+                                         dummy=self.dummy, delta_dummy=self.delta_dummy,
+                                         )
                 self.workers[ext] = worker
             elif ext == "solid":
-                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark,
-                                                      flat=self.flat,
-                                                      solidangle=self.get_solid_angle(),
-                                                      dummy=self.dummy,
-                                                      delta_dummy=self.delta_dummy,
-                                                      polarization=self.polarization
-                                                      )
+                worker = PixelwiseWorker(dark=self.dark,
+                                         flat=self.flat,
+                                         solidangle=self.get_solid_angle(),
+                                         dummy=self.dummy,
+                                         delta_dummy=self.delta_dummy,
+                                         polarization=self.polarization
+                                         )
                 self.workers[ext] = worker
             elif ext == "dist":
-                worker = pyFAI.worker.DistortionWorker(dark=self.dark,
-                                                       flat=self.flat,
-                                                       solidangle=self.get_solid_angle(),
-                                                       dummy=self.dummy,
-                                                       delta_dummy=self.delta_dummy,
-                                                       polarization=self.polarization,
-                                                       detector=self.ai.detector)
+                worker = DistortionWorker(dark=self.dark,
+                                          flat=self.flat,
+                                          solidangle=self.get_solid_angle(),
+                                          dummy=self.dummy,
+                                          delta_dummy=self.delta_dummy,
+                                          polarization=self.polarization,
+                                          detector=self.ai.detector)
                 self.workers[ext] = worker
                 if self.distortion is None:
                     self.distortion = worker.distortion
@@ -703,13 +777,13 @@ Possible values for to_save:
                     worker.distortion = self.distortion
 
             elif ext == "norm":
-                worker = pyFAI.worker.DistortionWorker(dark=self.dark,
-                                                       flat=self.flat,
-                                                       solidangle=self.get_solid_angle(),
-                                                       dummy=self.dummy,
-                                                       delta_dummy=self.delta_dummy,
-                                                       polarization=self.polarization,
-                                                       detector=self.ai.detector)
+                worker = DistortionWorker(dark=self.dark,
+                                          flat=self.flat,
+                                          solidangle=self.get_solid_angle(),
+                                          dummy=self.dummy,
+                                          delta_dummy=self.delta_dummy,
+                                          polarization=self.polarization,
+                                          detector=self.ai.detector)
                 self.workers[ext] = worker
                 if self.distortion is None:
                     self.distortion = worker.distortion
@@ -724,12 +798,11 @@ Possible values for to_save:
             else:
                 self.log_warning("unknown treatment %s" % ext)
 
-            if (len(shape) >= 3) and (bitshuffle is not None):
-                compression = {"compression": bitshuffle.h5.H5FILTER,
-                               "compression_opts": (0, bitshuffle.h5.H5_COMPRESS_LZ4)}
+            if (len(shape) >= 3):
+                compression = {k:v for k, v in COMPRESSION.items()}
             else:
                 compression = {}
-
+            print(compression)
             output_ds = nxdata.create_dataset("data",
                                               shape,
                                               dtype=numpy.float32,
@@ -867,7 +940,7 @@ Possible values for to_save:
         if not os.path.exists(filename):
             self.log_error("Unable to read dark data from filename %s" % filename,
                            do_raise=True)
-        with pyFAI.io.Nexus(filename, "r") as nxs:
+        with Nexus(filename, "r") as nxs:
             for entry in nxs.get_entries():
                 for instrument in nxs.get_class(entry, "NXinstrument"):
                     for detector in nxs.get_class(instrument, "NXdetector"):
