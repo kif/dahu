@@ -11,14 +11,45 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/02/2020"
+__date__ = "21/02/2020"
 __status__ = "development"
 version = "0.0.1"
 
+from collections import namedtuple
 from typing import NamedTuple
 import logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("bm29.common")
 import numpy
+from dahu.cache import DataCache
+from hdf5plugin import Bitshuffle
+import pyFAI, pyFAI.units
+from pyFAI.method_registry import IntegrationMethod
+import fabio
+
+#cmp contains the compression options, shared by all plugins. Used mainly for images 
+cmp = Bitshuffle()
+
+# Constants associated to the azimuthal integrator to be used in all plugins:
+polarization_factor = 0.9
+method = IntegrationMethod.select_method(1, "no", "csr", "opencl")[0]
+
+#This cache contains azimuthal integrators shared between the different plugins
+KeyCache = namedtuple("KeyCache", "npt unit poni mask energy")
+shared_cache = DataCache(10)
+
+def get_integrator(keycache):
+    "retrieve or build an azimuthal integrator based on the keycache provided "
+    #key = KeyCache(self.npt, self.unit, self.poni, self.mask, self.energy)
+    if keycache in shared_cache:
+        ai = shared_cache[keycache]
+    else:
+        ai = pyFAI.load(keycache.poni)
+        ai.wavelength = 1e-10 * pyFAI.units.hc / keycache.energy
+        if keycache.mask:
+            mask = numpy.logical_or(fabio.open(keycache.mask).data, ai.detector.mask).astype("int8")
+            ai.detector.mask = mask
+        shared_cache[keycache] = ai
+    return ai
 
 def _fromdict(cls, dico):
     "Mirror of _asdict: take the dict and populate the tuple to be returned"
