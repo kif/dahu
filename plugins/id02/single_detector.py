@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/03/2020"
+__date__ = "17/03/2020"
 __status__ = "development"
 __version__ = "0.9.0"
 
@@ -44,6 +44,8 @@ else:
 numexpr.set_num_threads(8)
 
 CacheKey = namedtuple("CacheKey", ["ai", "mask", "shape"])
+
+print(__file__)
 
 
 class SingleDetector(Plugin):
@@ -129,7 +131,8 @@ Possible values for to_save:
                 "Dummy": float,
                 "PSize": float,
                 "SampleDistance": float,
-                "Wavelength": float,
+                "Wavelength": float, #both are possible ?
+                "WaveLength": float,
                 "Rot": float
                 }
 
@@ -258,8 +261,8 @@ Possible values for to_save:
             self.variance_formula = self.input.get("variance_formula")
             if self.variance_formula:
                 self.variance_function = numexpr.NumExpr(self.variance_formula,
-                                                         [("data", float),
-                                                          ("dark", float)])
+                                                         [("data", numpy.float64),
+                                                          ("dark", numpy.float64)])
 
     def process(self):
         self.metadata = self.parse_image_file()
@@ -280,7 +283,18 @@ Possible values for to_save:
                     "PSize_1", "PSize_2", "Rot_1", "Rot_2", "Rot_3",
                     "SampleDistance", "WaveLength"):
             forai[key] = self.metadata.get(key)
+
         self.dist = self.metadata.get("SampleDistance")
+
+        # Some safety checks, use-input are sometimes False !
+        if self.dist<0: 
+            #which is impossible
+            self.log_warning(f"Found negative distance: {self.dist}, considering its absolute value")
+            self.dist = forai["SampleDistance"] = abs(self.metadata.get("SampleDistance"))
+             
+        if forai["WaveLength"] <0:
+            self.log_warning(f"Found negative wavelength: {forai['WaveLength']}, considering its absolute value")
+            forai["WaveLength"] = abs(self.metadata.get("WaveLength"))
         self.dummy = self.metadata.get("Dummy", self.dummy)
         self.delta_dummy = self.metadata.get("DDummy", self.delta_dummy)
         # read detector distortion distortion_filename
@@ -538,7 +552,7 @@ Possible values for to_save:
         for key, value in parameters_grp.items():
             base = key.split("_")[0]
             conv = self.KEY_CONV.get(base, str)
-            metadata[key] = conv(value.value)
+            metadata[key] = conv(value[()])
         return metadata
 
     def parse_image_file_lima(self):
@@ -603,7 +617,7 @@ Possible values for to_save:
         detector_name = "undefined"
         for grp in detector_grp:
             if "detector_information/name" in grp:
-                detector_name = grp["detector_information/name"].value
+                detector_name = grp["detector_information/name"][()]
         md_entry = self.metadata_nxs.get_entries()[0]
         instruments = self.metadata_nxs.get_class(md_entry, "NXinstrument")
         if instruments:
@@ -799,10 +813,9 @@ Possible values for to_save:
                 self.log_warning("unknown treatment %s" % ext)
 
             if (len(shape) >= 3):
-                compression = {k:v for k, v in COMPRESSION.items()}
+                compression = { k:v for k, v in COMPRESSION.items()}
             else:
                 compression = {}
-            print(compression)
             output_ds = nxdata.create_dataset("data",
                                               shape,
                                               dtype=numpy.float32,
@@ -969,32 +982,25 @@ Possible values for to_save:
 
         self.cache.get(self.cache_ai, {}).update(to_cache)
 
-        closed_files = []
-        if self.images_ds:
+        to_close = {}
+        #close also the source
+        self.output_ds["source"] = self.images_ds
+        for key, ds in self.output_ds.items():
+            if not bool(ds):
+                #the dataset is None when the file has been closed
+                continue 
             try:
-                filename = self.images_ds.file.filename
-            except RuntimeError:
-                filename = None
-            if filename and filename not in closed_files:
-                try:
-                    self.images_ds.file.close()
-                except RuntimeError:
-                    self.log_warning("Issue in closing file " + filename)
-                else:
-                    closed_files.append(filename)
-
-        for ds in self.output_ds.values():
+                hdf5_file = ds.file
+                filename = hdf5_file.filename
+            except (RuntimeError, ValueError) as err:
+                self.log_warning(f"Unable to retrieve filename of dataset {key}: {err}")
+            else:
+                to_close[filename] =  hdf5_file
+        for filename, hdf5_file in to_close.items():
             try:
-                filename = ds.file.filename
-            except RuntimeError:
-                filename = None
-            if filename and filename not in closed_files:
-                try:
-                    ds.file.close()
-                except RuntimeError:
-                    self.log_warning("Issue in closing file " + filename)
-                else:
-                    closed_files.append(filename)
+                hdf5_file.close()
+            except (RuntimeError,ValueError) as err:
+                self.log_warning(f"Issue in closing file {filename} {type(err)}: {err}")
 
         self.ai = None
         self.polarization = None
