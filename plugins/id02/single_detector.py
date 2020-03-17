@@ -639,7 +639,7 @@ Possible values for to_save:
                 nxs = Nexus(outfile)
             entry = nxs.new_entry("entry", program_name="dahu", title=self.image_file + ":" + self.images_ds.name)
             entry["program_name"].attrs["version"] = dahu_version
-            entry["plugin_name"] = fully_qualified_name(self)
+            entry["plugin_name"] = fully_qualified_name(self.__class__)
             entry["plugin_name"].attrs["version"] = __version__
             entry["input"] = str(json_config)
             entry["input"].attrs["format"] = 'json'
