@@ -358,8 +358,8 @@ input = {
                     self.mcs_grp[I + "Factor"] = I_factor
                     self.mcs_grp[I + "Factor"].attrs["interpretation"] = "scalar"
                     measured = counter * I_factor
-                    self.mcs_grp[dest] = measured
-                    self.mcs_grp[dest].attrs["interpretation"] = "scalar"
+                    self.mcs_grp[dest + "UnCor"] = measured
+                    self.mcs_grp[dest + "UnCor"].attrs["interpretation"] = "scalar"
                     self.mcs_grp[dest + "ShutCor"] = measured * correction_time
                     self.mcs_grp[dest + "ShutCor"].attrs["interpretation"] = "scalar"
         else:
