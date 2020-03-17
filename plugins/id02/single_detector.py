@@ -25,7 +25,7 @@ import numexpr
 import h5py
 from dahu import version as dahu_version
 from dahu.plugin import Plugin
-from dahu.utils import get_isotime
+from dahu.utils import get_isotime, fully_qualified_name
 from dahu.job import Job
 from dahu.cache import DataCache
 import fabio
@@ -639,7 +639,7 @@ Possible values for to_save:
                 nxs = Nexus(outfile)
             entry = nxs.new_entry("entry", program_name="dahu", title=self.image_file + ":" + self.images_ds.name)
             entry["program_name"].attrs["version"] = dahu_version
-            entry["plugin_name"] = str(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
+            entry["plugin_name"] = fully_qualified_name(self)
             entry["plugin_name"].attrs["version"] = __version__
             entry["input"] = str(json_config)
             entry["input"].attrs["format"] = 'json'
