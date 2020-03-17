@@ -457,7 +457,7 @@ Possible values for to_save:
         if correct_shutter_closing_time:
             key = "Intensity1ShutCor"
         else:
-            key = "Intensity1"
+            key = "Intensity1UnCor"
         for entry in self.metadata_nxs.get_entries():
             for instrument in self.metadata_nxs.get_class(entry, "NXinstrument"):
                 if "MCS" in instrument:
