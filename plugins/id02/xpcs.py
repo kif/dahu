@@ -112,14 +112,14 @@ Minimalistic example:
         if len(entries) == 0:
             self.log_error("No entry in data_file %s" % data_file)
         entry = entries[0]
-        measurments = nxs.get_class(entry, "NXmeasurment")
-        if len(measurments) == 0:
-            self.log_error("No NXmeasurment in entry: %s of data_file: %s" % (entry, data_file))
-        measurment = measurments[0]
-        if "data" in measurment:
-            dataset = measurment["data"]
+        measurements = nxs.get_class(entry, "NXmeasurement")
+        if len(measurements) == 0:
+            self.log_error("No NXmeasurement in entry: %s of data_file: %s" % (entry, data_file))
+        measurement = measurements[0]
+        if "data" in measurement:
+            dataset = measurement["data"]
         else:
-            self.log_error("No dataset in measurment: %s of data_file: %s" % (entry, data_file))
+            self.log_error("No dataset in measurement: %s of data_file: %s" % (entry, data_file))
             dataset = None
         return dataset
 
@@ -208,7 +208,7 @@ Minimalistic example:
             for key, value in self.input.get("sample", {}):
                 sample_grp[key] = value
 
-            # Process 0: Measurement group
+            # Process 0: measurement group
             measurement_grp = nxs.new_class(entry_grp, "0_measurement", "NXdata")
             measurement_grp["images"] = h5py.ExternalLink(self.dataset.file.filename, self.dataset.name)
             measurement_grp.attrs["signal"] = "images"
