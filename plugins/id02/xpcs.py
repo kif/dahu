@@ -23,8 +23,8 @@ try:
     import numexpr
 except ImportError as err:
     logger.error("NumExpr module is missing, some calculation will be slower")
-else:
     numexpr = None
+
 import hdf5plugin
 import fabio
 from pyFAI.detectors import Detector
@@ -34,13 +34,13 @@ from pyFAI.units import CONST_hc
 from dynamix import version as dynamix_version
 from dynamix.correlator import dense
 # Dummy factory for correlators
-CORRELATORS = {(i, getattr(dense, i))
+CORRELATORS = {i: getattr(dense, i)
                for i in dir(dense)
                if i.endswith("Correlator")}
 COMPRESSION = hdf5plugin.Bitshuffle()
 
 
-class xpcs(Plugin):
+class XPCS(Plugin):
     """This plugin does pixel correlation for XPCS and averages the signal from various bins provided in the qmask. 
 
 Minimalistic example:
@@ -89,16 +89,17 @@ Minimalistic example:
         self.unit = "q_nm^-1"
         self.ai = None
         self.correlator_name = None
+        self.result_filename = None
 
-    def process(self, kwargs=None):
-        Plugin.process(self, kwargs)
+    def process(self):
+        Plugin.process(self)
         self.dataset = self.read_data()
         self.nframes = self.dataset.shape[0]
         self.shape = self.dataset.shape[1:]
         self.qmask = self.make_qmask()
         Correlator = self.get_correlator()
         correlator = Correlator(self.shape, self.nframes, qmask=self.qmask)
-        results = correlator.correlate(self.frames[...])
+        results = correlator.correlate(self.dataset[...])
         self.save_results(results)
 
     def read_data(self):
@@ -163,19 +164,20 @@ Minimalistic example:
 
             if widthq is None:
                 self.log_error("widthq is mandatory in experiment_setup section")
-            if numexpr is not None:
-                qmaskf = numexpr.evaluate("(q_array - firstq) / (widthq + stepq)")
-                qmask = numexpr.evaluate("where(qmaskf<0, 0, where(qmaskf>(numberq+1),0, where((qmaskf%1)>(widthq/(widthq + stepq)), 0, qmaskf)))",
-                         out=numpy.empty(q_array.shape, dtype=numpy.uint16),
-                         casting="unsafe")
-            else:
+            if numexpr is None:
                 qmaskf = (q_array - firstq) / (widthq + stepq)
                 qmaskf[qmaskf < 0] = 0
                 qmaskf[qmaskf > (numberq + 1)] = 0
                 qmaskf[(qmaskf % 1) > widthq / (widthq + stepq)] = 0
                 qmask = qmaskf.astype(dtype=numpy.uint16)
                 self.log_warning("numexpr is missing, calculation is slower")
+            else:
+                qmaskf = numexpr.evaluate("(q_array - firstq) / (widthq + stepq)")
+                qmask = numexpr.evaluate("where(qmaskf<0, 0, where(qmaskf>(numberq+1),0, where((qmaskf%1)>(widthq/(widthq + stepq)), 0, qmaskf)))",
+                         out=numpy.empty(q_array.shape, dtype=numpy.uint16),
+                         casting="unsafe")
         self.ai = geometry
+        # TODO: calculate Q-range
         return qmask
 
     def get_correlator(self):
@@ -197,15 +199,15 @@ Minimalistic example:
             result_file = a + "_xpcs" + b
             self.log_warning("No destination file provided, saving in %s" % result_file)
         with Nexus(result_file, mode="w") as nxs:
-            entry_grp = nxs.new_entry(self, entry="entry",
+            entry_grp = nxs.new_entry(entry="entry",
                                       program_name=self.input.get("plugin_name", "dahu"),
                                       title="XPCS experiment",
                                       force_time=self.start_time)
             nxs.h5.attrs["default"] = entry_grp.name
 
             # Sample description, provided by the input
-            sample_grp = nxs.new_class(entry_grp, self.sample.name, "NXsample")
-            for key, value in self.input.get("sample", {}):
+            sample_grp = nxs.new_class(entry_grp, "sample", "NXsample")
+            for key, value in self.input.get("sample", {}).items():
                 sample_grp[key] = value
 
             # Process 0: measurement group
@@ -246,17 +248,21 @@ Minimalistic example:
             xpcs_grp["program"] = "dynamix"
             xpcs_grp["version"] = dynamix_version
             xpcs_grp["date"] = get_isotime()
-            xpcs_grp.create_dataset("correlator", self.correlator_name)
+            xpcs_grp.create_dataset("correlator", data=self.correlator_name)
             xpcs_grp.create_dataset("correlator_config", data=json.dumps({}))  # TODO
-            xpcs_grp.create_dataset("qmask", data=self.qmask, **COMPRESSION)
-            xpcs_grp.attrs["interpretation"] = "image"
+            qmask_ds = xpcs_grp.create_dataset("qmask", self.qmask.shape, chunks=self.qmask.shape, **COMPRESSION)
+            qmask_ds[...] = self.qmask
+            qmask_ds.attrs["interpretation"] = "image"
             xpcs_data = nxs.new_class(xpcs_grp, "results", "NXdata")
             xpcs_grp.attrs["default"] = xpcs_data.name
-            result_ds = xpcs_data.create_dataset("data", data=result, **COMPRESSION)
+            result_ds = xpcs_data.create_dataset("data", result.shape, chunks=result.shape, **COMPRESSION)
+            result_ds[...] = result
             result_ds.attrs["interpretation"] = "spectrum"
+        self.result_filename = result_file
 
     def teardown(self):
-        self.output["result_file"] = self.result_filename
+        if self.result_filename:
+            self.output["result_file"] = self.result_filename
         try:
             self.dataset.file.close()
         except Exception as err:
