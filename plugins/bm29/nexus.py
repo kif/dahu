@@ -99,7 +99,7 @@ class Nexus(object):
             logger.error("h5py module missing: NeXus not supported")
             raise RuntimeError("H5py module is missing")
 
-        pre_existing = os.path.exists(self.filename)
+        pre_existing = os.path.exists(self.filename) or "w" in mode
         if self.mode is None:
             if pre_existing:
                 self.mode = "r"

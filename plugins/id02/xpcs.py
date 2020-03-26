@@ -203,7 +203,7 @@ Minimalistic example:
                          casting="unsafe")
         self.ai = geometry
 
-        self.qrange = firstq + widthq / 2 + numpy.arange(numberq) * (widthq + stepq)
+        self.qrange = firstq + widthq / 2 + numpy.arange(qmask.max()) * (widthq + stepq)
 
         return qmask
 
@@ -244,7 +244,7 @@ Minimalistic example:
             # Process 0: measurement group
             measurement_grp = nxs.new_class(entry_grp, "0_measurement", "NXmeasurement")
             measurement_grp["images"] = h5py.ExternalLink(os.path.relpath(os.path.abspath(self.dataset.file.filename),
-                                                                          os.path.abspath(result_file)),
+                                                                          os.path.dirname(os.path.abspath(result_file))),
                                                           self.dataset.name)
             measurement_grp.attrs["signal"] = "images"
 
@@ -277,7 +277,6 @@ Minimalistic example:
 
             # Storage of the result
             xpcs_grp = nxs.new_class(entry_grp, "1_XPCS", "NXprocess")
-            entry_grp.attrs["default"] = xpcs_grp
             xpcs_grp["sequence_index"] = 1
             xpcs_grp["program"] = "dynamix"
             xpcs_grp["version"] = dynamix_version
@@ -288,7 +287,7 @@ Minimalistic example:
             qmask_ds[...] = self.qmask
             qmask_ds.attrs["interpretation"] = "image"
             xpcs_data = nxs.new_class(xpcs_grp, "results", "NXdata")
-            xpcs_grp.attrs["default"] = xpcs_data.name
+            entry_grp.attrs["default"] = xpcs_grp.attrs["default"] = xpcs_data.name
             result_ds = xpcs_data.create_dataset("g2", result.shape, chunks=result.shape, **COMPRESSION)
             result_ds[...] = result
             result_ds.attrs["interpretation"] = "spectrum"
@@ -303,7 +302,7 @@ Minimalistic example:
 
             xpcs_data.attrs["signal"] = "g2"
             xpcs_data.attrs["axes"] = ["q", "t"]
-            # xpcs_data["title"] = "g₂(q, t)"
+            xpcs_data["title"] = "g₂(q, t)"
         self.result_filename = result_file
 
     def teardown(self):
