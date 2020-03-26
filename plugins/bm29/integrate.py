@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/02/2020"
+__date__ = "26/03/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -177,7 +177,7 @@ class IntegrateMultiframe(Plugin):
 
     def create_nexus(self):
         creation_time = os.stat(self.input_file).st_ctime
-        nxs = self.nxs = Nexus(self.output_file, mode="w")
+        nxs = self.nxs = Nexus(self.output_file, mode="w", creator="dahu")
         
         entry_grp = nxs.new_entry("entry", self.input.get("plugin_name", "dahu"), 
                               title='BioSaxs multiframe integration', 

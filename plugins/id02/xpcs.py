@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "25/03/2020"
+__date__ = "26/03/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -18,7 +18,6 @@ logger = logging.getLogger("id02.xpcs")
 
 from dahu.plugin import Plugin
 import numpy
-import h5py
 try:
     import numexpr
 except ImportError as err:
@@ -26,6 +25,7 @@ except ImportError as err:
     numexpr = None
 
 import hdf5plugin
+import h5py
 import fabio
 from pyFAI.detectors import Detector
 from pyFAI.geometry import Geometry
@@ -90,6 +90,7 @@ Minimalistic example:
         self.ai = None
         self.correlator_name = None
         self.result_filename = None
+        self.timestep = None
 
     def process(self):
         Plugin.process(self)
@@ -122,6 +123,18 @@ Minimalistic example:
         else:
             self.log_error("No dataset in measurement: %s of data_file: %s" % (entry, data_file))
             dataset = None
+
+        instruments = nxs.get_class(entry, "NXinstrument")
+        if len(instruments) == 0:
+            self.log_error("No NXinstrument in entry: %s of data_file: %s" % (entry, data_file))
+        instrument = instruments[0]
+        detectors = nxs.get_class(instrument, "NXdetector")
+        if len(detectors) != 1:
+            self.log_error("No NXdetector in entry: %s of data_file: %s" % (entry, data_file))
+        detector = detectors[0]
+        header = detector["header"]
+        zero = numpy.array([0])
+        self.timestep = float(header.get("acq_expo_time", zero)[()]) + float(header.get("acq_latency_time", zero)[()])
         return dataset
 
     def make_qmask(self):
@@ -161,6 +174,17 @@ Minimalistic example:
             numberq = experiment_setup.get("numberq", (1 << 16) - 2)  # we plan to store the qmask as uint16
 
             # TODO: manage the different masks!
+            detector_maskfile = detector_section.get("mask", '')
+            if os.path.exists(detector_maskfile):
+                detector_mask = fabio.open(detector_maskfile).data
+            else:
+                detector_mask = numpy.zeros(q_array.shape, dtype=numpy.int8)
+            beamstop_maskfile = experiment_setup.get("beamstop_mask", "")
+            if os.path.exists(beamstop_maskfile):
+                beamstop_mask = fabio.open(beamstop_maskfile).data
+            else:
+                beamstop_mask = numpy.zeros(q_array.shape, dtype=numpy.int8)
+            mask = numpy.logical_or(detector_mask, beamstop_mask)
 
             if widthq is None:
                 self.log_error("widthq is mandatory in experiment_setup section")
@@ -169,15 +193,18 @@ Minimalistic example:
                 qmaskf[qmaskf < 0] = 0
                 qmaskf[qmaskf > (numberq + 1)] = 0
                 qmaskf[(qmaskf % 1) > widthq / (widthq + stepq)] = 0
+                qmaskf[mask] = 0
                 qmask = qmaskf.astype(dtype=numpy.uint16)
                 self.log_warning("numexpr is missing, calculation is slower")
             else:
                 qmaskf = numexpr.evaluate("(q_array - firstq) / (widthq + stepq)")
-                qmask = numexpr.evaluate("where(qmaskf<0, 0, where(qmaskf>(numberq+1),0, where((qmaskf%1)>(widthq/(widthq + stepq)), 0, qmaskf)))",
+                qmask = numexpr.evaluate("where(qmaskf<0, 0, where(qmaskf>(numberq+1),0, where((qmaskf%1)>(widthq/(widthq + stepq)), 0, where(mask, 0, qmaskf))))",
                          out=numpy.empty(q_array.shape, dtype=numpy.uint16),
                          casting="unsafe")
         self.ai = geometry
-        # TODO: calculate Q-range
+
+        self.qrange = firstq + widthq / 2 + numpy.arange(numberq) * (widthq + stepq)
+
         return qmask
 
     def get_correlator(self):
@@ -198,7 +225,11 @@ Minimalistic example:
             a, b = os.path.splitext(input_file)
             result_file = a + "_xpcs" + b
             self.log_warning("No destination file provided, saving in %s" % result_file)
-        with Nexus(result_file, mode="w") as nxs:
+
+        if os.path.exists(result_file):
+            os.unlink(result_file)
+
+        with Nexus(result_file, mode="w", creator="dahu") as nxs:
             entry_grp = nxs.new_entry(entry="entry",
                                       program_name=self.input.get("plugin_name", "dahu"),
                                       title="XPCS experiment",
@@ -211,8 +242,10 @@ Minimalistic example:
                 sample_grp[key] = value
 
             # Process 0: measurement group
-            measurement_grp = nxs.new_class(entry_grp, "0_measurement", "NXdata")
-            measurement_grp["images"] = h5py.ExternalLink(self.dataset.file.filename, self.dataset.name)
+            measurement_grp = nxs.new_class(entry_grp, "0_measurement", "NXmeasurement")
+            measurement_grp["images"] = h5py.ExternalLink(os.path.relpath(os.path.abspath(self.dataset.file.filename),
+                                                                          os.path.abspath(result_file)),
+                                                          self.dataset.name)
             measurement_grp.attrs["signal"] = "images"
 
             # Instrument
@@ -244,6 +277,7 @@ Minimalistic example:
 
             # Storage of the result
             xpcs_grp = nxs.new_class(entry_grp, "1_XPCS", "NXprocess")
+            entry_grp.attrs["default"] = xpcs_grp
             xpcs_grp["sequence_index"] = 1
             xpcs_grp["program"] = "dynamix"
             xpcs_grp["version"] = dynamix_version
@@ -255,9 +289,21 @@ Minimalistic example:
             qmask_ds.attrs["interpretation"] = "image"
             xpcs_data = nxs.new_class(xpcs_grp, "results", "NXdata")
             xpcs_grp.attrs["default"] = xpcs_data.name
-            result_ds = xpcs_data.create_dataset("data", result.shape, chunks=result.shape, **COMPRESSION)
+            result_ds = xpcs_data.create_dataset("g2", result.shape, chunks=result.shape, **COMPRESSION)
             result_ds[...] = result
             result_ds.attrs["interpretation"] = "spectrum"
+            qrange_ds = xpcs_data.create_dataset("q", data=self.qrange)
+            qrange_ds.attrs["interpretation"] = "scalar"
+            qrange_ds.attrs["unit"] = self.unit
+
+            trange = numpy.arange(result.shape[-1]) * self.timestep
+            trange_ds = xpcs_data.create_dataset("t", data=trange)
+            trange_ds.attrs["interpretation"] = "scalar"
+            trange_ds.attrs["unit"] = "s"
+
+            xpcs_data.attrs["signal"] = "g2"
+            xpcs_data.attrs["axes"] = ["q", "t"]
+            # xpcs_data["title"] = "g₂(q, t)"
         self.result_filename = result_file
 
     def teardown(self):

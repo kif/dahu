@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/03/2020"
+__date__ = "26/03/2020"
 __status__ = "development"
 __version__ = "0.9.0"
 
@@ -44,8 +44,6 @@ else:
 numexpr.set_num_threads(8)
 
 CacheKey = namedtuple("CacheKey", ["ai", "mask", "shape"])
-
-print(__file__)
 
 
 class SingleDetector(Plugin):
