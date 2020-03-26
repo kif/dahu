@@ -190,7 +190,7 @@ class IntegrateMultiframe(Plugin):
         instrument_grp = nxs.new_instrument(entry_grp, "BM29")
         instrument_grp["name"] = "BioSaxs"
         source_grp = nxs.new_class(instrument_grp, "ESRF", "NXsource")
-        source_grp["radiation"] = "Synchrotron X-ray source"
+        source_grp["type"] = "Synchrotron X-ray source"
         source_grp["name"] = "European Synchrotron Radiation Facility"
         source_grp["probe"] = "X-ray"
         current = numpy.ascontiguousarray(self.input.get("storage_ring_current", []), dtype=numpy.float32)

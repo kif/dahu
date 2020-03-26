@@ -252,7 +252,7 @@ Minimalistic example:
             instrument_grp = nxs.new_instrument(entry_grp, "ID02")
             instrument_grp["name"] = "TruSAXS"
             source_grp = nxs.new_class(instrument_grp, "ESRF", "NXsource")
-            source_grp["radiation"] = "Synchrotron X-ray source"
+            source_grp["type"] = "Synchrotron X-ray source"
             source_grp["name"] = "European Synchrotron Radiation Facility"
             source_grp["probe"] = "X-ray"
 #             current = numpy.ascontiguousarray(self.input.get("storage_ring_current", []), dtype=numpy.float32)
@@ -286,6 +286,7 @@ Minimalistic example:
             qmask_ds = xpcs_grp.create_dataset("qmask", self.qmask.shape, chunks=self.qmask.shape, **COMPRESSION)
             qmask_ds[...] = self.qmask
             qmask_ds.attrs["interpretation"] = "image"
+            qmask_ds.attrs["long_name"] = "mask with bins averaged (0=masked-out)"
             xpcs_data = nxs.new_class(xpcs_grp, "results", "NXdata")
             entry_grp.attrs["default"] = xpcs_grp.attrs["default"] = xpcs_data.name
             result_ds = xpcs_data.create_dataset("g2", result.shape, chunks=result.shape, **COMPRESSION)
@@ -294,11 +295,13 @@ Minimalistic example:
             qrange_ds = xpcs_data.create_dataset("q", data=self.qrange)
             qrange_ds.attrs["interpretation"] = "scalar"
             qrange_ds.attrs["unit"] = self.unit
+            qrange_ds.attrs["long_name"] = "Scattering vector q (%s)" % self.unit
 
             trange = numpy.arange(result.shape[-1]) * self.timestep
             trange_ds = xpcs_data.create_dataset("t", data=trange)
             trange_ds.attrs["interpretation"] = "scalar"
             trange_ds.attrs["unit"] = "s"
+            trange_ds.attrs["long_name"] = "Time t (s)"
 
             xpcs_data.attrs["signal"] = "g2"
             xpcs_data.attrs["axes"] = ["q", "t"]
