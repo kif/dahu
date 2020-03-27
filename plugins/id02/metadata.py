@@ -7,9 +7,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/03/2020"
+__date__ = "27/03/2020"
 __status__ = "development"
-__version__ = "0.9.0"
+__version__ = "0.9.1"
 
 import os
 import posixpath
@@ -17,7 +17,7 @@ import json
 import numpy
 from dahu.plugin import Plugin
 from dahu import version as dahu_version
-from dahu.utils import get_isotime
+from dahu.utils import get_isotime, fully_qualified_name
 import PyTango
 import logging
 logger = logging.getLogger("id02.metadata")
@@ -156,7 +156,7 @@ input = {
             self.log_error("hdf5_filename not in input")
         self.hdf5_filename = self.input2.get("hdf5_filename")
         self.entry = self.input2.get("entry", "entry")
-        self.instrument = self.input2.get("instrument", "ESRF-ID02")
+        self.instrument = self.input2.get("instrument", "ID02")
 
     def process(self):
         self.create_hdf5()
@@ -167,35 +167,33 @@ input = {
         Create a HDF5 file and data-structure
         """
         try:
-            self.nxs = Nexus(self.hdf5_filename, "a")
+            self.nxs = Nexus(self.hdf5_filename, mode="a", creator="dahu")
         except IOError as error:
             self.log_warning("Unable to open %s: %s. Removing file and starting from scratch" % (self.hdf5_filename, error))
             os.unlink(self.hdf5_filename)
             self.nxs = Nexus(self.hdf5_filename)
 
-        entry = self.nxs.new_entry(self.entry, program_name="Dahu", title="id02.metadata")
-        # self.group.parent["title"] = str("id02.metadata")
-        # self.group.parent["program"] = str("Dahu")
-        # self.group.parent["start_time"] = str(start_time)
+        entry = self.nxs.new_entry(self.entry,
+                                   program_name=self.input.get("plugin_name", fully_qualified_name(self.__class__)),
+                                   title="C216 metadata collection")
         self.entry = entry.name
-        entry["program_name"].attrs["version"] = dahu_version
-        entry["plugin_name"] = str(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
-        entry["plugin_name"].attrs["version"] = __version__
-        entry["input"] = str(json.dumps(self.input))
-        entry["input"].attrs["format"] = 'json'
+        entry["program_name"].attrs["version"] = __version__
 
-        self.instrument = posixpath.join(self.entry, self.instrument)
-        self.group = self.nxs.h5.require_group(self.instrument)
-        self.group.parent.attrs["NX_class"] = "NXentry"
-        self.group.attrs["NX_class"] = "NXinstrument"
+        config_grp = self.nxs.new_class(entry, "configuration", "NXnote")
+        config_grp["type"] = "text/json"
+        config_grp["data"] = json.dumps(self.input, indent=2, separators=(",\r\n", ": "))
+
+        # Instrument
+        instrument_grp = self.nxs.new_instrument(entry=entry, instrument_name=self.instrument)
+        instrument_grp["name"] = "TruSAXS"
+        self.instrument = instrument_grp.name
+
         # TimeFrameGenerator
-        self.tfg_grp = self.nxs.h5.require_group(posixpath.join(self.instrument, "TFG"))
-        self.tfg_grp.attrs["NX_class"] = "NXcollection"
+        self.tfg_grp = self.nxs.new_class(instrument_grp, "TFG", "NXcollection")
         self.tfg_grp["device"] = str(self.c216)
 
         # MultiCounterScaler
-        self.mcs_grp = self.nxs.h5.require_group(posixpath.join(self.instrument, "MCS"))
-        self.mcs_grp.attrs["NX_class"] = "NXcollection"
+        self.mcs_grp = self.nxs.new_class(instrument_grp, "MCS", "NXcollection")
         self.mcs_grp["device"] = str(self.c216)
 
         # Static metadata
@@ -213,8 +211,6 @@ input = {
                     self.info_grp[field] = str(value)
                 else:
                     self.info_grp[field] = str(value)
-
-        start_time = self.input2.get("HMStartTime", get_isotime())
 
         # Factor
         HS32F = self.input2.get("HS32F")
