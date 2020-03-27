@@ -37,8 +37,7 @@ import freesas, freesas.cormap
 
 #from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import Sample, Ispyb, get_equivalent_frames, cmp, get_integrator, KeyCache,\
-                    method, polarization_factor
-from .nexus import Nexus, get_isotime
+                    method, polarization_factor,Nexus, get_isotime
 
 
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
