@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "26/03/2020"
+__date__ = "27/03/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -114,10 +114,10 @@ Minimalistic example:
         if len(entries) == 0:
             self.log_error("No entry in data_file %s" % data_file)
         entry = entries[0]
-        measurements = nxs.get_class(entry, "NXmeasurement")
-        if len(measurements) == 0:
-            self.log_error("No NXmeasurement in entry: %s of data_file: %s" % (entry, data_file))
-        measurement = measurements[0]
+        if "measurement" in entry:
+            measurement = entry["measurement"]
+        else:
+                self.log_error("No measurement in entry: %s of data_file: %s" % (entry, data_file))
         if "data" in measurement:
             dataset = measurement["data"]
         else:
@@ -242,7 +242,7 @@ Minimalistic example:
                 sample_grp[key] = value
 
             # Process 0: measurement group
-            measurement_grp = nxs.new_class(entry_grp, "0_measurement", "NXmeasurement")
+            measurement_grp = nxs.new_class(entry_grp, "0_measurement", "NXdata")
             measurement_grp["images"] = h5py.ExternalLink(os.path.relpath(os.path.abspath(self.dataset.file.filename),
                                                                           os.path.dirname(os.path.abspath(result_file))),
                                                           self.dataset.name)
@@ -255,13 +255,8 @@ Minimalistic example:
             source_grp["type"] = "Synchrotron X-ray source"
             source_grp["name"] = "European Synchrotron Radiation Facility"
             source_grp["probe"] = "X-ray"
-#             current = numpy.ascontiguousarray(self.input.get("storage_ring_current", []), dtype=numpy.float32)
-#             current_ds = source_grp.create_dataset("current",
-#                                                    data=current)
-#             current_ds.attrs["units"] = "mA"
-#             current_ds.attrs["interpretation"] = "spectrum"
-            monochromator_grp = nxs.new_class(instrument_grp, "DCM", "NXmonochromator")
-            monochromator_grp["description"] = "Cryogenically cooled Si-111 double-crystal monochromator "
+            monochromator_grp = nxs.new_class(instrument_grp, "monochromator", "NXmonochromator")
+            monochromator_grp["description"] = "Cryogenically cooled Si-111 channel-cut monochromator"
             wl = self.ai.wavelength * 1e10
             resolution = 2e-4
             wl_ds = monochromator_grp.create_dataset("wavelength", data=numpy.float32(wl))
@@ -274,7 +269,12 @@ Minimalistic example:
             nrj_ds.attrs["resolution"] = resolution
             nrje_ds = monochromator_grp.create_dataset("energy_error", data=CONST_hc / wl * resolution)
             nrje_ds.attrs["units"] = "keV"
-
+            crystal_grp = nxs.new_class(monochromator_grp, "Si-111", "NXcrystal")
+            crystal_grp["usage"] = "Bragg"
+            crystal_grp["type"] = "Si"
+            crystal_grp["temperature"] = numpy.float32(77.0)
+            crystal_grp["temperature"].attrs["unit"] = "K"
+            crystal_grp["reflection"] = numpy.ones(3, dtype=numpy.int8)
             # Storage of the result
             xpcs_grp = nxs.new_class(entry_grp, "1_XPCS", "NXprocess")
             xpcs_grp["sequence_index"] = 1
@@ -282,12 +282,17 @@ Minimalistic example:
             xpcs_grp["version"] = dynamix_version
             xpcs_grp["date"] = get_isotime()
             xpcs_grp.create_dataset("correlator", data=self.correlator_name)
-            xpcs_grp.create_dataset("correlator_config", data=json.dumps({}))  # TODO
-            qmask_ds = xpcs_grp.create_dataset("qmask", self.qmask.shape, chunks=self.qmask.shape, **COMPRESSION)
+
+            config_grp = nxs.new_class(xpcs_grp, "configuration", "NXnote")
+            config_grp["type"] = "text/json"
+            config_grp["data"] = json.dumps(self.input, indent=2, separators=(",\r\n", ": "))
+
+            xpcs_data = nxs.new_class(xpcs_grp, "results", "NXdata")
+            qmask_ds = xpcs_data.create_dataset("qmask", self.qmask.shape, chunks=self.qmask.shape, **COMPRESSION)
             qmask_ds[...] = self.qmask
             qmask_ds.attrs["interpretation"] = "image"
             qmask_ds.attrs["long_name"] = "mask with bins averaged (0=masked-out)"
-            xpcs_data = nxs.new_class(xpcs_grp, "results", "NXdata")
+
             entry_grp.attrs["default"] = xpcs_grp.attrs["default"] = xpcs_data.name
             result_ds = xpcs_data.create_dataset("g2", result.shape, chunks=result.shape, **COMPRESSION)
             result_ds[...] = result
