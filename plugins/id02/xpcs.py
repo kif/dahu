@@ -27,9 +27,9 @@ except ImportError as err:
 import hdf5plugin
 import h5py
 import fabio
+from .common import Nexus, get_isotime
 from pyFAI.detectors import Detector
 from pyFAI.geometry import Geometry
-from pyFAI.io import Nexus, get_isotime
 from pyFAI.units import CONST_hc
 from dynamix import version as dynamix_version
 from dynamix.correlator import dense
