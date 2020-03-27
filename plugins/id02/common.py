@@ -16,7 +16,7 @@ import h5py
 import pyFAI.io
 pyFAI.io.logger.setLevel(logging.ERROR)
 if pyFAI.version_info < (0, 20):
-    from ..bm29.nexus import Nexus
+    from .nexus import Nexus
 else:
     from pyFAI.io import Nexus
 

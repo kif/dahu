@@ -37,8 +37,7 @@ import pyFAI, pyFAI.azimuthalIntegrator
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
-from .common import Sample, Ispyb, get_equivalent_frames, cmp, get_integrator, KeyCache, polarization_factor, method
-from .nexus import Nexus, get_isotime
+from .common import Sample, Ispyb, get_equivalent_frames, cmp, get_integrator, KeyCache, polarization_factor, method, Nexus, get_isotime
 
 NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I poni mask energy polarization signal2d error2d buffer concentration")
 
