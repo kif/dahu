@@ -16,9 +16,9 @@ import h5py
 import pyFAI.io
 pyFAI.io.logger.setLevel(logging.ERROR)
 if pyFAI.version_info < (0, 20):
-    from .nexus import Nexus
+    from .nexus import Nexus, get_isotime
 else:
-    from pyFAI.io import Nexus
+    from pyFAI.io import Nexus, get_isotime
 
 # silence non serious error messages, which are printed
 # because we use h5py in a new thread (not in the main one)
