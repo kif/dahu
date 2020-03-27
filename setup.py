@@ -33,9 +33,8 @@ __authors__ = ["Jérôme Kieffer", "Thomas Vincent"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "14/02/2020"
+__date__ = "27/03/2020"
 __status__ = "development"
-
 
 import sys
 import os
@@ -64,10 +63,10 @@ except ImportError:
 PROJECT = "dahu"
 cmdclass = {}
 
+
 def get_version():
     import version
     return version.strictversion
-
 
 
 def get_readme():
@@ -99,15 +98,16 @@ classifiers = ["Development Status :: 3 - Alpha",
                "Topic :: Software Development :: Libraries :: Python Modules",
                ]
 
-
 # ########## #
 # version.py #
 # ########## #
+
 
 class build_py(_build_py):
     """
     Enhanced build_py which copies version.py to <PROJECT>._version.py
     """
+
     def find_package_modules(self, package, package_dir):
         modules = _build_py.find_package_modules(self, package, package_dir)
         if package == PROJECT:
@@ -117,10 +117,10 @@ class build_py(_build_py):
 
 cmdclass['build_py'] = build_py
 
-
 ########
 # Test #
 ########
+
 
 class PyTest(Command):
     user_options = []
@@ -133,9 +133,11 @@ class PyTest(Command):
 
     def run(self):
         import subprocess
-        errno = subprocess.call([sys.executable, 'run_tests.py', '-i'])
+        errno = subprocess.call([sys.executable, 'run_tests.py'])
         if errno != 0:
             raise SystemExit(errno)
+
+
 cmdclass['test'] = PyTest
 
 # ################### #
@@ -150,6 +152,7 @@ try:
 except ImportError:
     sphinx = None
 else:
+
     # i.e. if sphinx:
     class build_doc(BuildDoc):
 
@@ -180,11 +183,13 @@ else:
                 self.mkpath(self.builder_target_dir)
                 BuildDoc.run(self)
             sys.path.pop(0)
+
     cmdclass['build_doc'] = build_doc
 
 # ############################# #
 # numpy.distutils Configuration #
 # ############################# #
+
 
 def configuration(parent_package='', top_path=None):
     """Recursive construction of package info to be used in setup().
@@ -214,6 +219,7 @@ class sdist_debian(sdist):
     * remove auto-generated doc
     * remove cython generated .c files
     """
+
     def prune_file_list(self):
         sdist.prune_file_list(self)
         to_remove = ["doc/build", "doc/pdf", "doc/html", "pylint", "epydoc"]
@@ -251,8 +257,8 @@ class sdist_debian(sdist):
         self.archive_files = [debian_arch]
         print("Building debian .orig.tar.gz in %s" % self.archive_files[0])
 
-cmdclass['debian_src'] = sdist_debian
 
+cmdclass['debian_src'] = sdist_debian
 
 # ##### #
 # setup #
@@ -271,11 +277,11 @@ for root, dirs, files in os.walk("plugins", topdown=True):
     for name in dirs:
         base = os.path.join(root, name)
         if not os.path.isfile(os.path.join(base, "__init__.py")):
-            continue 
-        fqn = "dahu."+base.replace(os.sep, ".")
+            continue
+        fqn = "dahu." + base.replace(os.sep, ".")
         plugins.append(fqn)
         plugin_dir[fqn] = base
-        
+
 setup_kwargs.update(name=PROJECT,
                     version=get_version(),
                     url="https://github.com/kif/dahu",
@@ -292,7 +298,7 @@ setup_kwargs.update(name=PROJECT,
                         'gui/icons/*.png',
                         ]},
                     zip_safe=False,
-                    packages=["dahu", "dahu.test"]+plugins,
+                    packages=["dahu", "dahu.test"] + plugins,
                     package_dir=plugin_dir,
                     test_suite="test",
                     scripts=script_files,
