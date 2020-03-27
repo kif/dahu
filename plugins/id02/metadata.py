@@ -171,7 +171,7 @@ input = {
         except IOError as error:
             self.log_warning("Unable to open %s: %s. Removing file and starting from scratch" % (self.hdf5_filename, error))
             os.unlink(self.hdf5_filename)
-            self.nxs = Nexus(self.hdf5_filename)
+            self.nxs = Nexus(self.hdf5_filename, mode="w", creator="dahu")
 
         entry = self.nxs.new_entry(self.entry,
                                    program_name=self.input.get("plugin_name", fully_qualified_name(self.__class__)),
@@ -179,6 +179,7 @@ input = {
         self.entry = entry.name
         entry["program_name"].attrs["version"] = __version__
 
+        # configuration
         config_grp = self.nxs.new_class(entry, "configuration", "NXnote")
         config_grp["type"] = "text/json"
         config_grp["data"] = json.dumps(self.input, indent=2, separators=(",\r\n", ": "))

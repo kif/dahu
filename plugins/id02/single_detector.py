@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "26/03/2020"
+__date__ = "27/03/2020"
 __status__ = "development"
 __version__ = "0.9.0"
 
@@ -609,7 +609,6 @@ Possible values for to_save:
         basename = os.path.splitext(os.path.basename(self.image_file))[0]
         if basename.endswith("_raw"):
             basename = basename[:-4]
-        json_config = json.dumps(self.input)
         isotime = str(get_isotime())
         detector_grp = self.input_nxs.find_detector(all=True)
         detector_name = "undefined"
@@ -630,17 +629,20 @@ Possible values for to_save:
             outfile = os.path.join(self.dest, "%s_%s.h5" % (basename, ext))
             self.output_hdf5[ext] = outfile
             try:
-                nxs = Nexus(outfile, "a")
+                nxs = Nexus(outfile, mode="a", creator="dahu")
             except IOError as error:
                 self.log_warning("invalid HDF5 file %s: remove and re-create!\n%s" % (outfile, error))
                 os.unlink(outfile)
-                nxs = Nexus(outfile)
-            entry = nxs.new_entry("entry", program_name="dahu", title=self.image_file + ":" + self.images_ds.name)
-            entry["program_name"].attrs["version"] = dahu_version
-            entry["plugin_name"] = fully_qualified_name(self.__class__)
-            entry["plugin_name"].attrs["version"] = __version__
-            entry["input"] = str(json_config)
-            entry["input"].attrs["format"] = 'json'
+                nxs = Nexus(outfile, mode="w", creator="dahu")
+            entry = nxs.new_entry("entry", 
+                                  program_name=self.input.get("plugin_name", fully_qualified_name(self.__class__)),
+                                  title=self.image_file + ":" + self.images_ds.name)
+            entry["program_name"].attrs["version"] = __version__
+
+            #configuration
+            config_grp = self.nxs.new_class(entry, "configuration", "NXnote")
+            config_grp["type"] = "text/json"
+            config_grp["data"] = json.dumps(self.input, indent=2, separators=(",\r\n", ": "))
 
             entry["detector_name"] = str(detector_name)
 

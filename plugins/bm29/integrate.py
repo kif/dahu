@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "26/03/2020"
+__date__ = "27/03/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -162,7 +162,10 @@ class IntegrateMultiframe(Plugin):
             try:
                 with Nexus(self.input_file, "r") as nxs:
                     entry = nxs.get_entries()[0]
-                    measurement = nxs.get_class(entry, class_type="NXmeasurement")[0]
+                    if "measurement" in entry:
+                        measurement = entry["measurement"]
+                    else:
+                        self.log_error("No measurement in entry: %s of data_file: %s" % (entry, self.input_file))
                     self._input_frames = measurement["data"][...]
             except Exception as err:
                 self.log_error("%s: %s"%(type(err),str(err)), do_raise=True)
@@ -263,7 +266,10 @@ class IntegrateMultiframe(Plugin):
         else: #use external links
             with Nexus(self.input_file, "r") as nxsr:
                 entry = nxsr.get_entries()[0]
-                measurement = nxsr.get_class(entry, class_type="NXmeasurement")[0]
+                if "measurement" in entry:
+                    measurement = entry["measurement"]
+                else:
+                    self.log_error("No measurement in entry: %s of data_file: %s" % (entry, self.input_file))
                 h5path = measurement["data"].name
             measurement_grp["images"] = detector_grp["frames"] = h5py.ExternalLink(self.input_file, h5path)            
             
