@@ -6,7 +6,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/03/2020"
+__date__ = "27/03/2020"
 __status__ = "development"
 __version__ = "1.0.0"
 
@@ -15,7 +15,10 @@ import logging
 import h5py
 import pyFAI.io
 pyFAI.io.logger.setLevel(logging.ERROR)
-from pyFAI.io import Nexus
+if pyFAI.version_info < (0, 20):
+    from ..bm29.nexus import Nexus
+else:
+    from pyFAI.io import Nexus
 
 # silence non serious error messages, which are printed
 # because we use h5py in a new thread (not in the main one)
