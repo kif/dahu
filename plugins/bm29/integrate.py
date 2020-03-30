@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/02/2020"
+__date__ = "27/03/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -37,8 +37,7 @@ import freesas, freesas.cormap
 
 #from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import Sample, Ispyb, get_equivalent_frames, cmp, get_integrator, KeyCache,\
-                    method, polarization_factor
-from .nexus import Nexus, get_isotime
+                    method, polarization_factor,Nexus, get_isotime
 
 
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
@@ -162,7 +161,10 @@ class IntegrateMultiframe(Plugin):
             try:
                 with Nexus(self.input_file, "r") as nxs:
                     entry = nxs.get_entries()[0]
-                    measurement = nxs.get_class(entry, class_type="NXmeasurement")[0]
+                    if "measurement" in entry:
+                        measurement = entry["measurement"]
+                    else:
+                        self.log_error("No measurement in entry: %s of data_file: %s" % (entry, self.input_file))
                     self._input_frames = measurement["data"][...]
             except Exception as err:
                 self.log_error("%s: %s"%(type(err),str(err)), do_raise=True)
@@ -177,7 +179,7 @@ class IntegrateMultiframe(Plugin):
 
     def create_nexus(self):
         creation_time = os.stat(self.input_file).st_ctime
-        nxs = self.nxs = Nexus(self.output_file, mode="w")
+        nxs = self.nxs = Nexus(self.output_file, mode="w", creator="dahu")
         
         entry_grp = nxs.new_entry("entry", self.input.get("plugin_name", "dahu"), 
                               title='BioSaxs multiframe integration', 
@@ -190,7 +192,7 @@ class IntegrateMultiframe(Plugin):
         instrument_grp = nxs.new_instrument(entry_grp, "BM29")
         instrument_grp["name"] = "BioSaxs"
         source_grp = nxs.new_class(instrument_grp, "ESRF", "NXsource")
-        source_grp["radiation"] = "Synchrotron X-ray source"
+        source_grp["type"] = "Synchrotron X-ray source"
         source_grp["name"] = "European Synchrotron Radiation Facility"
         source_grp["probe"] = "X-ray"
         current = numpy.ascontiguousarray(self.input.get("storage_ring_current", []), dtype=numpy.float32)
@@ -263,7 +265,10 @@ class IntegrateMultiframe(Plugin):
         else: #use external links
             with Nexus(self.input_file, "r") as nxsr:
                 entry = nxsr.get_entries()[0]
-                measurement = nxsr.get_class(entry, class_type="NXmeasurement")[0]
+                if "measurement" in entry:
+                    measurement = entry["measurement"]
+                else:
+                    self.log_error("No measurement in entry: %s of data_file: %s" % (entry, self.input_file))
                 h5path = measurement["data"].name
             measurement_grp["images"] = detector_grp["frames"] = h5py.ExternalLink(self.input_file, h5path)            
             

@@ -13,7 +13,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "07/02/2020"
+__date__ = "17/03/2020"
 __status__ = "production"
 
 from .factory import plugin_factory, register
@@ -122,6 +122,7 @@ class PluginFromFunction(Plugin):
     """
     Template class to build  a plugin from a function
     """
+
     def __init__(self):
         """
         :param funct: function to be wrapped
@@ -139,7 +140,7 @@ class PluginFromFunction(Plugin):
 
     def process(self):
         if self.input is None:
-            print("PluginFromFunction.process: self.input is None !!! %s", self.input)
+            logger.warning("PluginFromFunction.process: self.input is None !!! %s", self.input)
         else:
             funct_input = self.input.copy()
             if "job_id" in funct_input:
@@ -163,5 +164,4 @@ def plugin_from_function(function):
                  "__doc__": function.__doc__})
     plugin_factory.register(klass, class_name)
     return class_name
-
 
