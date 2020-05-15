@@ -41,7 +41,7 @@ from freesas.autorg import auto_gpa, autoRg
 from freesas.bift import BIFT
 from scipy.optimize import minimize
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
-from .common import Sample, Ispyb, get_equivalent_frames, cmp, get_integrator, KeyCache, polarization_factor, method, Nexus, get_isotime
+from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, polarization_factor, method, Nexus, get_isotime
 
 NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I poni mask energy polarization signal2d error2d buffer concentration")
 
@@ -151,9 +151,9 @@ class SubtractBuffer(Plugin):
                 self.buffer_juices.append(buffer_juice)
         
     #Process 1: CorMap
-        cormap_grp = nxs.new_class(entry_grp, "1_cormap", "NXprocess")
+        cormap_grp = nxs.new_class(entry_grp, "1_correlation_mapping", "NXprocess")
         cormap_grp["sequence_index"] = 1
-        cormap_grp["program"] = "freesas"
+        cormap_grp["program"] = "freesas.cormap"
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
         cormap_data = nxs.new_class(cormap_grp, "results", "NXdata")
@@ -211,12 +211,12 @@ class SubtractBuffer(Plugin):
         
         int_avg_ds =  average_data.create_dataset("intensity_normed", 
                                                   data=numpy.ascontiguousarray(sub_average, dtype=numpy.float32),
-                                                  **cmp)
+                                                  **cmp_float)
         int_avg_ds.attrs["interpretation"] = "image"
         int_avg_ds.attrs["formula"] = "sample_signal - mean(buffer_signal_i)"
         int_std_ds =  average_data.create_dataset("intensity_std", 
                                                    data=numpy.ascontiguousarray(sub_std, dtype=numpy.float32),
-                                                   **cmp)
+                                                   **cmp_float)
         int_std_ds.attrs["interpretation"] = "image"    
         int_std_ds.attrs["formula"] = "sqrt( sample_variance + (sum(buffer_variance)/n_buffer**2 ))"
         int_std_ds.attrs["method"] = "quadratic sum of sample error and buffer errors"
@@ -332,8 +332,8 @@ class SubtractBuffer(Plugin):
         logI = numpy.log(I[mask])
         dlogI = err[mask] / logI
         q2_ds = guinier_data.create_dataset("q2", data=q2.astype(numpy.float32))
-        q2_ds.attrs["unit"] = radius_unit+"²"
-        q2_ds.attrs["long_name"] = "q² (%s²)"%radius_unit
+        q2_ds.attrs["unit"] = radius_unit+"⁻²"
+        q2_ds.attrs["long_name"] = "q² (%s⁻²)"%radius_unit
         q2_ds.attrs["interpretation"] = "spectrum"
         lnI_ds = guinier_data.create_dataset("logI", data=logI.astype(numpy.float32))
         lnI_ds.attrs["long_name"] = "log(I)"
@@ -355,7 +355,7 @@ class SubtractBuffer(Plugin):
             entry_grp.attrs["default"] = ai2_data.name
             self.log_error("No Guinier region found, data of dubious quality", do_raise=True)
     # Process 5: Kratky plot
-        kratky_grp = nxs.new_class(entry_grp, "5_Dimensionless_Kratky_plot", "NXprocess")
+        kratky_grp = nxs.new_class(entry_grp, "5_dimensionless_Kratky_plot", "NXprocess")
         kratky_grp["sequence_index"] = 5
         kratky_grp["program"] = "freesas.autorg"
         kratky_grp["version"] = freesas.version
@@ -432,8 +432,8 @@ class SubtractBuffer(Plugin):
             r_ds = bift_data.create_dataset("r", data=stats.radius.astype(numpy.float32))
             r_ds.attrs["interpretation"] = "spectrum"
             
-            r_ds.attrs["unit"] = "nm" if "nm" in unit_name else "Å"
-            r_ds.attrs["longname"] = "radius"
+            r_ds.attrs["unit"] = radius_unit
+            r_ds.attrs["long_name"] = "radius r(%s)"%radius_unit
             p_ds = bift_data.create_dataset("p(r)", data=stats.density_avg.astype(numpy.float32))
             p_ds.attrs["interpretation"] = "spectrum"
             bift_data["errors"] = stats.density_std

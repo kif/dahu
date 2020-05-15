@@ -32,12 +32,11 @@ except ImportError:
 import h5py
 import fabio
 import pyFAI, pyFAI.azimuthalIntegrator
-from hdf5plugin import Bitshuffle
 import freesas, freesas.cormap
 
 #from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
-from .common import Sample, Ispyb, get_equivalent_frames, cmp, get_integrator, KeyCache,\
-                    method, polarization_factor,Nexus, get_isotime
+from .common import Sample, Ispyb, get_equivalent_frames, get_integrator, KeyCache,\
+                    method, polarization_factor,Nexus, get_isotime, cmp_float, cmp_int
 
 
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
@@ -245,7 +244,7 @@ class IntegrateMultiframe(Plugin):
         ybc_ds = detector_grp.create_dataset("beam_center_y", data=f2d["centerY"])
         ybc_ds.attrs["units"] = "pixel"
         mask = self.ai.detector.mask
-        mask_ds = detector_grp.create_dataset("pixel_mask", data=mask, **cmp)
+        mask_ds = detector_grp.create_dataset("pixel_mask", data=mask, **cmp_int)
         mask_ds.attrs["interpretation"] = "image"
         mask_ds.attrs["long_name"] = "Mask for invalid/hidden pixels"
         mask_ds.attrs["filename"] = self.input.get("mask_file")
@@ -259,7 +258,7 @@ class IntegrateMultiframe(Plugin):
             frames_ds = detector_grp.create_dataset("frames",
                                                      data=data,
                                                      chunks=(1,)+data.shape[-2:],
-                                                     **cmp)
+                                                     **cmp_int)
             frames_ds.attrs["interpretation"] = "image"
             measurement_grp["images"] = frames_ds
         else: #use external links
@@ -329,9 +328,9 @@ class IntegrateMultiframe(Plugin):
 
         
     # Process 2: Freesas cormap 
-        cormap_grp = nxs.new_class(entry_grp, "2_cormap", "NXprocess")
+        cormap_grp = nxs.new_class(entry_grp, "2_correlation_mapping", "NXprocess")
         cormap_grp["sequence_index"] = 2
-        cormap_grp["program"] = "freesas"
+        cormap_grp["program"] = "freesas.cormap"
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
         cormap_data = nxs.new_class(cormap_grp, "results", "NXdata")
@@ -364,12 +363,12 @@ class IntegrateMultiframe(Plugin):
         res3 = self.process3_average(cormap_results.tomerge)    
         int_avg_ds =  average_data.create_dataset("intensity_normed", 
                                                   data=numpy.ascontiguousarray(res3.average, dtype=numpy.float32),
-                                                  **cmp)
+                                                  **cmp_float)
         int_avg_ds.attrs["interpretation"] = "image"
         int_avg_ds.attrs["formula"] = "sum_i(signal_i))/sum_i(normalization_i)"
         int_std_ds =  average_data.create_dataset("intensity_std", 
                                                    data=numpy.ascontiguousarray(res3.deviation, dtype=numpy.float32),
-                                                   **cmp)
+                                                   **cmp_float)
         int_std_ds.attrs["interpretation"] = "image"    
         int_std_ds.attrs["formula"] = "sqrt(sum_i(variance_i))/sum(normalization_i)"
         int_std_ds.attrs["method"] = "Propagated error from weighted mean assuming poissonian behavour of every data-point"

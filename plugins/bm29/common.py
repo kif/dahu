@@ -23,7 +23,7 @@ import logging
 logger = logging.getLogger("bm29.common")
 import numpy
 from dahu.cache import DataCache
-from hdf5plugin import Bitshuffle
+from hdf5plugin import Bitshuffle, Zfp
 import pyFAI, pyFAI.units
 from pyFAI.method_registry import IntegrationMethod
 import fabio
@@ -32,7 +32,9 @@ if pyFAI.version_info < (0, 20):
 else:
     from pyFAI.io import Nexus, get_isotime
 #cmp contains the compression options, shared by all plugins. Used mainly for images 
-cmp = Bitshuffle()
+cmp_int = Bitshuffle()
+cmp_float = Zfp(rate=8)
+cmp = cmp_float
 
 # Constants associated to the azimuthal integrator to be used in all plugins:
 polarization_factor = 0.9
