@@ -4,20 +4,21 @@
 """Data Analysis plugin for BM29: BioSaxs
 
 * SubtractBuffer: Search for the equivalence of buffers, average them and subtract from sample signal.  
- 
+* SaxsAnalysis: Performs Guinier + Kratky + IFT, generates plots  
 """
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/03/2020"
+__date__ = "15/05/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
 import os
 import posixpath
 import json
+from math import log, pi
 from collections import namedtuple
 from dahu.plugin import Plugin
 from dahu.factory import register
@@ -36,6 +37,9 @@ import fabio
 import pyFAI, pyFAI.azimuthalIntegrator
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap
+from freesas.autorg import auto_gpa, autoRg
+from freesas.bift import BIFT
+from scipy.optimize import minimize
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import Sample, Ispyb, get_equivalent_frames, cmp, get_integrator, KeyCache, polarization_factor, method, Nexus, get_isotime
 
@@ -134,7 +138,7 @@ class SubtractBuffer(Plugin):
                               title='BioSaxs buffer subtraction', 
                               force_time=get_isotime())
         nxs.h5.attrs["default"] = entry_grp.name
-        #Process 0: Measurement group
+    #Process 0: Measurement group
         input_grp = nxs.new_class(entry_grp, "0_measurement", "NXcollection")
         input_grp["sequence_index"] = 0
 
@@ -146,7 +150,7 @@ class SubtractBuffer(Plugin):
                 input_grp["buffer_%i"%idx] = h5py.ExternalLink(buffer_file, buffer_juice.h5path)     
                 self.buffer_juices.append(buffer_juice)
         
-        #Process 1: CorMap
+    #Process 1: CorMap
         cormap_grp = nxs.new_class(entry_grp, "1_cormap", "NXprocess")
         cormap_grp["sequence_index"] = 1
         cormap_grp["program"] = "freesas"
@@ -154,7 +158,7 @@ class SubtractBuffer(Plugin):
         cormap_grp["date"] = get_isotime()
         cormap_data = nxs.new_class(cormap_grp, "results", "NXdata")
         
-        # cormap processing   
+    #Cormap processing   
         nb_frames = len(self.buffer_juices)
         count = numpy.empty((nb_frames, nb_frames), dtype=numpy.uint16)
         proba = numpy.empty((nb_frames, nb_frames), dtype=numpy.float32)
@@ -181,14 +185,14 @@ class SubtractBuffer(Plugin):
         cormap_grp["fidelity"] = fidelity
         cormap_grp.attrs["default"] = cormap_data.name
         
-        #Process 2: Image processing: subtraction with standard deviation
+    #Process 2: Image processing: subtraction with standard deviation
         average_grp = nxs.new_class(entry_grp, "2_buffer_subtraction", "NXprocess")
         average_grp["sequence_index"] = 2
         average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
         average_data = nxs.new_class(average_grp, "results", "NXdata")
         average_data.attrs["signal"] = "intensity_normed"
-        # Stage 2 
+    # Stage 2 processing
 
         #Nota: formula probably wrong ! Take into account the number of readings !
         #TODO implement those math using numexpr:
@@ -217,7 +221,7 @@ class SubtractBuffer(Plugin):
         int_std_ds.attrs["formula"] = "sqrt( sample_variance + (sum(buffer_variance)/n_buffer**2 ))"
         int_std_ds.attrs["method"] = "quadratic sum of sample error and buffer errors"
         average_grp.attrs["default"] = average_data.name
-        # Process 3: Azimuthal integration of the subtracted image
+    # Process 3: Azimuthal integration of the subtracted image
         ai2_grp = nxs.new_class(entry_grp, "3_azimuthal_integration", "NXprocess")
         ai2_grp["sequence_index"] = 3
         ai2_grp["program"] = "pyFAI"
@@ -244,6 +248,7 @@ class SubtractBuffer(Plugin):
         ai2_q_ds = ai2_data.create_dataset(radial_unit,
                                            data=numpy.ascontiguousarray(res2.radial, dtype=numpy.float32))
         ai2_q_ds.attrs["units"] = unit_name
+        radius_unit = "nm" if "nm" in unit_name else "Å"
         ai2_q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
         
         ai2_int_ds = ai2_data.create_dataset("I", data=numpy.ascontiguousarray(res2.intensity, dtype=numpy.float32))
@@ -258,12 +263,192 @@ class SubtractBuffer(Plugin):
         ai2_std_ds.attrs["interpretation"] ="spectrum"
         ai2_int_ds.attrs["units"] = "arbitrary"
     
-    #TODO:
-    # Stage 4 processing: AutoRg --> available in FreeSAS
-    # Stage 5 processing Kratky plot  --> copy from former EDNA
-    # stage 6 Pair distribution function    --> Needs to implemented 
+    # Process 4: Guinier analysis
+        guinier_grp = nxs.new_class(entry_grp, "4_Guinier", "NXprocess")
+        guinier_grp["sequence_index"] = 4
+        guinier_grp["program"] = "freesas"
+        guinier_grp["version"] = freesas.version
+        guinier_grp["date"] = get_isotime()
+        guinier_autorg = nxs.new_class(guinier_grp, "autorg", "NXcollection")
+        guinier_gpa = nxs.new_class(guinier_grp, "gpa", "NXcollection")
+        guinier_data = nxs.new_class(guinier_grp, "results", "NXdata")
+    # Stage4 processing: autorg and auto_gpa
+        sasm = numpy.vstack((res2.radial, res2.intensity, res2.sigma)).T
+        numpy.savetxt("data.dat", sasm)
+        try:
+            autorg = autoRg(sasm)
+        except Exception as err:
+            guinier_autorg["Failed"] = "%s: %s"%(err.__class__.__name__, err)
+            autorg = None
+        else:
+            "Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
+            guinier_autorg["Rg"] = autorg.Rg
+            guinier_autorg["Rg"].attrs["unit"] = radius_unit
+            guinier_autorg["Rg_error"] = autorg.sigma_Rg
+            guinier_autorg["Rg_error"].attrs["unit"] = radius_unit
+            guinier_autorg["I0"] = autorg.I0
+            guinier_autorg["I0_error"] = autorg.sigma_I0
+            guinier_autorg["start_point"] = autorg.start_point
+            guinier_autorg["end_point"] = autorg.end_point
+            guinier_autorg["quality"] = autorg.quality
+            guinier_autorg["aggregated"] = autorg.aggregated
+        try:
+            gpa = auto_gpa(sasm)
+        except Exception as error:
+            guinier_gpa["Failed"] = "%s: %s"%(error.__class__.__name__, error)
+            gpa = None
+        else:
+            "Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
+            guinier_gpa["Rg"] = gpa.Rg
+            guinier_autorg["Rg"].attrs["unit"] = radius_unit
+            guinier_gpa["Rg_error"] = gpa.sigma_Rg
+            guinier_autorg["Rg_error"].attrs["unit"] = radius_unit
+            guinier_gpa["I0"] = gpa.I0
+            guinier_gpa["I0_error"] = gpa.sigma_I0
+            guinier_gpa["start_point"] = gpa.start_point
+            guinier_gpa["end_point"] = gpa.end_point
+#             guinier_gpa["quality"] = autorg.quality
+#             guinier_gpa["aggregated"] = autorg.aggregated
+            
+    # Stage #4 Guinier plot generation:
+        guinier = autorg or gpa #take one of the fit
+
+        q, I, err = sasm.T[:3]
+        mask = (I > 0) & numpy.isfinite(I) & (q > 0) & numpy.isfinite(q)
+        if err is not None:
+            mask &= (err > 0.0) & numpy.isfinite(err)
+        mask = mask.astype(bool)
+        if autorg:
+            Rg = guinier.Rg
+            I0 = guinier.I0
+            first_point = guinier.start_point
+            last_point = guinier.end_point
+            intercept = numpy.log(I0)
+            slope = -Rg * Rg / 3.0
+            end = numpy.where(q > 1.5 / Rg)[0][0]
+            mask[end:] = False
+
+        q2 = q[mask] ** 2
+        logI = numpy.log(I[mask])
+        dlogI = err[mask] / logI
+        q2_ds = guinier_data.create_dataset("q2", data=q2.astype(numpy.float32))
+        q2_ds.attrs["unit"] = radius_unit+"²"
+        q2_ds.attrs["long_name"] = "q² (%s²)"%radius_unit
+        q2_ds.attrs["interpretation"] = "spectrum"
+        lnI_ds = guinier_data.create_dataset("logI", data=logI.astype(numpy.float32))
+        lnI_ds.attrs["long_name"] = "log(I)"
+        lnI_ds.attrs["interpretation"] = "spectrum"
+        erI_ds = guinier_data.create_dataset("errors", data=dlogI.astype(numpy.float32))
+        erI_ds.attrs["interpretation"] = "spectrum"
+                                             
+        if autorg:
+            guinier_data["fit"] = intercept + slope * q2
+            guinier_data["fit"].attrs["slope"] = slope
+            guinier_data["fit"].attrs["intercept"] = intercept
         
+        guinier_data_attrs = guinier_data.attrs
+        guinier_data_attrs["signal"] = "logI"
+        guinier_data_attrs["axes"] = "q2"
+        guinier_data_attrs["auxiliary_signals"] = "fit"
+        guinier_grp.attrs["default"] = guinier_data.name
+        if guinier is None:
+            entry_grp.attrs["default"] = ai2_data.name
+            self.log_error("No Guinier region found, data of dubious quality", do_raise=True)
+    # Process 5: Kratky plot
+        kratky_grp = nxs.new_class(entry_grp, "5_Kratky", "NXprocess")
+        kratky_grp["sequence_index"] = 5
+        kratky_grp["program"] = "freesas.autorg"
+        kratky_grp["version"] = freesas.version
+        kratky_grp["date"] = get_isotime()
+        kratky_data = nxs.new_class(kratky_grp, "results", "NXdata")
+        kratky_grp.attrs["default"] = kratky_data.name
+    # Stage #5 Kratky plot generation:
+        Rg = guinier.Rg
+        I0 = guinier.I0
+        xdata = q * Rg
+        ydata = xdata * xdata * I / I0
+        dy = xdata * xdata * err / I0
+        qRg_ds = kratky_data.create_dataset("qRg", data=xdata.astype(numpy.float32))
+        qRg_ds.attrs["interpretation"] = "spectrum"
+        qRg_ds.attrs["long_name"] = "q·Rg (unit-less)"
+        k_ds = kratky_data.create_dataset("q2Rg2I/I0", data = ydata.astype(numpy.float32))
+        k_ds.attrs["interpretation"] = "spectrum"
+        k_ds.attrs["long_name"] = "q²Rg²I/I₀"
+        ke_ds = kratky_data.create_dataset("errors", data=dy.astype(numpy.float32))
+        ke_ds.attrs["interpretation"] = "spectrum"
+        kratky_data_attrs = kratky_data.attrs
+        kratky_data_attrs["signal"] = "q2Rg2I/I0"
+        kratky_data_attrs["axes"] = "qRg"
+        
+    # stage 6: Pair distribution function, what is the equivalent of datgnom
+        bift_grp = nxs.new_class(entry_grp, "6_Bayesian_IFT", "NXprocess")
+        bift_grp["sequence_index"] = 6
+        bift_grp["program"] = "freesas.bift"
+        bift_grp["version"] = freesas.version
+        bift_grp["date"] = get_isotime()
+        bift_data = nxs.new_class(bift_grp, "results", "NXdata")
+    
+    # Process stage6, i.e. perform the IFT
+        try:
+            bo = BIFT(q, I, err) 
+            Dmax = bo.set_Guinier(guinier, Dmax_over_Rg=3)
+            # Pretty limited quality as we have real time constrains
+            npt = 64
+            # Then scan on Dmax:
+            alpha_max = bo.guess_alpha_max(npt)
+            key = bo.grid_scan(Dmax, Dmax, 1,
+                               1.0 / alpha_max, alpha_max, 11, npt)
+            Dmax, alpha = key[:2]
+            # Then scan on Dmax:
+            key = bo.grid_scan(guinier.Rg*2,guinier.Rg*4, 5,
+                               alpha, alpha, 1, npt)
+            Dmax, alpha = key[:2]
+            if bo.evidence_cache[key].converged:
+                bo.update_wisdom()
+                use_wisdom = True
+            else:
+                use_wisdom = False
+            res = minimize(bo.opti_evidence, (Dmax, log(alpha)), args=(npt, use_wisdom), method="powell")
+        except Exception as error:
+            bift_grp["Failed"] = "%s: %s"%(error.__class__.__name__, error)
+            bo = None
+        else:
+            stats = bo.calc_stats()
+            bift_grp["alpha"] = stats.alpha_avg
+            bift_grp["alpha_error"] = stats.alpha_std
+            bift_grp["Dmax"]=stats.Dmax_avg
+            bift_grp["Dmax_error"]=stats.Dmax_std
+            bift_grp["S0"]=stats.regularization_avg
+            bift_grp["S0_error"]=stats.regularization_std
+            bift_grp["Chi2r"]=stats.chi2r_avg
+            bift_grp["Chi2r_error"]=stats.chi2r_std
+            bift_grp["logP"]=stats.evidence_avg
+            bift_grp["logP_error"]=stats.evidence_std
+            bift_grp["Rg"]=stats.Rg_avg
+            bift_grp["Rg_error"]=stats.Rg_std
+            bift_grp["I0"]=stats.I0_avg
+            bift_grp["I0_error"]=stats.I0_std
+            #Now the plot:
+            r_ds = bift_data.create_dataset("r", data=stats.radius.astype(numpy.float32))
+            r_ds.attrs["interpretation"] = "spectrum"
+            
+            r_ds.attrs["unit"] = "nm" if "nm" in unit_name else "Å"
+            r_ds.attrs["longname"] = "radius"
+            p_ds = bift_data.create_dataset("p(r)", data=stats.density_avg.astype(numpy.float32))
+            p_ds.attrs["interpretation"] = "spectrum"
+            bift_data["errors"] = stats.density_std
+            bift_data.attrs["signal"] = "p(r)"
+            bift_data.attrs["axes"] = "r"
+            
+            r = stats.radius
+            T = numpy.outer(q, r / pi)
+            T = (4 * pi * (r[-1] - r[0]) / (len(r) - 1)) * numpy.sinc(T)
+            bift_ds = ai2_data.create_dataset("BIFT", data=T.dot(stats.density_avg).astype(numpy.float32))
+            bift_ds.attrs["interpretation"] = "spectrum"
+            ai2_data.attrs["auxiliary_signals"] = "BIFT"
+            bift_grp.attrs["default"] = bift_data.name
         #Finally declare the default entry and default dataset ...
+        #overlay the BIFT fitted data on top of the scattering curve 
         entry_grp.attrs["default"] = ai2_data.name
 
 
@@ -282,6 +467,8 @@ class SubtractBuffer(Plugin):
             unit = pyFAI.units.to_unit(axis+"_"+nxdata_grp[axis].attrs["units"])
             integration_grp = nxdata_grp.parent
             poni = integration_grp["configuration"].attrs["poni_file"]
+            if not os.path.exists(poni):
+                poni = integration_grp["configuration"][...]
             polarization = integration_grp["polarization_factor"][()]
             instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
             detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]

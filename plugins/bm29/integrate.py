@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/03/2020"
+__date__ = "15/05/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -315,6 +315,7 @@ class IntegrateMultiframe(Plugin):
         std_ds = integration_data.create_dataset("errors", data=numpy.ascontiguousarray(integrate1_results.sigma, dtype=numpy.float32))
         integration_data.attrs["signal"] = "I"
         integration_data.attrs["axes"] = [".", radial_unit]
+        #integration_data.attrs["axes"] = numpy.array([".", radial_unit], dtype=h5py.string_dtype(encoding='utf-8'))
         
         int_ds.attrs["interpretation"] = "spectrum" 
         int_ds.attrs["units"] = "arbitrary"

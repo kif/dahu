@@ -11,12 +11,14 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/03/2020"
+__date__ = "15/05/2020"
 __status__ = "development"
 version = "0.0.1"
 
+import os
 from collections import namedtuple
 from typing import NamedTuple
+import json
 import logging
 logger = logging.getLogger("bm29.common")
 import numpy
@@ -46,7 +48,13 @@ def get_integrator(keycache):
     if keycache in shared_cache:
         ai = shared_cache[keycache]
     else:
-        ai = pyFAI.load(keycache.poni)
+        if os.path.exists(keycache.poni):
+            ai = pyFAI.load(keycache.poni)
+        else:
+            logger.warning("Poni file does not exist, try to consider it as a JSON-dict")
+            config = json.loads(keycache.poni)
+            ai = pyFAI.load(config)
+            
         ai.wavelength = 1e-10 * pyFAI.units.hc / keycache.energy
         if keycache.mask:
             mask = numpy.logical_or(fabio.open(keycache.mask).data, ai.detector.mask).astype("int8")
