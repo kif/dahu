@@ -264,7 +264,7 @@ class SubtractBuffer(Plugin):
         ai2_int_ds.attrs["units"] = "arbitrary"
     
     # Process 4: Guinier analysis
-        guinier_grp = nxs.new_class(entry_grp, "4_Guinier", "NXprocess")
+        guinier_grp = nxs.new_class(entry_grp, "4_Guinier_analysis", "NXprocess")
         guinier_grp["sequence_index"] = 4
         guinier_grp["program"] = "freesas"
         guinier_grp["version"] = freesas.version
@@ -355,7 +355,7 @@ class SubtractBuffer(Plugin):
             entry_grp.attrs["default"] = ai2_data.name
             self.log_error("No Guinier region found, data of dubious quality", do_raise=True)
     # Process 5: Kratky plot
-        kratky_grp = nxs.new_class(entry_grp, "5_Kratky", "NXprocess")
+        kratky_grp = nxs.new_class(entry_grp, "5_Dimensionless_Kratky_plot", "NXprocess")
         kratky_grp["sequence_index"] = 5
         kratky_grp["program"] = "freesas.autorg"
         kratky_grp["version"] = freesas.version
@@ -373,7 +373,7 @@ class SubtractBuffer(Plugin):
         qRg_ds.attrs["long_name"] = "q·Rg (unit-less)"
         k_ds = kratky_data.create_dataset("q2Rg2I/I0", data = ydata.astype(numpy.float32))
         k_ds.attrs["interpretation"] = "spectrum"
-        k_ds.attrs["long_name"] = "q²Rg²I/I₀"
+        k_ds.attrs["long_name"] = "q²Rg²I(q)/I₀"
         ke_ds = kratky_data.create_dataset("errors", data=dy.astype(numpy.float32))
         ke_ds.attrs["interpretation"] = "spectrum"
         kratky_data_attrs = kratky_data.attrs
@@ -381,7 +381,7 @@ class SubtractBuffer(Plugin):
         kratky_data_attrs["axes"] = "qRg"
         
     # stage 6: Pair distribution function, what is the equivalent of datgnom
-        bift_grp = nxs.new_class(entry_grp, "6_Bayesian_IFT", "NXprocess")
+        bift_grp = nxs.new_class(entry_grp, "6_indirect_Fourier_transformation", "NXprocess")
         bift_grp["sequence_index"] = 6
         bift_grp["program"] = "freesas.bift"
         bift_grp["version"] = freesas.version
