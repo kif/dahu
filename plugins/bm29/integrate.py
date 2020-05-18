@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "15/05/2020"
+__date__ = "18/05/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -184,6 +184,13 @@ class IntegrateMultiframe(Plugin):
                               title='BioSaxs multiframe integration', 
                               force_time=get_isotime(creation_time))
         nxs.h5.attrs["default"] = entry_grp.name
+        
+        # Configuration
+        cfg_grp = nxs.new_class(entry_grp, "configuration", "NXnote")
+        cfg_grp.create_dataset("data", data=json.dumps(self.input, indent=2, separators=(",\r\n", ":\t")))
+        cfg_grp.create_dataset("format", data = "text/json")
+
+        
         #Process 0: Measurement group
         measurement_grp = nxs.new_class(entry_grp, "0_measurement", "NXdata")
         
@@ -292,12 +299,13 @@ class IntegrateMultiframe(Plugin):
         integration_grp["program"] = "pyFAI"
         integration_grp["version"] = pyFAI.version
         integration_grp["date"] = get_isotime()
-        cfg_ds = integration_grp.create_dataset("configuration", data=json.dumps(self.ai.get_config()))
-        cfg_ds.attrs["format"] = "json"
-        cfg_ds.attrs["poni_file"] = self.poni
-        pol_ds = integration_grp.create_dataset("polarization_factor", data=polarization_factor)
+        cfg_grp = nxs.new_class(integration_grp, "configuration", "NXnote")
+        cfg_grp.create_dataset("data", data=json.dumps(self.ai.get_config(), indent=2, separators=(",\r\n", ": ")))
+        cfg_grp.create_dataset("format", data = "text/json")
+        cfg_grp.create_dataset("file_name", data = self.poni)
+        pol_ds = cfg_grp.create_dataset("polarization_factor", data=polarization_factor)
         pol_ds.attrs["comment"] = "Between -1 and +1, 0 for circular"
-        integration_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
+        cfg_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
         integration_data = nxs.new_class(integration_grp, "results", "NXdata")
         integration_grp.attrs["default"] = integration_data.name
         
@@ -334,10 +342,15 @@ class IntegrateMultiframe(Plugin):
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
         cormap_data = nxs.new_class(cormap_grp, "results", "NXdata")
+        cfg_grp = nxs.new_class(cormap_grp, "configuration", "NXcollection")
+        
+        fidelity_abs = self.input.get("fidelity_abs", 0)
+        fidelity_rel = self.input.get("fidelity_rel", 0)
+        cfg_grp["fidelity_abs"] = fidelity_abs
+        cfg_grp["fidelity_rel"] = fidelity_rel
         
     # Stage 2 processing   
-        cormap_results = self.process2_cormap(integrate1_results.intensity)
-        
+        cormap_results = self.process2_cormap(integrate1_results.intensity, fidelity_abs, fidelity_rel)
         cormap_data.attrs["signal"] = "probability"
         cormap_ds = cormap_data.create_dataset("probability", data=cormap_results.probability)
         cormap_ds.attrs["interpretation"] = "image"
@@ -348,9 +361,8 @@ class IntegrateMultiframe(Plugin):
         count_ds.attrs["long_name"] = "Longest sequence where curves do not cross each other"
 
         cormap_grp["to_merge"] = numpy.arange(*cormap_results.tomerge, dtype=numpy.uint16)
-        cormap_grp["fidelity_abs"] = self.input.get("fidelity_abs", 0)
-        cormap_grp["fidelity_rel"] = self.input.get("fidelity_rel", 0)
         cormap_grp.attrs["default"] = cormap_data.name
+        
     # Process 3: time average and standard deviation
         average_grp = nxs.new_class(entry_grp, "3_time_average", "NXprocess")
         average_grp["sequence_index"] = 3
@@ -384,8 +396,6 @@ class IntegrateMultiframe(Plugin):
         ai2_data.attrs["axes"] = radial_unit
 
         ai2_grp["configuration"]=integration_grp["configuration"]
-        ai2_grp["polarization_factor"] = integration_grp["polarization_factor"]
-        ai2_grp["integration_method"] = integration_grp["integration_method"]
         ai2_grp.attrs["default"] = ai2_data.name
 
     # Stage 4 processing
@@ -439,7 +449,7 @@ class IntegrateMultiframe(Plugin):
             sigma[idx] = res.sigma
         return IntegrationResult(res.radial, intensity, sigma)
 
-    def process2_cormap(self, curves):
+    def process2_cormap(self, curves, fidelity_abs, fidelity_rel):
         "Take the integrated data as input, returns a CormapResult namedtuple"
         logger.debug("in process2_cormap")
         count = numpy.empty((self.nb_frames, self.nb_frames), dtype=numpy.uint16)
@@ -451,7 +461,7 @@ class IntegrateMultiframe(Plugin):
                 res = freesas.cormap.gof(curves[i], curves[j])
                 proba[i,j] = proba[j,i] = res.P
                 count[i,j] = count[j,i] = res.c
-        tomerge = get_equivalent_frames(proba, self.input.get("fidelity_abs", 0), self.input.get("fidelity_rel", 0))
+        tomerge = get_equivalent_frames(proba, fidelity_abs, fidelity_rel)
         return CormapResult(proba, count, tomerge)
         
     def process3_average(self, tomerge):

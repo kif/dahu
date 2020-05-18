@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "15/05/2020"
+__date__ = "18/05/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -43,7 +43,7 @@ from scipy.optimize import minimize
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, polarization_factor, method, Nexus, get_isotime
 
-NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I poni mask energy polarization signal2d error2d buffer concentration")
+NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I poni mask energy polarization method signal2d error2d buffer concentration")
 
 
 class SubtractBuffer(Plugin):
@@ -65,7 +65,6 @@ class SubtractBuffer(Plugin):
         self.sample_file = None
         self.nxs = None
         self.output_file = None
-        self.ai = None
         self.npt = None
         self.poni = None
         self.mask = None
@@ -95,8 +94,6 @@ class SubtractBuffer(Plugin):
         self.output["output_file"] = self.output_file
         if self.nxs is not None:
             self.nxs.close()
-        if self.ai is not None:
-            self.ai = None
         self.sample_juice = None
         self.buffer_juices = []
 
@@ -138,6 +135,12 @@ class SubtractBuffer(Plugin):
                               title='BioSaxs buffer subtraction', 
                               force_time=get_isotime())
         nxs.h5.attrs["default"] = entry_grp.name
+        
+    # Configuration
+        cfg_grp = nxs.new_class(entry_grp, "configuration", "NXnote")
+        cfg_grp.create_dataset("data", data=json.dumps(self.input, indent=2, separators=(",\r\n", ":\t")))
+        cfg_grp.create_dataset("format", data = "text/json")
+
     #Process 0: Measurement group
         input_grp = nxs.new_class(entry_grp, "0_measurement", "NXcollection")
         input_grp["sequence_index"] = 0
@@ -157,6 +160,7 @@ class SubtractBuffer(Plugin):
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
         cormap_data = nxs.new_class(cormap_grp, "results", "NXdata")
+        cfg_grp = nxs.new_class(cormap_grp, "configuration", "NXcollection")
         
     #Cormap processing   
         nb_frames = len(self.buffer_juices)
@@ -170,6 +174,8 @@ class SubtractBuffer(Plugin):
                 proba[i,j] = proba[j,i] = res.P
                 count[i,j] = count[j,i] = res.c
         fidelity = self.input.get("fidelity", 0)
+        cfg_grp["fidelity_abs"] = fidelity
+        cfg_grp["fidelity_rel"] = fidelity
         tomerge = get_equivalent_frames(proba, fidelity, fidelity)
 
         cormap_data.attrs["signal"] = "probability"
@@ -182,7 +188,6 @@ class SubtractBuffer(Plugin):
         count_ds.attrs["long_name"] = "Longest sequence where curves do not cross each other"
 
         cormap_grp["to_merge"] = numpy.arange(*tomerge, dtype=numpy.uint16)
-        cormap_grp["fidelity"] = fidelity
         cormap_grp.attrs["default"] = cormap_data.name
         
     #Process 2: Image processing: subtraction with standard deviation
@@ -229,13 +234,19 @@ class SubtractBuffer(Plugin):
         ai2_grp["date"] = get_isotime()
         key_cache = KeyCache(self.sample_juice.npt, self.sample_juice.unit, self.sample_juice.poni, self.sample_juice.mask, self.sample_juice.energy)
         ai = get_integrator(key_cache)
-        ai2_grp.create_dataset("configuration", data=json.dumps(ai.get_config()))
         radial_unit, unit_name = str(key_cache.unit).split("_", 1)
         ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
         ai2_data.attrs["signal"] = "I"
         ai2_data.attrs["axes"] = radial_unit
-        ai2_grp["polarization_factor"] = self.sample_juice.polarization
         ai2_grp.attrs["default"] = ai2_data.name
+        cfg_grp = nxs.new_class(ai2_grp, "configuration", "NXnote")
+        cfg_grp.create_dataset("data", data=json.dumps(ai.get_config(), indent=2, separators=(",\r\n", ": ")))
+        cfg_grp.create_dataset("format", data = "text/json")
+        if os.path.exists(key_cache.poni):
+            cfg_grp.create_dataset("file_name", data = key_cache.poni)
+        pol_ds = cfg_grp.create_dataset("polarization_factor", data=polarization_factor)
+        pol_ds.attrs["comment"] = "Between -1 and +1, 0 for circular"
+        cfg_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
 
     # Stage 3 processing: azimuthal integration
         res2 = ai._integrate1d_ng(sub_average, key_cache.npt, 
@@ -243,7 +254,7 @@ class SubtractBuffer(Plugin):
                                   polarization_factor=self.sample_juice.polarization,
                                   unit=key_cache.unit,
                                   safe=False,
-                                  method=method)
+                                  method=self.sample_juice.method)
 
         ai2_q_ds = ai2_data.create_dataset(radial_unit,
                                            data=numpy.ascontiguousarray(res2.radial, dtype=numpy.float32))
@@ -266,7 +277,7 @@ class SubtractBuffer(Plugin):
     # Process 4: Guinier analysis
         guinier_grp = nxs.new_class(entry_grp, "4_Guinier_analysis", "NXprocess")
         guinier_grp["sequence_index"] = 4
-        guinier_grp["program"] = "freesas"
+        guinier_grp["program"] = "freesas.autorg"
         guinier_grp["version"] = freesas.version
         guinier_grp["date"] = get_isotime()
         guinier_autorg = nxs.new_class(guinier_grp, "autorg", "NXcollection")
@@ -274,7 +285,6 @@ class SubtractBuffer(Plugin):
         guinier_data = nxs.new_class(guinier_grp, "results", "NXdata")
     # Stage4 processing: autorg and auto_gpa
         sasm = numpy.vstack((res2.radial, res2.intensity, res2.sigma)).T
-        numpy.savetxt("data.dat", sasm)
         try:
             autorg = autoRg(sasm)
         except Exception as err:
@@ -292,6 +302,8 @@ class SubtractBuffer(Plugin):
             guinier_autorg["end_point"] = autorg.end_point
             guinier_autorg["quality"] = autorg.quality
             guinier_autorg["aggregated"] = autorg.aggregated
+            guinier_autorg["qₘᵢₙ·Rg"] =  autorg.Rg * res2.radial[autorg.start_point]
+            guinier_autorg["qₘₐₓ·Rg"] =  autorg.Rg * res2.radial[autorg.end_point -1] 
         try:
             gpa = auto_gpa(sasm)
         except Exception as error:
@@ -387,19 +399,28 @@ class SubtractBuffer(Plugin):
         bift_grp["version"] = freesas.version
         bift_grp["date"] = get_isotime()
         bift_data = nxs.new_class(bift_grp, "results", "NXdata")
-    
+        cfg_grp = nxs.new_class(bift_grp, "configuration", "NXcollection")
     # Process stage6, i.e. perform the IFT
         try:
             bo = BIFT(q, I, err) 
+            cfg_grp["Rg"] = guinier.Rg
+            cfg_grp["npt"] = npt = 64 
+            cfg_grp["Dmax÷Rg"] = 3
             Dmax = bo.set_Guinier(guinier, Dmax_over_Rg=3)
             # Pretty limited quality as we have real time constrains
-            npt = 64
-            # Then scan on Dmax:
-            alpha_max = bo.guess_alpha_max(npt)
+            
+            # First scan on alpha:
+            cfg_grp["alpha_sup"] = alpha_max = bo.guess_alpha_max(npt)
+            cfg_grp["alpha_inf"] = 1/alpha_max
+            cfg_grp["alpha_scan_steps"] = 11
+            
             key = bo.grid_scan(Dmax, Dmax, 1,
                                1.0 / alpha_max, alpha_max, 11, npt)
             Dmax, alpha = key[:2]
             # Then scan on Dmax:
+            cfg_grp["Dmax_sup"] = guinier.Rg*4
+            cfg_grp["Dmax_inf"] = guinier.Rg*2
+            cfg_grp["Dmax_scan_steps"] = 5
             key = bo.grid_scan(guinier.Rg*2,guinier.Rg*4, 5,
                                alpha, alpha, 1, npt)
             Dmax, alpha = key[:2]
@@ -409,6 +430,8 @@ class SubtractBuffer(Plugin):
             else:
                 use_wisdom = False
             res = minimize(bo.opti_evidence, (Dmax, log(alpha)), args=(npt, use_wisdom), method="powell")
+            cfg_grp["Powell_steps"] = res.nfev
+            cfg_grp["Monte-Carlo_steps"] = 0
         except Exception as error:
             bift_grp["Failed"] = "%s: %s"%(error.__class__.__name__, error)
             bo = None
@@ -452,8 +475,8 @@ class SubtractBuffer(Plugin):
         entry_grp.attrs["default"] = ai2_data.name
 
 
-    @staticmethod
-    def read_nexus(filename):
+    #@staticmethod
+    def read_nexus(self, filename):
         "return some NexusJuice from a HDF5 file "
         with Nexus(filename, "r") as nxsr:
             entry_grp = nxsr.get_entries()[0]
@@ -466,10 +489,11 @@ class SubtractBuffer(Plugin):
             npt = len(q)
             unit = pyFAI.units.to_unit(axis+"_"+nxdata_grp[axis].attrs["units"])
             integration_grp = nxdata_grp.parent
-            poni = integration_grp["configuration"].attrs["poni_file"]
+            poni = str(integration_grp["configuration/file_name"][()]).strip()
             if not os.path.exists(poni):
-                poni = integration_grp["configuration"][...]
-            polarization = integration_grp["polarization_factor"][()]
+                poni = str(integration_grp["configuration/data"][()]).strip()
+            polarization = integration_grp["configuration/polarization_factor"][()]
+            method = IntegrationMethod.select_method(**json.loads(integration_grp["configuration/integration_method"][()]))[0]
             instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
             detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]
             mask = detector_grp["pixel_mask"].attrs["filename"]
@@ -481,4 +505,4 @@ class SubtractBuffer(Plugin):
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
             buffer = sample_grp["buffer"]
             concentration = sample_grp["concentration"]
-        return NexusJuice(filename, h5path, npt, unit, q, I, poni, mask, energy, polarization, image2d, error2d, buffer, concentration)
+        return NexusJuice(filename, h5path, npt, unit, q, I, poni, mask, energy, polarization, method, image2d, error2d, buffer, concentration)
