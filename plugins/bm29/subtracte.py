@@ -11,12 +11,11 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "18/05/2020"
+__date__ = "19/05/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
 import os
-import posixpath
 import json
 from math import log, pi
 from collections import namedtuple
@@ -71,6 +70,7 @@ class SubtractBuffer(Plugin):
         self.energy = None
         self.sample_juice = None
         self.buffer_juices = []
+        self.Rg = self.I0 = self.Dmax = self.Vc = self.mass = None
            
     def setup(self, kwargs=None):
         logger.debug("SubtractBuffer.setup")
@@ -92,6 +92,11 @@ class SubtractBuffer(Plugin):
         logger.debug("SubtractBuffer.teardown")
         # export the output file location
         self.output["output_file"] = self.output_file
+        self.output["Rg"] = self.Rg
+        self.output["I0"] = self.I0
+        self.output["Dmax"] = self.Dmax
+        self.output["Vc"] = self.Vc
+        self.output["mass"] = self.mass
         if self.nxs is not None:
             self.nxs.close()
         self.sample_juice = None
@@ -285,13 +290,31 @@ class SubtractBuffer(Plugin):
         guinier_data = nxs.new_class(guinier_grp, "results", "NXdata")
     # Stage4 processing: autorg and auto_gpa
         sasm = numpy.vstack((res2.radial, res2.intensity, res2.sigma)).T
+
+        try:
+            gpa = auto_gpa(sasm)
+        except Exception as error:
+            guinier_gpa["Failed"] = "%s: %s"%(error.__class__.__name__, error)
+            gpa = None
+        else:
+            #"Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
+            guinier_gpa["Rg"] = gpa.Rg
+            guinier_autorg["Rg"].attrs["unit"] = radius_unit
+            guinier_gpa["Rg_error"] = gpa.sigma_Rg
+            guinier_autorg["Rg_error"].attrs["unit"] = radius_unit
+            guinier_gpa["I0"] = gpa.I0
+            guinier_gpa["I0_error"] = gpa.sigma_I0
+            guinier_gpa["start_point"] = gpa.start_point
+            guinier_gpa["end_point"] = gpa.end_point
+#             guinier_gpa["quality"] = autorg.quality
+#             guinier_gpa["aggregated"] = autorg.aggregated
         try:
             autorg = autoRg(sasm)
         except Exception as err:
             guinier_autorg["Failed"] = "%s: %s"%(err.__class__.__name__, err)
             autorg = None
         else:
-            "Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
+            #"Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
             guinier_autorg["Rg"] = autorg.Rg
             guinier_autorg["Rg"].attrs["unit"] = radius_unit
             guinier_autorg["Rg_error"] = autorg.sigma_Rg
@@ -304,23 +327,6 @@ class SubtractBuffer(Plugin):
             guinier_autorg["aggregated"] = autorg.aggregated
             guinier_autorg["qₘᵢₙ·Rg"] =  autorg.Rg * res2.radial[autorg.start_point]
             guinier_autorg["qₘₐₓ·Rg"] =  autorg.Rg * res2.radial[autorg.end_point -1] 
-        try:
-            gpa = auto_gpa(sasm)
-        except Exception as error:
-            guinier_gpa["Failed"] = "%s: %s"%(error.__class__.__name__, error)
-            gpa = None
-        else:
-            "Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
-            guinier_gpa["Rg"] = gpa.Rg
-            guinier_autorg["Rg"].attrs["unit"] = radius_unit
-            guinier_gpa["Rg_error"] = gpa.sigma_Rg
-            guinier_autorg["Rg_error"].attrs["unit"] = radius_unit
-            guinier_gpa["I0"] = gpa.I0
-            guinier_gpa["I0_error"] = gpa.sigma_I0
-            guinier_gpa["start_point"] = gpa.start_point
-            guinier_gpa["end_point"] = gpa.end_point
-#             guinier_gpa["quality"] = autorg.quality
-#             guinier_gpa["aggregated"] = autorg.aggregated
             
     # Stage #4 Guinier plot generation:
         guinier = autorg or gpa #take one of the fit
@@ -333,8 +339,8 @@ class SubtractBuffer(Plugin):
         if autorg:
             Rg = guinier.Rg
             I0 = guinier.I0
-            first_point = guinier.start_point
-            last_point = guinier.end_point
+#             first_point = guinier.start_point
+#             last_point = guinier.end_point
             intercept = numpy.log(I0)
             slope = -Rg * Rg / 3.0
             end = numpy.where(q > 1.5 / Rg)[0][0]
@@ -475,8 +481,8 @@ class SubtractBuffer(Plugin):
         entry_grp.attrs["default"] = ai2_data.name
 
 
-    #@staticmethod
-    def read_nexus(self, filename):
+    @staticmethod
+    def read_nexus(filename):
         "return some NexusJuice from a HDF5 file "
         with Nexus(filename, "r") as nxsr:
             entry_grp = nxsr.get_entries()[0]
