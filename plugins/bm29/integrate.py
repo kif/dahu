@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "18/05/2020"
+__date__ = "27/05/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -276,7 +276,8 @@ class IntegrateMultiframe(Plugin):
                 else:
                     self.log_error("No measurement in entry: %s of data_file: %s" % (entry, self.input_file))
                 h5path = measurement["data"].name
-            measurement_grp["images"] = detector_grp["frames"] = h5py.ExternalLink(self.input_file, h5path)            
+            rel_path = os.path.relpath(os.path.abspath(self.input_file), os.path.dirname(os.path.abspath(self.output_file)))
+            measurement_grp["images"] = detector_grp["frames"] = h5py.ExternalLink(rel_path, h5path)            
             
         measurement_grp.attrs["signal"] = "images"
         

@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/05/2020"
+__date__ = "27/05/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -149,13 +149,14 @@ class SubtractBuffer(Plugin):
     #Process 0: Measurement group
         input_grp = nxs.new_class(entry_grp, "0_measurement", "NXcollection")
         input_grp["sequence_index"] = 0
-
-        input_grp["sample"] = h5py.ExternalLink(self.sample_file, self.sample_juice.h5path)
+        rel_path = os.path.relpath(os.path.abspath(self.sample_file), os.path.dirname(os.path.abspath(self.output_file)))
+        input_grp["sample"] = h5py.ExternalLink(rel_path, self.sample_juice.h5path)
 
         for idx, buffer_file in enumerate(self.buffer_files):
             buffer_juice = self.validate_buffer(buffer_file)
             if buffer_file is not None:
-                input_grp["buffer_%i"%idx] = h5py.ExternalLink(buffer_file, buffer_juice.h5path)     
+                rel_path = os.path.relpath(os.path.abspath(buffer_file), os.path.dirname(os.path.abspath(self.output_file)))
+                input_grp["buffer_%i"%idx] = h5py.ExternalLink(rel_path, buffer_juice.h5path)     
                 self.buffer_juices.append(buffer_juice)
         
     #Process 1: CorMap
