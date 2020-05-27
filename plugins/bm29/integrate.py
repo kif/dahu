@@ -360,8 +360,10 @@ class IntegrateMultiframe(Plugin):
         count_ds = cormap_data.create_dataset("count", data=cormap_results.count)
         count_ds.attrs["interpretation"] = "image"
         count_ds.attrs["long_name"] = "Longest sequence where curves do not cross each other"
-
-        cormap_grp["to_merge"] = numpy.arange(*cormap_results.tomerge, dtype=numpy.uint16)
+        
+        to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*cormap_results.tomerge, dtype=numpy.uint16)
+        count_ds.attrs["long_name"] = "Index of equivalent frames"
+                                                 
         cormap_grp.attrs["default"] = cormap_data.name
         
     # Process 3: time average and standard deviation
