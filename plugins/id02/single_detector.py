@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/03/2020"
+__date__ = "04/06/2020"
 __status__ = "development"
 __version__ = "0.9.0"
 
@@ -640,7 +640,7 @@ Possible values for to_save:
             entry["program_name"].attrs["version"] = __version__
 
             #configuration
-            config_grp = self.nxs.new_class(entry, "configuration", "NXnote")
+            config_grp = nxs.new_class(entry, "configuration", "NXnote")
             config_grp["type"] = "text/json"
             config_grp["data"] = json.dumps(self.input, indent=2, separators=(",\r\n", ": "))
 
