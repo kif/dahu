@@ -224,7 +224,7 @@ input = {
         # Name
         HS32N = self.input2.get("HS32N")
         if HS32N is not None:
-            self.mcs_grp.create_dataset("HS32N", data=numpy.array([str(i) for i in HS32N])).attrs.__setitem__("interpretation", "spectrum")
+            self.mcs_grp.create_dataset("HS32N", data=[i.encode() for i in HS32N]).attrs.__setitem__("interpretation", "spectrum")
         # Mode
         HS32M = self.input2.get("HS32M")
         if HS32M is not None:
