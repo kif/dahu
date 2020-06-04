@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/03/2020"
+__date__ = "04/06/2020"
 __status__ = "development"
 __version__ = "0.9.1"
 
@@ -216,19 +216,19 @@ input = {
         # Factor
         HS32F = self.input2.get("HS32F")
         if HS32F is not None:
-            self.mcs_grp.create_dataset("HS32F", data=HS32F).attrs__setitem__("interpretation", "spectrum")
+            self.mcs_grp.create_dataset("HS32F", data=HS32F).attrs.__setitem__("interpretation", "spectrum")
         # Zero
         HS32Z = self.input2.get("HS32Z")
         if HS32Z is not None:
-            self.mcs_grp.create_dataset("HS32Z", data=HS32Z).attrs__setitem__("interpretation", "spectrum")
+            self.mcs_grp.create_dataset("HS32Z", data=HS32Z).attrs.__setitem__("interpretation", "spectrum")
         # Name
         HS32N = self.input2.get("HS32N")
         if HS32N is not None:
-            self.mcs_grp.create_dataset("HS32N", data=numpy.array([str(i) for i in HS32N])).attrs__setitem__("interpretation", "spectrum")
+            self.mcs_grp.create_dataset("HS32N", data=numpy.array([str(i) for i in HS32N])).attrs.__setitem__("interpretation", "spectrum")
         # Mode
         HS32M = self.input2.get("HS32M")
         if HS32M is not None:
-            self.mcs_grp.create_dataset("HS32M", data=HS32M).attrs__setitem__("interpretation", "spectrum")
+            self.mcs_grp.create_dataset("HS32M", data=HS32M).attrs.__setitem__("interpretation", "spectrum")
 
         if HS32N and HS32Z and HS32F:
             self.mcs_grp.require_group("interpreted")
