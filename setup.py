@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # /*##########################################################################
 #
-# Copyright (c) 2013-2016 European Synchrotron Radiation Facility
+# Copyright (c) 2013-2020 European Synchrotron Radiation Facility
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -24,8 +24,6 @@
 #
 # ###########################################################################*/
 
-from __future__ import with_statement, print_function
-
 """
 Data Analysis Highly tailored for Upbl09a 
 """
@@ -33,13 +31,14 @@ __authors__ = ["Jérôme Kieffer", "Thomas Vincent"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/03/2020"
+__date__ = "10/06/2020"
 __status__ = "development"
 
 import sys
 import os
-import platform
 import glob
+import logging
+logger = logging.getLogger("dahu.setup")
 
 from numpy.distutils.misc_util import Configuration
 
@@ -48,16 +47,10 @@ try:
     from setuptools import setup, Command
     from setuptools.command.build_py import build_py as _build_py
     from setuptools.command.sdist import sdist
-    from setuptools.command.build_ext import build_ext
-    from setuptools.command.install_data import install_data
-    from setuptools.command.sdist import sdist
-except ImportError:
+except ImportError as err:
+    print(err)
     from numpy.distutils.core import setup, Command
     from distutils.command.build_py import build_py as _build_py
-    from distutils.core import Extension
-    from distutils.command.sdist import sdist
-    from distutils.command.build_ext import build_ext
-    from distutils.command.install_data import install_data
     from distutils.command.sdist import sdist
 
 PROJECT = "dahu"
@@ -90,9 +83,9 @@ classifiers = ["Development Status :: 3 - Alpha",
                "Operating System :: Microsoft :: Windows",
                "Operating System :: POSIX",
                "Programming Language :: Cython",
-               "Programming Language :: Python :: 2.7",
-               "Programming Language :: Python :: 3.4",
-               "Programming Language :: Python :: 3.5",
+               "Programming Language :: Python :: 3.6",
+               "Programming Language :: Python :: 3.7",
+               "Programming Language :: Python :: 3.8",
                "Programming Language :: Python :: Implementation :: CPython",
                "Topic :: Scientific/Engineering :: Physics",
                "Topic :: Software Development :: Libraries :: Python Modules",
