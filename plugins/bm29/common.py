@@ -17,6 +17,7 @@ version = "0.0.1"
 
 from collections import namedtuple
 from typing import NamedTuple
+import json
 import logging
 logger = logging.getLogger("bm29.common")
 import numpy
@@ -32,11 +33,14 @@ else:
     
 #cmp contains the compression options, shared by all plugins. Used mainly for images 
 cmp = cmp_int = Bitshuffle()
-cmp_float = Zfp(Reversible=True) 
+cmp_float = Zfp(reversible=True) 
 
 
 #This is used for NXdata plot style
-SAXS_STYLE = {'xscale': 'linear', 'yscale': 'log'}
+SAXS_STYLE = json.dumps({'xscale': 'linear', 
+                         'yscale': 'log'},
+                        indent=2, 
+                        separators=(",\r\n", ":\t"))
 
 # Constants associated to the azimuthal integrator to be used in all plugins:
 polarization_factor = 0.9
