@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/05/2020"
+__date__ = "10/06/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -35,8 +35,8 @@ import pyFAI, pyFAI.azimuthalIntegrator
 import freesas, freesas.cormap
 
 #from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
-from .common import Sample, Ispyb, get_equivalent_frames, get_integrator, KeyCache,\
-                    method, polarization_factor,Nexus, get_isotime, cmp_float, cmp_int
+from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, get_integrator, KeyCache,\
+                    method, polarization_factor,Nexus, get_isotime, SAXS_STYLE
 
 
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
@@ -306,7 +306,7 @@ class IntegrateMultiframe(Plugin):
         cfg_grp.create_dataset("file_name", data = self.poni)
         pol_ds = cfg_grp.create_dataset("polarization_factor", data=polarization_factor)
         pol_ds.attrs["comment"] = "Between -1 and +1, 0 for circular"
-        cfg_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
+        integration_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
         integration_data = nxs.new_class(integration_grp, "results", "NXdata")
         integration_grp.attrs["default"] = integration_data.name
         
@@ -323,7 +323,7 @@ class IntegrateMultiframe(Plugin):
         std_ds = integration_data.create_dataset("errors", data=numpy.ascontiguousarray(integrate1_results.sigma, dtype=numpy.float32))
         integration_data.attrs["signal"] = "I"
         integration_data.attrs["axes"] = [".", radial_unit]
-        #integration_data.attrs["axes"] = numpy.array([".", radial_unit], dtype=h5py.string_dtype(encoding='utf-8'))
+        integration_data.attrs["SILX_style"] = SAXS_STYLE
         
         int_ds.attrs["interpretation"] = "spectrum" 
         int_ds.attrs["units"] = "arbitrary"
@@ -388,6 +388,7 @@ class IntegrateMultiframe(Plugin):
         int_std_ds.attrs["formula"] = "sqrt(sum_i(variance_i))/sum(normalization_i)"
         int_std_ds.attrs["method"] = "Propagated error from weighted mean assuming poissonian behavour of every data-point"
         average_grp.attrs["default"] = average_data.name
+        
     # Process 4: Azimuthal integration of the time average image
         ai2_grp = nxs.new_class(entry_grp, "4_azimuthal_integration", "NXprocess")
         ai2_grp["sequence_index"] = 4
@@ -397,8 +398,11 @@ class IntegrateMultiframe(Plugin):
         ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
         ai2_data.attrs["signal"] = "I"
         ai2_data.attrs["axes"] = radial_unit
+        ai2_data.attrs["SILX_style"] = SAXS_STYLE
 
         ai2_grp["configuration"]=integration_grp["configuration"]
+        #ai2_grp["polarization_factor"] = integration_grp["polarization_factor"]
+        #ai2_grp["integration_method"] = integration_grp["integration_method"]
         ai2_grp.attrs["default"] = ai2_data.name
 
     # Stage 4 processing

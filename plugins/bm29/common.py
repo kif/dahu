@@ -11,14 +11,12 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "15/05/2020"
+__date__ = "10/06/2020"
 __status__ = "development"
 version = "0.0.1"
 
-import os
 from collections import namedtuple
 from typing import NamedTuple
-import json
 import logging
 logger = logging.getLogger("bm29.common")
 import numpy
@@ -31,10 +29,14 @@ if pyFAI.version_info < (0, 20):
     from .nexus import Nexus, get_isotime
 else:
     from pyFAI.io import Nexus, get_isotime
+    
 #cmp contains the compression options, shared by all plugins. Used mainly for images 
-cmp_int = Bitshuffle()
-cmp_float = Zfp(rate=8)
-cmp = cmp_float
+cmp = cmp_int = Bitshuffle()
+cmp_float = Zfp(Reversible=True) 
+
+
+#This is used for NXdata plot style
+SAXS_STYLE = {'xscale': 'linear', 'yscale': 'log'}
 
 # Constants associated to the azimuthal integrator to be used in all plugins:
 polarization_factor = 0.9
@@ -50,13 +52,7 @@ def get_integrator(keycache):
     if keycache in shared_cache:
         ai = shared_cache[keycache]
     else:
-        if os.path.exists(keycache.poni):
-            ai = pyFAI.load(keycache.poni)
-        else:
-            logger.warning("Poni file does not exist, try to consider it as a JSON-dict")
-            config = json.loads(keycache.poni)
-            ai = pyFAI.load(config)
-            
+        ai = pyFAI.load(keycache.poni)
         ai.wavelength = 1e-10 * pyFAI.units.hc / keycache.energy
         if keycache.mask:
             mask = numpy.logical_or(fabio.open(keycache.mask).data, ai.detector.mask).astype("int8")
