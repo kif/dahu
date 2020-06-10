@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/03/2020"
+__date__ = "10/06/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -36,8 +36,8 @@ from hdf5plugin import Bitshuffle
 import freesas, freesas.cormap
 
 #from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
-from .common import Sample, Ispyb, get_equivalent_frames, cmp, get_integrator, KeyCache,\
-                    method, polarization_factor,Nexus, get_isotime
+from .common import Sample, Ispyb, get_equivalent_frames, int_cmp, float_cmp, get_integrator, KeyCache,\
+                    method, polarization_factor,Nexus, get_isotime, SAXS_STYLE
 
 
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
@@ -245,7 +245,7 @@ class IntegrateMultiframe(Plugin):
         ybc_ds = detector_grp.create_dataset("beam_center_y", data=f2d["centerY"])
         ybc_ds.attrs["units"] = "pixel"
         mask = self.ai.detector.mask
-        mask_ds = detector_grp.create_dataset("pixel_mask", data=mask, **cmp)
+        mask_ds = detector_grp.create_dataset("pixel_mask", data=mask, **int_cmp)
         mask_ds.attrs["interpretation"] = "image"
         mask_ds.attrs["long_name"] = "Mask for invalid/hidden pixels"
         mask_ds.attrs["filename"] = self.input.get("mask_file")
@@ -259,7 +259,7 @@ class IntegrateMultiframe(Plugin):
             frames_ds = detector_grp.create_dataset("frames",
                                                      data=data,
                                                      chunks=(1,)+data.shape[-2:],
-                                                     **cmp)
+                                                     **int_cmp)
             frames_ds.attrs["interpretation"] = "image"
             measurement_grp["images"] = frames_ds
         else: #use external links
@@ -302,7 +302,6 @@ class IntegrateMultiframe(Plugin):
         integration_data = nxs.new_class(integration_grp, "results", "NXdata")
         integration_grp.attrs["default"] = integration_data.name
         
-        
     # Stage 1 processing: Integration frame per frame
         integrate1_results = self.process1_integration(self.input_frames)
         
@@ -315,6 +314,7 @@ class IntegrateMultiframe(Plugin):
         std_ds = integration_data.create_dataset("errors", data=numpy.ascontiguousarray(integrate1_results.sigma, dtype=numpy.float32))
         integration_data.attrs["signal"] = "I"
         integration_data.attrs["axes"] = [".", radial_unit]
+        integration_data.attrs["SILX_style"] = SAXS_STYLE
         
         int_ds.attrs["interpretation"] = "spectrum" 
         int_ds.attrs["units"] = "arbitrary"
@@ -326,7 +326,6 @@ class IntegrateMultiframe(Plugin):
         sum_ds = integration_data.create_dataset("sum", data=numpy.ascontiguousarray(integrate1_results.intensity.sum(axis=-1), dtype=numpy.float32))
         sum_ds.attrs["interpretation"] = "spectrum" 
 
-        
     # Process 2: Freesas cormap 
         cormap_grp = nxs.new_class(entry_grp, "2_cormap", "NXprocess")
         cormap_grp["sequence_index"] = 2
@@ -351,6 +350,7 @@ class IntegrateMultiframe(Plugin):
         cormap_grp["fidelity_abs"] = self.input.get("fidelity_abs", 0)
         cormap_grp["fidelity_rel"] = self.input.get("fidelity_rel", 0)
         cormap_grp.attrs["default"] = cormap_data.name
+        
     # Process 3: time average and standard deviation
         average_grp = nxs.new_class(entry_grp, "3_time_average", "NXprocess")
         average_grp["sequence_index"] = 3
@@ -363,16 +363,17 @@ class IntegrateMultiframe(Plugin):
         res3 = self.process3_average(cormap_results.tomerge)    
         int_avg_ds =  average_data.create_dataset("intensity_normed", 
                                                   data=numpy.ascontiguousarray(res3.average, dtype=numpy.float32),
-                                                  **cmp)
+                                                  **float_cmp)
         int_avg_ds.attrs["interpretation"] = "image"
         int_avg_ds.attrs["formula"] = "sum_i(signal_i))/sum_i(normalization_i)"
         int_std_ds =  average_data.create_dataset("intensity_std", 
                                                    data=numpy.ascontiguousarray(res3.deviation, dtype=numpy.float32),
-                                                   **cmp)
+                                                   **float_cmp)
         int_std_ds.attrs["interpretation"] = "image"    
         int_std_ds.attrs["formula"] = "sqrt(sum_i(variance_i))/sum(normalization_i)"
         int_std_ds.attrs["method"] = "Propagated error from weighted mean assuming poissonian behavour of every data-point"
         average_grp.attrs["default"] = average_data.name
+        
     # Process 4: Azimuthal integration of the time average image
         ai2_grp = nxs.new_class(entry_grp, "4_azimuthal_integration", "NXprocess")
         ai2_grp["sequence_index"] = 4
@@ -382,6 +383,7 @@ class IntegrateMultiframe(Plugin):
         ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
         ai2_data.attrs["signal"] = "I"
         ai2_data.attrs["axes"] = radial_unit
+        ai2_data.attrs["SILX_style"] = SAXS_STYLE
 
         ai2_grp["configuration"]=integration_grp["configuration"]
         ai2_grp["polarization_factor"] = integration_grp["polarization_factor"]
