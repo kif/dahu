@@ -35,7 +35,7 @@ import h5py
 import fabio
 import pyFAI, pyFAI.azimuthalIntegrator
 from pyFAI.method_registry import IntegrationMethod
-import freesas, freesas.cormap
+import freesas, freesas.cormap, freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier
 from freesas.bift import BIFT
 from scipy.optimize import minimize
@@ -525,7 +525,20 @@ class SubtractBuffer(Plugin):
         #overlay the BIFT fitted data on top of the scattering curve 
         entry_grp.attrs["default"] = ai2_data.name
 
-
+        # stage 7: Rambo-Tainer invariant
+        rti_grp = nxs.new_class(entry_grp, "7_Rambo-Tainer_invariants", "NXprocess")
+        rti_grp["sequence_index"] = 7
+        rti_grp["program"] = "freesas.invariants"
+        rti_grp["version"] = freesas.version
+        rti_data = nxs.new_class(rti_grp, "results", "NXdata")
+        #average_data.attrs["SILX_style"] = SAXS_STYLE 
+        #average_data.attrs["signal"] = "intensity_normed"
+        rti = freesas.invariants.calc_Rambo_Tainer(sasm, guinier)
+        for k,v in rti._asdict().items():
+            rti_data[k] = v
+        self.Vc = rti.Vc
+        self.mass = rti.mass
+        
     @staticmethod
     def read_nexus(filename):
         "return some NexusJuice from a HDF5 file "
