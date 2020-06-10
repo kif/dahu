@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/05/2020"
+__date__ = "10/06/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -36,11 +36,12 @@ import fabio
 import pyFAI, pyFAI.azimuthalIntegrator
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap
-from freesas.autorg import auto_gpa, autoRg
+from freesas.autorg import auto_gpa, autoRg, auto_guinier
 from freesas.bift import BIFT
 from scipy.optimize import minimize
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
-from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, polarization_factor, method, Nexus, get_isotime
+from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
+                    polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE
 
 NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I poni mask energy polarization method signal2d error2d buffer concentration")
 
@@ -166,6 +167,7 @@ class SubtractBuffer(Plugin):
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
         cormap_data = nxs.new_class(cormap_grp, "results", "NXdata")
+        cormap_data.attrs["SILX_style"] = NORMAL_STYLE
         cfg_grp = nxs.new_class(cormap_grp, "configuration", "NXcollection")
         
     #Cormap processing   
@@ -203,6 +205,7 @@ class SubtractBuffer(Plugin):
         average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
         average_data = nxs.new_class(average_grp, "results", "NXdata")
+        average_data.attrs["SILX_style"] = SAXS_STYLE 
         average_data.attrs["signal"] = "intensity_normed"
     # Stage 2 processing
 
@@ -233,6 +236,7 @@ class SubtractBuffer(Plugin):
         int_std_ds.attrs["formula"] = "sqrt( sample_variance + (sum(buffer_variance)/n_buffer**2 ))"
         int_std_ds.attrs["method"] = "quadratic sum of sample error and buffer errors"
         average_grp.attrs["default"] = average_data.name
+        
     # Process 3: Azimuthal integration of the subtracted image
         ai2_grp = nxs.new_class(entry_grp, "3_azimuthal_integration", "NXprocess")
         ai2_grp["sequence_index"] = 3
@@ -243,6 +247,7 @@ class SubtractBuffer(Plugin):
         ai = get_integrator(key_cache)
         radial_unit, unit_name = str(key_cache.unit).split("_", 1)
         ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
+        ai2_data.attrs["SILX_style"] = SAXS_STYLE
         ai2_data.attrs["signal"] = "I"
         ai2_data.attrs["axes"] = radial_unit
         ai2_grp.attrs["default"] = ai2_data.name
@@ -289,7 +294,9 @@ class SubtractBuffer(Plugin):
         guinier_grp["date"] = get_isotime()
         guinier_autorg = nxs.new_class(guinier_grp, "autorg", "NXcollection")
         guinier_gpa = nxs.new_class(guinier_grp, "gpa", "NXcollection")
+        guinier_guinier = nxs.new_class(guinier_grp, "guinier", "NXcollection")
         guinier_data = nxs.new_class(guinier_grp, "results", "NXdata")
+        guinier_data.attrs["SILX_style"] = NORMAL_STYLE
     # Stage4 processing: autorg and auto_gpa
         sasm = numpy.vstack((res2.radial, res2.intensity, res2.sigma)).T
 
@@ -301,15 +308,36 @@ class SubtractBuffer(Plugin):
         else:
             #"Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
             guinier_gpa["Rg"] = gpa.Rg
-            guinier_autorg["Rg"].attrs["unit"] = radius_unit
+            guinier_gpa["Rg"].attrs["unit"] = radius_unit
             guinier_gpa["Rg_error"] = gpa.sigma_Rg
-            guinier_autorg["Rg_error"].attrs["unit"] = radius_unit
+            guinier_gpa["Rg_error"].attrs["unit"] = radius_unit
             guinier_gpa["I0"] = gpa.I0
             guinier_gpa["I0_error"] = gpa.sigma_I0
             guinier_gpa["start_point"] = gpa.start_point
             guinier_gpa["end_point"] = gpa.end_point
-#             guinier_gpa["quality"] = autorg.quality
-#             guinier_gpa["aggregated"] = autorg.aggregated
+            guinier_gpa["quality"] = gpa.quality
+            guinier_gpa["aggregated"] = gpa.aggregated
+
+        try:
+            guinier = auto_guinier(sasm)
+        except Exception as error:
+            guinier_guinier["Failed"] = "%s: %s"%(error.__class__.__name__, error)
+            guinier = None
+        else:
+            #"Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
+            guinier_guinier["Rg"] = guinier.Rg
+            guinier_guinier["Rg"].attrs["unit"] = radius_unit
+            guinier_guinier["Rg_error"] = guinier.sigma_Rg
+            guinier_guinier["Rg_error"].attrs["unit"] = radius_unit
+            guinier_guinier["I0"] = guinier.I0
+            guinier_guinier["I0_error"] = guinier.sigma_I0
+            guinier_guinier["start_point"] = guinier.start_point
+            guinier_guinier["end_point"] = guinier.end_point
+            guinier_guinier["quality"] = guinier.quality
+            guinier_guinier["aggregated"] = guinier.aggregated
+            guinier_guinier["qₘᵢₙ·Rg"] =  guinier.Rg * res2.radial[guinier.start_point]
+            guinier_guinier["qₘₐₓ·Rg"] =  guinier.Rg * res2.radial[guinier.end_point - 1] 
+
         try:
             autorg = autoRg(sasm)
         except Exception as err:
@@ -328,10 +356,10 @@ class SubtractBuffer(Plugin):
             guinier_autorg["quality"] = autorg.quality
             guinier_autorg["aggregated"] = autorg.aggregated
             guinier_autorg["qₘᵢₙ·Rg"] =  autorg.Rg * res2.radial[autorg.start_point]
-            guinier_autorg["qₘₐₓ·Rg"] =  autorg.Rg * res2.radial[autorg.end_point -1] 
+            guinier_autorg["qₘₐₓ·Rg"] =  autorg.Rg * res2.radial[autorg.end_point - 1] 
             
     # Stage #4 Guinier plot generation:
-        guinier = autorg or gpa #take one of the fit
+        guinier = guinier or autorg or gpa #take one of the fit
 
         q, I, err = sasm.T[:3]
         mask = (I > 0) & numpy.isfinite(I) & (q > 0) & numpy.isfinite(q)
@@ -381,6 +409,7 @@ class SubtractBuffer(Plugin):
         kratky_grp["version"] = freesas.version
         kratky_grp["date"] = get_isotime()
         kratky_data = nxs.new_class(kratky_grp, "results", "NXdata")
+        kratky_data.attrs["SILX_style"] = NORMAL_STYLE
         kratky_grp.attrs["default"] = kratky_data.name
     # Stage #5 Kratky plot generation:
         Rg = guinier.Rg
@@ -407,6 +436,8 @@ class SubtractBuffer(Plugin):
         bift_grp["version"] = freesas.version
         bift_grp["date"] = get_isotime()
         bift_data = nxs.new_class(bift_grp, "results", "NXdata")
+        bift_data.attrs["SILX_style"] = NORMAL_STYLE
+
         cfg_grp = nxs.new_class(bift_grp, "configuration", "NXcollection")
     # Process stage6, i.e. perform the IFT
         try:

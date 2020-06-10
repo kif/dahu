@@ -36,7 +36,7 @@ import freesas, freesas.cormap
 
 #from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, get_integrator, KeyCache,\
-                    method, polarization_factor,Nexus, get_isotime, SAXS_STYLE
+                    method, polarization_factor,Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE
 
 
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
@@ -193,7 +193,7 @@ class IntegrateMultiframe(Plugin):
         
         #Process 0: Measurement group
         measurement_grp = nxs.new_class(entry_grp, "0_measurement", "NXdata")
-        
+        measurement_grp.attrs["SILX_style"] = SAXS_STYLE
         #Instrument
         instrument_grp = nxs.new_instrument(entry_grp, "BM29")
         instrument_grp["name"] = "BioSaxs"
@@ -306,8 +306,9 @@ class IntegrateMultiframe(Plugin):
         cfg_grp.create_dataset("file_name", data = self.poni)
         pol_ds = cfg_grp.create_dataset("polarization_factor", data=polarization_factor)
         pol_ds.attrs["comment"] = "Between -1 and +1, 0 for circular"
-        integration_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
+        cfg_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
         integration_data = nxs.new_class(integration_grp, "results", "NXdata")
+        integration_grp.attrs["SILX_style"] = SAXS_STYLE
         integration_grp.attrs["default"] = integration_data.name
         
         
@@ -343,6 +344,7 @@ class IntegrateMultiframe(Plugin):
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
         cormap_data = nxs.new_class(cormap_grp, "results", "NXdata")
+        cormap_data.attrs["SILX_style"] = NORMAL_STYLE
         cfg_grp = nxs.new_class(cormap_grp, "configuration", "NXcollection")
         
         fidelity_abs = self.input.get("fidelity_abs", 0)
@@ -372,6 +374,7 @@ class IntegrateMultiframe(Plugin):
         average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
         average_data = nxs.new_class(average_grp, "results", "NXdata")
+        average_data.attrs["SILX_style"] = SAXS_STYLE
         average_data.attrs["signal"] = "intensity_normed"
         
     # Stage 3 processing

@@ -37,10 +37,13 @@ cmp_float = Zfp(reversible=True)
 
 
 #This is used for NXdata plot style
-SAXS_STYLE = json.dumps({'xscale': 'linear', 
-                         'yscale': 'log'},
+SAXS_STYLE = json.dumps({"signal_scale_type": "log"},
                         indent=2, 
                         separators=(",\r\n", ":\t"))
+NORMAL_STYLE = json.dumps({"signal_scale_type": "linear"},
+                          indent=2, 
+                          separators=(",\r\n", ":\t"))
+
 
 # Constants associated to the azimuthal integrator to be used in all plugins:
 polarization_factor = 0.9
