@@ -310,7 +310,7 @@ class IntegrateMultiframe(Plugin):
         integration_data = nxs.new_class(integration_grp, "results", "NXdata")
         integration_grp.attrs["SILX_style"] = SAXS_STYLE
         integration_grp.attrs["default"] = integration_data.name
-        
+        integration_grp.attrs["title"] = str(self.sample)
         
     # Stage 1 processing: Integration frame per frame
         integrate1_results = self.process1_integration(self.input_frames)
@@ -402,6 +402,7 @@ class IntegrateMultiframe(Plugin):
         ai2_data.attrs["signal"] = "I"
         ai2_data.attrs["axes"] = radial_unit
         ai2_data.attrs["SILX_style"] = SAXS_STYLE
+        ai2_data.attrs["title"] = str(self.sample)
 
         ai2_grp["configuration"]=integration_grp["configuration"]
         #ai2_grp["polarization_factor"] = integration_grp["polarization_factor"]

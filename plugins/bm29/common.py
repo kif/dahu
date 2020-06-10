@@ -98,6 +98,8 @@ class Sample(NamedTuple):
 
     _fromdict = classmethod(_fromdict)
     
+    def __repr__(self):
+        return f"{self.name}, {self.concentration} mg/mL in {self.buffer}"
     
         
 class Ispyb(NamedTuple):        

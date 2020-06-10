@@ -41,9 +41,10 @@ from freesas.bift import BIFT
 from scipy.optimize import minimize
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
-                    polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE
+                    polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
+                    Sample
 
-NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I poni mask energy polarization method signal2d error2d buffer concentration")
+NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I poni mask energy polarization method signal2d error2d sample")
 
 
 class SubtractBuffer(Plugin):
@@ -127,10 +128,10 @@ class SubtractBuffer(Plugin):
         if self.sample_juice.polarization != buffer_juice.polarization:
             self.log_warning(f"Sample {buffer_file} differs in polarization factor, discarding")
             return
-        if self.sample_juice.buffer != buffer_juice.buffer:
+        if self.sample_juice.sample.buffer != buffer_juice.sample.buffer:
             self.log_warning(f"Sample {buffer_file} differs in buffer descsription, discarding")
             return
-        if buffer_juice.concentration:
+        if buffer_juice.sample.concentration:
             self.log_warning(f"Sample {buffer_file} concentration not null, discarding")
             return
         return buffer_juice
@@ -248,6 +249,7 @@ class SubtractBuffer(Plugin):
         radial_unit, unit_name = str(key_cache.unit).split("_", 1)
         ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
         ai2_data.attrs["SILX_style"] = SAXS_STYLE
+        ai2_data.attrs["title"] = "%s, subtracted"%self.sample_juice.sample.name
         ai2_data.attrs["signal"] = "I"
         ai2_data.attrs["axes"] = radial_unit
         ai2_grp.attrs["default"] = ai2_data.name
@@ -297,6 +299,7 @@ class SubtractBuffer(Plugin):
         guinier_guinier = nxs.new_class(guinier_grp, "guinier", "NXcollection")
         guinier_data = nxs.new_class(guinier_grp, "results", "NXdata")
         guinier_data.attrs["SILX_style"] = NORMAL_STYLE
+        guinier_data.attrs["title"] = "Guinier analysis"
     # Stage4 processing: autorg and auto_gpa
         sasm = numpy.vstack((res2.radial, res2.intensity, res2.sigma)).T
 
@@ -344,36 +347,40 @@ class SubtractBuffer(Plugin):
             guinier_autorg["Failed"] = "%s: %s"%(err.__class__.__name__, err)
             autorg = None
         else:
-            #"Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
-            guinier_autorg["Rg"] = autorg.Rg
-            guinier_autorg["Rg"].attrs["unit"] = radius_unit
-            guinier_autorg["Rg_error"] = autorg.sigma_Rg
-            guinier_autorg["Rg_error"].attrs["unit"] = radius_unit
-            guinier_autorg["I0"] = autorg.I0
-            guinier_autorg["I0_error"] = autorg.sigma_I0
-            guinier_autorg["start_point"] = autorg.start_point
-            guinier_autorg["end_point"] = autorg.end_point
-            guinier_autorg["quality"] = autorg.quality
-            guinier_autorg["aggregated"] = autorg.aggregated
-            guinier_autorg["qₘᵢₙ·Rg"] =  autorg.Rg * res2.radial[autorg.start_point]
-            guinier_autorg["qₘₐₓ·Rg"] =  autorg.Rg * res2.radial[autorg.end_point - 1] 
+            if autorg.Rg<0:
+                guinier_autorg["Failed"] = "No Guinier region found with this algorithm"
+                autorg = None
+            else: 
+                #"Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
+                guinier_autorg["Rg"] = autorg.Rg
+                guinier_autorg["Rg"].attrs["unit"] = radius_unit
+                guinier_autorg["Rg_error"] = autorg.sigma_Rg
+                guinier_autorg["Rg_error"].attrs["unit"] = radius_unit
+                guinier_autorg["I0"] = autorg.I0
+                guinier_autorg["I0_error"] = autorg.sigma_I0
+                guinier_autorg["start_point"] = autorg.start_point
+                guinier_autorg["end_point"] = autorg.end_point
+                guinier_autorg["quality"] = autorg.quality
+                guinier_autorg["aggregated"] = autorg.aggregated
+                guinier_autorg["qₘᵢₙ·Rg"] =  autorg.Rg * res2.radial[autorg.start_point]
+                guinier_autorg["qₘₐₓ·Rg"] =  autorg.Rg * res2.radial[autorg.end_point - 1] 
             
     # Stage #4 Guinier plot generation:
-        guinier = guinier or autorg or gpa #take one of the fit
+        guinier = guinier or autorg or gpa #take one of the fits
 
         q, I, err = sasm.T[:3]
         mask = (I > 0) & numpy.isfinite(I) & (q > 0) & numpy.isfinite(q)
         if err is not None:
             mask &= (err > 0.0) & numpy.isfinite(err)
         mask = mask.astype(bool)
-        if autorg:
-            Rg = guinier.Rg
-            I0 = guinier.I0
+        if guinier:
+            self.Rg = guinier.Rg
+            self.I0 = guinier.I0
 #             first_point = guinier.start_point
 #             last_point = guinier.end_point
-            intercept = numpy.log(I0)
-            slope = -Rg * Rg / 3.0
-            end = numpy.where(q > 1.5 / Rg)[0][0]
+            intercept = numpy.log(self.I0)
+            slope = -self.Rg **2 / 3.0
+            end = numpy.where(q > 1.5 / self.Rg)[0][0]
             mask[end:] = False
 
         q2 = q[mask] ** 2
@@ -389,7 +396,7 @@ class SubtractBuffer(Plugin):
         erI_ds = guinier_data.create_dataset("errors", data=dlogI.astype(numpy.float32))
         erI_ds.attrs["interpretation"] = "spectrum"
                                              
-        if autorg:
+        if guinier:
             guinier_data["fit"] = intercept + slope * q2
             guinier_data["fit"].attrs["slope"] = slope
             guinier_data["fit"].attrs["intercept"] = intercept
@@ -402,6 +409,7 @@ class SubtractBuffer(Plugin):
         if guinier is None:
             entry_grp.attrs["default"] = ai2_data.name
             self.log_error("No Guinier region found, data of dubious quality", do_raise=True)
+
     # Process 5: Kratky plot
         kratky_grp = nxs.new_class(entry_grp, "5_dimensionless_Kratky_plot", "NXprocess")
         kratky_grp["sequence_index"] = 5
@@ -410,7 +418,9 @@ class SubtractBuffer(Plugin):
         kratky_grp["date"] = get_isotime()
         kratky_data = nxs.new_class(kratky_grp, "results", "NXdata")
         kratky_data.attrs["SILX_style"] = NORMAL_STYLE
+        kratky_data.attrs["title"] = "Dimensionless Kratky plots"
         kratky_grp.attrs["default"] = kratky_data.name
+
     # Stage #5 Kratky plot generation:
         Rg = guinier.Rg
         I0 = guinier.I0
@@ -437,12 +447,14 @@ class SubtractBuffer(Plugin):
         bift_grp["date"] = get_isotime()
         bift_data = nxs.new_class(bift_grp, "results", "NXdata")
         bift_data.attrs["SILX_style"] = NORMAL_STYLE
+        bift_data.attrs["title"] = "Pair distance distribution function p(r)"
 
         cfg_grp = nxs.new_class(bift_grp, "configuration", "NXcollection")
     # Process stage6, i.e. perform the IFT
         try:
             bo = BIFT(q, I, err) 
             cfg_grp["Rg"] = guinier.Rg
+            # Pretty limited quality as we have real time constrains
             cfg_grp["npt"] = npt = 64 
             cfg_grp["Dmax÷Rg"] = 3
             Dmax = bo.set_Guinier(guinier, Dmax_over_Rg=3)
@@ -541,7 +553,15 @@ class SubtractBuffer(Plugin):
             img_grp = nxsr.get_class(entry_grp["3_time_average"], class_type="NXdata")[0]
             image2d = img_grp["intensity_normed"][()]
             error2d = img_grp["intensity_std"][()]
+            #Read the sample description:
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
-            buffer = sample_grp["buffer"]
-            concentration = sample_grp["concentration"]
-        return NexusJuice(filename, h5path, npt, unit, q, I, poni, mask, energy, polarization, method, image2d, error2d, buffer, concentration)
+            sample_name = sample_grp.name
+            buffer = sample_grp.get("buffer", "")
+            concentration = sample_grp.get("concentration")
+            description = sample_grp.get("description", "")
+            hplc = sample_grp.get("hplc")
+            temperature = sample_grp.get("temperature")
+            temperature_env = sample_grp.get("temperature_env")
+            sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
+            
+        return NexusJuice(filename, h5path, npt, unit, q, I, poni, mask, energy, polarization, method, image2d, error2d, sample)
