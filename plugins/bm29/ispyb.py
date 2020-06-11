@@ -15,3 +15,103 @@ __date__ = "10/06/2020"
 __status__ = "development"
 version = "0.0.1"
 
+import logging
+logger = logging.getLogger("bm29.ispyb")
+import os
+import shutil
+import numpy    
+from suds.client            import Client
+from suds.transport.https   import HttpAuthenticated
+
+class IspybConnector:
+    "This class is a conector to the web-service"
+    def __init__(self, server, login=None, passwd=None, pyarch=None, collection_id=-1, measurement_id=-1):
+        """Constructor of the ISPyB connections
+        
+        :param server: url of the service
+        :param login: name used to authenticate
+        :param passwd: password to use
+        :param pyarch: folder for archiving data
+        :param collection_id: identifier for the collection
+        :param measurement_id: identifier for the measurement
+        """
+        self.authentication = HttpAuthenticated(username=login, password=passwd)
+        self.client = Client(server, transport=self.authentication, cache=None)
+        if os.path.isdir(pyarch):
+            self.pyarch = os.path.abspath()
+        self.collection_id = collection_id
+        self.measurement_id = measurement_id
+        
+    def send_averaged(self, data):
+        """Send this to ISPyB and backup to PyArch
+        
+        :param: data: dict to be saved in pyarch with keys:
+                integer: frame index to be saved
+                "avg": the averaged frame
+                "merged": list of index merged
+                0,1,2,3 the different indexes for individual frames.     
+
+        """
+        discarded = []
+        frames = []
+        merged = data.pop("merged") 
+        
+        aver_data = data.pop("avg")
+        averaged = self.save_curve("avg", aver_data)
+            
+        for k,v in data:
+            if isinstance(k, int):
+                fn = self.save_curve(k, v)
+                if k in merged:
+                    frames.append(fn)
+                else:
+                    discarded.append(fn)
+        self.client.service.addAveraged(str(self.measurement_id),
+                                        str(self.collection_id),
+                                        str(frames),
+                                        str(discarded),
+                                        str(averaged))
+    
+    def save_curve(self, index, data):
+        """Save a  1D curve into the pyarch. Not those file do not exist outside pyarch
+        
+        :param: index: prefix or index value for 
+        :param: data: an IntegrationResult to be saved.  
+        :return: the full path of the file in pyarch 
+        """
+        dest = os.path.join(self.pyarch, "1d")
+        if not os.path.isdir(dest):
+            os.makedirs(dest)
+        if isinstance(index, int):
+            filename = os.path.join(dest, "frame_%04i.dat"%index)
+        else:
+            filename = os.path.join(dest, "frame_%s.dat"%index)
+        sasl = numpy.vstack((data.radius, data.intensity, data.sigma))
+        numpy.savetxt(filename, sasl.T)
+        return filename
+        
+    def send_subtracted(self,):
+        self.client.service.addSubtraction(
+                                            self.dataBioSaxsSample.measurementID.value,
+                                            self.rg,
+                                            self.rgStdev,
+                                            self.i0,
+                                            self.i0Stdev,
+                                            self.firstPointUsed,
+                                            self.lastPointUsed,
+                                            self.quality,
+                                            self.isagregated,
+                                            self.rgGnom,
+                                            self.dmax,
+                                            self.total,
+                                            self.volume,
+                                            str(sampleAvgOneDimensionalFiles),
+                                            str(bufferAvgOneDimensionalFiles),
+                                            self.averageSample,                     #sampleAverageFilePath,
+                                            self.bestBuffer,                        #bufferAverageFilePath,
+                                            self.subtractedFilePath,                #subtractedFilePath,
+                                            self.scatterPlot,                       #experimentalDataPlotFilePath,
+                                            self.densityPlot,                       #densityPlotFilePath,
+                                            self.guinierPlot,                       #guinierPlotFilePath,
+                                            self.kratkyPlot,                        #kratkyPlotFilePath,
+                                            self.gnomFile)                          #gnomOutputFilePath

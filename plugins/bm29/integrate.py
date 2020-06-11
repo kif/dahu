@@ -37,7 +37,7 @@ import freesas, freesas.cormap
 #from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, get_integrator, KeyCache,\
                     method, polarization_factor,Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE
-
+from .ispyb import IspybConnector
 
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
 CormapResult = namedtuple("CormapResult", "probability count tomerge")
@@ -81,7 +81,9 @@ class IntegrateMultiframe(Plugin):
         "server": "http://ispyb.esrf.fr:1234",
         "login": "mx1234",
         "passwd": "secret",
-        "pyarch_folder": "/data/pyarch/mx1234/1d", 
+        "pyarch": "/data/pyarch/mx1234/1d", 
+        "measurement_id": -1,
+        "collection_id": -1
        } 
     }
     """
@@ -106,6 +108,7 @@ class IntegrateMultiframe(Plugin):
         #self.method = IntegrationMethod.select_method(1, "no", "csr", "opencl")[0] -> constant
         self.monitor_values = None
         self.normalization_factor = None
+        self.to_pyarch = {} #contains all the stuff to be sent to Ispyb and pyarch
 
     def setup(self, kwargs=None):
         logger.debug("IntegrateMultiframe.setup")
@@ -174,7 +177,7 @@ class IntegrateMultiframe(Plugin):
         logger.debug("IntegrateMultiframe.process")
         self.ai = get_integrator(KeyCache(self.npt, self.unit, self.poni, self.mask, self.energy))
         self.create_nexus()
-        #Send to ispyb
+        self.send_to_ispyb()
 
     def create_nexus(self):
         creation_time = os.stat(self.input_file).st_ctime
@@ -365,8 +368,10 @@ class IntegrateMultiframe(Plugin):
         
         to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*cormap_results.tomerge, dtype=numpy.uint16))
         to_merge_ds.attrs["long_name"] = "Index of equivalent frames"
-                                                 
         cormap_grp.attrs["default"] = cormap_data.name
+        if self.ispyb:
+            self.to_pyarch["merged"] = cormap_results.tomerge
+
         
     # Process 3: time average and standard deviation
         average_grp = nxs.new_class(entry_grp, "3_time_average", "NXprocess")
@@ -421,7 +426,8 @@ class IntegrateMultiframe(Plugin):
                                        unit=self.unit,
                                        safe=False,
                                        method=method)
-
+        if self.ispyb:
+            self.to_pyarch["avg"] = res2
         ai2_q_ds = ai2_data.create_dataset(radial_unit,
                                            data=numpy.ascontiguousarray(res2.radial, dtype=numpy.float32))
         ai2_q_ds.attrs["units"] = unit_name
@@ -458,6 +464,8 @@ class IntegrateMultiframe(Plugin):
                                           method=method)
             intensity[idx] = res.intensity
             sigma[idx] = res.sigma
+            if self.ispyb:
+                self.to_pyarch[idx] = res
         return IntegrationResult(res.radial, intensity, sigma)
 
     def process2_cormap(self, curves, fidelity_abs, fidelity_rel):
@@ -493,4 +501,8 @@ class IntegrateMultiframe(Plugin):
             intensity_avg[wmask] = 0.0
             intensity_std[wmask] = 0.0
         return AverageResult(intensity_avg, intensity_std)
-        
+    
+    def send_to_ispyb(self):
+        if self.ispyb:
+            ispyb = IspybConnector(**self.ispyb)
+            ispyb.send_subtracted(self.to_pyarch)
