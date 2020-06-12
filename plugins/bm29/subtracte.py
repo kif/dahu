@@ -438,9 +438,47 @@ class SubtractBuffer(Plugin):
         kratky_data_attrs = kratky_data.attrs
         kratky_data_attrs["signal"] = "q2Rg2I/I0"
         kratky_data_attrs["axes"] = "qRg"
+
+    # stage 6: Rambo-Tainer invariant
+        rti_grp = nxs.new_class(entry_grp, "6_invariants", "NXprocess")
+        rti_grp["sequence_index"] = 6
+        rti_grp["program"] = "freesas.invariants"
+        rti_grp["version"] = freesas.version
+        rti_data = nxs.new_class(rti_grp, "results", "NXdata")
+        #average_data.attrs["SILX_style"] = SAXS_STYLE 
+        #average_data.attrs["signal"] = "intensity_normed"
+        #Rambo_Tainer
+        rti = freesas.invariants.calc_Rambo_Tainer(sasm, guinier)
+        Vc_ds = rti_data.create_dataset("Vc", data=rti.Vc)
+        Vc_ds.attrs["unit"] = "nm²"
+        Vc_ds.attrs["formula"] = "Rambo-Tainer: Vc = I₀/(sum_q qI(q) dq)"        
+        sigma_Vc_ds = rti_data.create_dataset("Vc_error", data=rti.sigma_Vc)
+        sigma_Vc_ds.attrs["unit"] = "nm²"
         
-    # stage 6: Pair distribution function, what is the equivalent of datgnom
-        bift_grp = nxs.new_class(entry_grp, "6_indirect_Fourier_transformation", "NXprocess")
+        Qr_ds = rti_data.create_dataset("Qr", data=rti.Qr)
+        Qr_ds.attrs["unit"] = "nm"
+        Qr_ds.attrs["formula"] = "Rambo-Tainer: Qr = Vc/Rg"        
+        sigma_Qr_ds = rti_data.create_dataset("Qr_error", data=rti.sigma_Qr
+        sigma_Qr_ds.attrs["unit"] = "nm"
+                        
+        mass_ds = rti_data.create_dataset("mass", data=rti.mass)          
+        mass_ds.attrs["unit"] = "kDa"
+        mass_ds.attrs["formula"] = "Rambo-Tainer: mass = (Qr/ec)^(1/k)"        
+        sigma_mass_ds = rti_data.create_dataset("mass_error", data=rti.sigma_mass)
+        sigma_mass_ds.attrs["unit"] = "kDa"
+        
+        for k,v in rti._asdict().items():
+            rti_data[k] = v
+        self.Vc = rti.Vc
+        self.mass = rti.mass
+        
+        self.volume = freesas.invariants.calc_Porod(sasm, guinier)
+        volume_ds = rti_data.create_dataset("volume", data=v)
+        volume_ds.attrs["unit"] = "nm³"
+        volume_ds.attrs["formula"] = "Porod: V = 2*π²I₀²/(sum_q I(q)q² dq)"
+        
+    # stage 7: Pair distribution function, what is the equivalent of datgnom
+        bift_grp = nxs.new_class(entry_grp, "7_indirect_Fourier_transformation", "NXprocess")
         bift_grp["sequence_index"] = 6
         bift_grp["program"] = "freesas.bift"
         bift_grp["version"] = freesas.version
@@ -450,7 +488,7 @@ class SubtractBuffer(Plugin):
         bift_data.attrs["title"] = "Pair distance distribution function p(r)"
 
         cfg_grp = nxs.new_class(bift_grp, "configuration", "NXcollection")
-    # Process stage6, i.e. perform the IFT
+    # Process stage7, i.e. perform the IFT
         try:
             bo = BIFT(q, I, err) 
             cfg_grp["Rg"] = guinier.Rg
@@ -524,20 +562,6 @@ class SubtractBuffer(Plugin):
         #Finally declare the default entry and default dataset ...
         #overlay the BIFT fitted data on top of the scattering curve 
         entry_grp.attrs["default"] = ai2_data.name
-
-        # stage 7: Rambo-Tainer invariant
-        rti_grp = nxs.new_class(entry_grp, "7_Rambo-Tainer_invariants", "NXprocess")
-        rti_grp["sequence_index"] = 7
-        rti_grp["program"] = "freesas.invariants"
-        rti_grp["version"] = freesas.version
-        rti_data = nxs.new_class(rti_grp, "results", "NXdata")
-        #average_data.attrs["SILX_style"] = SAXS_STYLE 
-        #average_data.attrs["signal"] = "intensity_normed"
-        rti = freesas.invariants.calc_Rambo_Tainer(sasm, guinier)
-        for k,v in rti._asdict().items():
-            rti_data[k] = v
-        self.Vc = rti.Vc
-        self.mass = rti.mass
         
     @staticmethod
     def read_nexus(filename):
