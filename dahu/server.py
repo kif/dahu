@@ -44,12 +44,12 @@ except ImportError:
     logger.debug("No socket opened for debugging -> please install rfoo")
 
 
-class DahuDS(PyTango.Device_4Impl):
+class DahuDS(PyTango.LatestDeviceImpl):
     """
     Tango device server launcher for Dahu server.
     """
     def __init__(self, cl, name):
-        PyTango.Device_4Impl.__init__(self, cl, name)
+        PyTango.LatestDeviceImpl.__init__(self, cl, name)
         self.init_device()
         self.job_queue = Queue()  # queue containing jobs to process
         self.event_queue = Queue()  # queue containing finished jobs
