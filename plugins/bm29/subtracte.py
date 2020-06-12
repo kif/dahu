@@ -56,7 +56,16 @@ class SubtractBuffer(Plugin):
       "sample_file" = "sample.h5",
       "output_file" = "subtracted.h5"
       "fidelity" = 0.001,
+      "ispyb": {
+        "url": "http://ispyb.esrf.fr:1234",
+        "login": "mx1234",
+        "passwd": "secret",
+        "pyarch": "/data/pyarch/mx1234/sample", 
+        "measurement_id": -1,
+        "collection_id": -1
+       } 
       # TODO ... "wait_for" = ["job1", "job2"]
+
       
     } 
     """
@@ -73,6 +82,8 @@ class SubtractBuffer(Plugin):
         self.sample_juice = None
         self.buffer_juices = []
         self.Rg = self.I0 = self.Dmax = self.Vc = self.mass = None
+        self.ispyb = None
+        self.to_pyarch = {}
            
     def setup(self, kwargs=None):
         logger.debug("SubtractBuffer.setup")
@@ -88,6 +99,7 @@ class SubtractBuffer(Plugin):
             self.log_warning(f"No output file provided, using: {self.output_file}")
         self.buffer_files = [os.path.abspath(fn) for fn in self.input.get("buffer_files", [])
                              if os.path.exists(fn)]
+        self.ispyb = Ispyb._fromdict(self.input.get("ispyb", {}))
             
     def teardown(self):
         Plugin.teardown(self)
@@ -103,6 +115,9 @@ class SubtractBuffer(Plugin):
             self.nxs.close()
         self.sample_juice = None
         self.buffer_juices = []
+        self.ispyb = None
+        self.to_pyarch = None
+
 
     def process(self):
         Plugin.process(self)
@@ -220,11 +235,12 @@ class SubtractBuffer(Plugin):
         # 
         buffer_average = numpy.mean([self.buffer_juices[i].signal2d for i in range(*tomerge)], axis=0)
         buffer_variance = numpy.sum([(self.buffer_juices[i].error2d)**2 for i in range(*tomerge)], axis=0) / (tomerge[1] - tomerge[0])**2
+        sample_average = self.sample_juice.signal2d
+        sample_variance = sample_juice.error2d**2
         sub_average = self.sample_juice.signal2d - buffer_average
-        sub_variance = self.sample_juice.error2d**2 + buffer_variance
+        sub_variance = sample_variance + buffer_variance
         sub_std = numpy.sqrt(sub_variance)
-        
-        
+                
         int_avg_ds =  average_data.create_dataset("intensity_normed", 
                                                   data=numpy.ascontiguousarray(sub_average, dtype=numpy.float32),
                                                   **cmp_float)
@@ -237,7 +253,26 @@ class SubtractBuffer(Plugin):
         int_std_ds.attrs["formula"] = "sqrt( sample_variance + (sum(buffer_variance)/n_buffer**2 ))"
         int_std_ds.attrs["method"] = "quadratic sum of sample error and buffer errors"
         average_grp.attrs["default"] = average_data.name
-        
+
+        if self.ispyb.server:
+            #we need to provide the sample record and the best_buffer so let's generate it
+            #This is a waist of time & resources ... 
+            res1 = ai._integrate1d_ng(sample_average, key_cache.npt, 
+                                      variance=sample_variance,
+                                      polarization_factor=self.sample_juice.polarization,
+                                      unit=key_cache.unit,
+                                      safe=False,
+                                      method=self.sample_juice.method)
+            self.to_pyarch["sample"] = res1
+            #Integrate also the buffer
+            res2 = ai._integrate1d_ng(buffer_average, key_cache.npt, 
+                                      variance=buffer_variance,
+                                      polarization_factor=self.sample_juice.polarization,
+                                      unit=key_cache.unit,
+                                      safe=False,
+                                      method=self.sample_juice.method)
+            self.to_pyarch["buffer"] = res2             
+
     # Process 3: Azimuthal integration of the subtracted image
         ai2_grp = nxs.new_class(entry_grp, "3_azimuthal_integration", "NXprocess")
         ai2_grp["sequence_index"] = 3
@@ -263,7 +298,7 @@ class SubtractBuffer(Plugin):
         cfg_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
 
     # Stage 3 processing: azimuthal integration
-        res2 = ai._integrate1d_ng(sub_average, key_cache.npt, 
+        res3 = ai._integrate1d_ng(sub_average, key_cache.npt, 
                                   variance=sub_variance,
                                   polarization_factor=self.sample_juice.polarization,
                                   unit=key_cache.unit,
@@ -271,14 +306,14 @@ class SubtractBuffer(Plugin):
                                   method=self.sample_juice.method)
 
         ai2_q_ds = ai2_data.create_dataset(radial_unit,
-                                           data=numpy.ascontiguousarray(res2.radial, dtype=numpy.float32))
+                                           data=numpy.ascontiguousarray(res3.radial, dtype=numpy.float32))
         ai2_q_ds.attrs["units"] = unit_name
         radius_unit = "nm" if "nm" in unit_name else "Å"
         ai2_q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
         
-        ai2_int_ds = ai2_data.create_dataset("I", data=numpy.ascontiguousarray(res2.intensity, dtype=numpy.float32))
+        ai2_int_ds = ai2_data.create_dataset("I", data=numpy.ascontiguousarray(res3.intensity, dtype=numpy.float32))
         ai2_std_ds = ai2_data.create_dataset("errors", 
-                                             data=numpy.ascontiguousarray(res2.sigma, dtype=numpy.float32))
+                                             data=numpy.ascontiguousarray(res3.sigma, dtype=numpy.float32))
         
         
         ai2_int_ds.attrs["interpretation"] ="spectrum"     
@@ -287,6 +322,9 @@ class SubtractBuffer(Plugin):
         #ai2_int_ds.attrs["uncertainties"] = "errors" #this does not work
         ai2_std_ds.attrs["interpretation"] ="spectrum"
         ai2_int_ds.attrs["units"] = "arbitrary"
+    
+        if self.ispyb.server:
+            self.to_pyarch["subtracted"] = res3
     
     # Process 4: Guinier analysis
         guinier_grp = nxs.new_class(entry_grp, "4_Guinier_analysis", "NXprocess")
@@ -301,7 +339,7 @@ class SubtractBuffer(Plugin):
         guinier_data.attrs["SILX_style"] = NORMAL_STYLE
         guinier_data.attrs["title"] = "Guinier analysis"
     # Stage4 processing: autorg and auto_gpa
-        sasm = numpy.vstack((res2.radial, res2.intensity, res2.sigma)).T
+        sasm = numpy.vstack((res3.radial, res3.intensity, res3.sigma)).T
 
         try:
             gpa = auto_gpa(sasm)
@@ -338,8 +376,8 @@ class SubtractBuffer(Plugin):
             guinier_guinier["end_point"] = guinier.end_point
             guinier_guinier["quality"] = guinier.quality
             guinier_guinier["aggregated"] = guinier.aggregated
-            guinier_guinier["qₘᵢₙ·Rg"] =  guinier.Rg * res2.radial[guinier.start_point]
-            guinier_guinier["qₘₐₓ·Rg"] =  guinier.Rg * res2.radial[guinier.end_point - 1] 
+            guinier_guinier["qₘᵢₙ·Rg"] =  guinier.Rg * res3.radial[guinier.start_point]
+            guinier_guinier["qₘₐₓ·Rg"] =  guinier.Rg * res3.radial[guinier.end_point - 1] 
 
         try:
             autorg = autoRg(sasm)
@@ -362,11 +400,14 @@ class SubtractBuffer(Plugin):
                 guinier_autorg["end_point"] = autorg.end_point
                 guinier_autorg["quality"] = autorg.quality
                 guinier_autorg["aggregated"] = autorg.aggregated
-                guinier_autorg["qₘᵢₙ·Rg"] =  autorg.Rg * res2.radial[autorg.start_point]
-                guinier_autorg["qₘₐₓ·Rg"] =  autorg.Rg * res2.radial[autorg.end_point - 1] 
+                guinier_autorg["qₘᵢₙ·Rg"] =  autorg.Rg * res3.radial[autorg.start_point]
+                guinier_autorg["qₘₐₓ·Rg"] =  autorg.Rg * res3.radial[autorg.end_point - 1] 
+
+        guinier = guinier or autorg or gpa #take one of the fits
+        if self.ispyb.server:
+            self.to_pyarch["guinier"] = guinier
             
     # Stage #4 Guinier plot generation:
-        guinier = guinier or autorg or gpa #take one of the fits
 
         q, I, err = sasm.T[:3]
         mask = (I > 0) & numpy.isfinite(I) & (q > 0) & numpy.isfinite(q)
@@ -602,3 +643,9 @@ class SubtractBuffer(Plugin):
             sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
             
         return NexusJuice(filename, h5path, npt, unit, q, I, poni, mask, energy, polarization, method, image2d, error2d, sample)
+
+    def send_to_ispyb(self):
+        if self.ispyb.url:
+            ispyb = IspybConnector(**self.ispyb)
+            ispyb.send_subtracted(self.to_pyarch)
+

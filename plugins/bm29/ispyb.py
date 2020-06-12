@@ -26,7 +26,7 @@ from freesas.collections import RG_RESULT
 
 class IspybConnector:
     "This class is a conector to the web-service"
-    def __init__(self, server, login=None, passwd=None, pyarch=None, collection_id=-1, measurement_id=-1):
+    def __init__(self, url, login=None, passwd=None, pyarch=None, collection_id=-1, measurement_id=-1):
         """Constructor of the ISPyB connections
         
         :param server: url of the service
@@ -37,7 +37,7 @@ class IspybConnector:
         :param measurement_id: identifier for the measurement
         """
         self.authentication = HttpAuthenticated(username=login, password=passwd)
-        self.client = Client(server, transport=self.authentication, cache=None)
+        self.client = Client(url, transport=self.authentication, cache=None)
         if os.path.isdir(pyarch):
             self.pyarch = os.path.abspath()
         self.collection_id = collection_id
@@ -97,6 +97,9 @@ class IspybConnector:
         """ 
         guinier = data.get("guinier", *([-1.]*8))
         gnom = data.get("bift", *([-1.]*8))
+        subtracted = data.get("subtracted")
+        sub = self.save_curve("subtracted", subtracted)
+        sasm = numpy.vstack((subtracted.radius, subtracted.intensity, subtracted.sigma))
         
         self.client.service.addSubtraction(str(self.measurement_id),
                                            str(guinier.Rg),
@@ -108,14 +111,14 @@ class IspybConnector:
                                            str(guinier.quality),
                                            str(guinier.aggregated),
                                            str(gnom.Rg_avg),
-                                           str(gnom.dmax_avg),
-                                            self.total,
-                                            self.volume,
+                                           str(gnom.Dmax_avg),
+                                           str(gnom.logP_avg),
+                                           str(data["volume"]),
                                             str(sampleAvgOneDimensionalFiles),
                                             str(bufferAvgOneDimensionalFiles),
                                             self.averageSample,                     #sampleAverageFilePath,
                                             self.bestBuffer,                        #bufferAverageFilePath,
-                                            self.subtractedFilePath,                #subtractedFilePath,
+                                           sub,                #subtractedFilePath,
                                             self.scatterPlot,                       #experimentalDataPlotFilePath,
                                             self.densityPlot,                       #densityPlotFilePath,
                                             self.guinierPlot,                       #guinierPlotFilePath,

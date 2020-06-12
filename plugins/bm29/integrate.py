@@ -6,6 +6,7 @@
 * IntegrateMultiframe: perform the integration of many frames contained in a HDF5 file and average them  
  
 """
+from builtins import None
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
@@ -78,10 +79,10 @@ class IntegrateMultiframe(Plugin):
         "temperature": 20,
         "temperature_env": 20},  
       "ispyb": {
-        "server": "http://ispyb.esrf.fr:1234",
+        "url": "http://ispyb.esrf.fr:1234",
         "login": "mx1234",
         "passwd": "secret",
-        "pyarch": "/data/pyarch/mx1234/1d", 
+        "pyarch": "/data/pyarch/mx1234/sample", 
         "measurement_id": -1,
         "collection_id": -1
        } 
@@ -154,6 +155,8 @@ class IntegrateMultiframe(Plugin):
         if self._input_frames is not None:
             self._input_frames = None
         self.monitor_values = None
+        self.to_pyarch = None
+        self.ispyb = None
         
 
     @property
@@ -369,7 +372,7 @@ class IntegrateMultiframe(Plugin):
         to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*cormap_results.tomerge, dtype=numpy.uint16))
         to_merge_ds.attrs["long_name"] = "Index of equivalent frames"
         cormap_grp.attrs["default"] = cormap_data.name
-        if self.ispyb:
+        if self.ispyb.url:
             self.to_pyarch["merged"] = cormap_results.tomerge
 
         
@@ -426,7 +429,7 @@ class IntegrateMultiframe(Plugin):
                                        unit=self.unit,
                                        safe=False,
                                        method=method)
-        if self.ispyb:
+        if self.ispyb.url:
             self.to_pyarch["avg"] = res2
         ai2_q_ds = ai2_data.create_dataset(radial_unit,
                                            data=numpy.ascontiguousarray(res2.radial, dtype=numpy.float32))
@@ -464,7 +467,7 @@ class IntegrateMultiframe(Plugin):
                                           method=method)
             intensity[idx] = res.intensity
             sigma[idx] = res.sigma
-            if self.ispyb:
+            if self.ispyb.url:
                 self.to_pyarch[idx] = res
         return IntegrationResult(res.radial, intensity, sigma)
 
@@ -503,6 +506,6 @@ class IntegrateMultiframe(Plugin):
         return AverageResult(intensity_avg, intensity_std)
     
     def send_to_ispyb(self):
-        if self.ispyb:
+        if self.ispyb.url:
             ispyb = IspybConnector(**self.ispyb)
-            ispyb.send_subtracted(self.to_pyarch)
+            ispyb.send_averaged(self.to_pyarch)
