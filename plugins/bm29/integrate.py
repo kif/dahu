@@ -6,7 +6,6 @@
 * IntegrateMultiframe: perform the integration of many frames contained in a HDF5 file and average them  
  
 """
-from builtins import None
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
