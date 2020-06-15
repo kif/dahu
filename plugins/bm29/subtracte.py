@@ -499,7 +499,7 @@ class SubtractBuffer(Plugin):
         Qr_ds = rti_data.create_dataset("Qr", data=rti.Qr)
         Qr_ds.attrs["unit"] = "nm"
         Qr_ds.attrs["formula"] = "Rambo-Tainer: Qr = Vc/Rg"        
-        sigma_Qr_ds = rti_data.create_dataset("Qr_error", data=rti.sigma_Qr
+        sigma_Qr_ds = rti_data.create_dataset("Qr_error", data=rti.sigma_Qr)
         sigma_Qr_ds.attrs["unit"] = "nm"
                         
         mass_ds = rti_data.create_dataset("mass", data=rti.mass)          
