@@ -107,7 +107,7 @@ class Ispyb(NamedTuple):
     login: str=None
     passwd: str=None
     pyarch: str=None
-    collection_id: int=-1,
+    collection_id: int=-1
     measurement_id: int=-1
 
     _fromdict = classmethod(_fromdict)
