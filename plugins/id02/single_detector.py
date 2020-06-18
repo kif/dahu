@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "04/06/2020"
+__date__ = "18/06/2020"
 __status__ = "development"
 __version__ = "0.9.0"
 
@@ -349,6 +349,8 @@ Possible values for to_save:
                 self.dark = dark
         elif type(self.dark_filename) in (int, float):
             self.dark = float(self.dark_filename)
+        if numpy.isscalar(self.dark):
+            self.dark = numpy.ones(self.ai.detector.shape) * self.dark
         self.ai.set_darkcurrent(self.dark)
 
         # Read and Process Flat
