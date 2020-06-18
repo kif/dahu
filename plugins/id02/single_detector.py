@@ -771,7 +771,6 @@ Possible values for to_save:
                                          dummy=self.dummy,
                                          delta_dummy=self.delta_dummy,
                                          polarization=self.polarization,
-                                         device="GPU"
                                          )
                 self.workers[ext] = worker
             elif ext == "dist":
@@ -782,7 +781,7 @@ Possible values for to_save:
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
                                           detector=self.ai.detector,
-                                          device="GPU")
+                                          )
                 self.workers[ext] = worker
                 if self.distortion is None:
                     self.distortion = worker.distortion
@@ -803,7 +802,7 @@ Possible values for to_save:
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
                                           detector=self.ai.detector,
-                                          device="GPU")
+                                          )
                 self.workers[ext] = worker
                 if self.distortion is None:
                     self.distortion = worker.distortion
