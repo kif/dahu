@@ -351,10 +351,9 @@ Possible values for to_save:
             self.dark = float(self.dark_filename)
         if numpy.isscalar(self.dark):
             self.dark = numpy.ones(self.ai.detector.shape) * self.dark
-        self.ai.set_darkcurrent(self.dark)
+        self.ai.detector.set_darkcurrent(self.dark)
 
         # Read and Process Flat
-
         self.flat_filename = self.input.get("flat_filename")
         if type(self.flat_filename) in StringTypes and os.path.exists(self.flat_filename):
             if self.flat_filename.endswith(".h5") or self.flat_filename.endswith(".nxs") or self.flat_filename.endswith(".hdf5"):
@@ -383,7 +382,9 @@ Possible values for to_save:
                     else:
                         binning = [i // j for i, j in zip(shape, self.flat.shape)]
                         self.flat = pyFAI.utils.unBinning(self.flat, binsize=binning, norm=False)
-            self.ai.set_flatfield(self.flat)
+            if numpy.isscalar(self.flat):
+            self.flat = numpy.ones(self.ai.detector.shape) * self.flat
+            self.ai.detector.set_flatfield(self.flat)
 
         # Read and Process mask
         if type(self.mask_filename) in StringTypes and os.path.exists(self.mask_filename):
@@ -769,7 +770,8 @@ Possible values for to_save:
                                          solidangle=self.get_solid_angle(),
                                          dummy=self.dummy,
                                          delta_dummy=self.delta_dummy,
-                                         polarization=self.polarization
+                                         polarization=self.polarization,
+                                         device="GPU"
                                          )
                 self.workers[ext] = worker
             elif ext == "dist":
@@ -779,7 +781,8 @@ Possible values for to_save:
                                           dummy=self.dummy,
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
-                                          detector=self.ai.detector)
+                                          detector=self.ai.detector,
+                                          device="GPU")
                 self.workers[ext] = worker
                 if self.distortion is None:
                     self.distortion = worker.distortion
@@ -799,7 +802,8 @@ Possible values for to_save:
                                           dummy=self.dummy,
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
-                                          detector=self.ai.detector)
+                                          detector=self.ai.detector,
+                                          device="GPU")
                 self.workers[ext] = worker
                 if self.distortion is None:
                     self.distortion = worker.distortion
