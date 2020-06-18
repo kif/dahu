@@ -1,0 +1,5 @@
+numpy
+h5py
+pyFAI
+dynamix
+hdf5plugin
