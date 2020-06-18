@@ -383,7 +383,7 @@ Possible values for to_save:
                         binning = [i // j for i, j in zip(shape, self.flat.shape)]
                         self.flat = pyFAI.utils.unBinning(self.flat, binsize=binning, norm=False)
             if numpy.isscalar(self.flat):
-            self.flat = numpy.ones(self.ai.detector.shape) * self.flat
+                self.flat = numpy.ones(self.ai.detector.shape) * self.flat
             self.ai.detector.set_flatfield(self.flat)
 
         # Read and Process mask
