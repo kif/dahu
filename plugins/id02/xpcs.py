@@ -89,6 +89,7 @@ Minimalistic example:
         self.qmask = None  # contains the numpy array with the qmask
         self.unit = "q_nm^-1"
         self.ai = None
+        self.wavelength = None
         self.correlator_name = None
         self.result_filename = None
         self.timestep = None
@@ -257,7 +258,7 @@ Minimalistic example:
             source_grp["probe"] = "X-ray"
             monochromator_grp = nxs.new_class(instrument_grp, "monochromator", "NXmonochromator")
             monochromator_grp["description"] = "Cryogenically cooled Si-111 channel-cut monochromator"
-            wl = self.ai.wavelength * 1e10
+            wl = self.wavelength * 1e10
             resolution = 2e-4
             wl_ds = monochromator_grp.create_dataset("wavelength", data=numpy.float32(wl))
             wl_ds.attrs["units"] = "Å"
