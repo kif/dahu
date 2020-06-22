@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "18/06/2020"
+__date__ = "22/06/2020"
 __status__ = "development"
 __version__ = "0.9.0"
 
@@ -804,7 +804,7 @@ Possible values for to_save:
                                           detector=self.ai.detector,
                                           )
                 self.workers[ext] = worker
-                if self.distortion is None:
+                if self.distortion is None and worker.distortion is not None:
                     self.distortion = worker.distortion
                     self.cache_dis = str(self.ai.detector)
                     if self.cache_dis in self.cache:

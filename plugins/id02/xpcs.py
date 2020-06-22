@@ -151,11 +151,11 @@ Minimalistic example:
             if pixel_size is None:
                 self.log_error("Pixel size is mandatory in detector description section")
             detector = Detector(pixel1=pixel_size, pixel2=pixel_size, max_shape=self.shape)
-            wavelength = experiment_setup.get("wavelength")
-            if wavelength is None:
+            self.wavelength = experiment_setup.get("wavelength")
+            if self.wavelength is None:
                 self.log_error("wavelength is mandatory in experiment_setup section")
             else:
-                wavelength *= 1e-10  # Convert Å in m
+                self.wavelength *= 1e-10  # Convert Å in m
             distance = experiment_setup.get("detector_distance")
             if distance is None:
                 self.log_error("detector_distance is mandatory in experiment_setup section")
@@ -167,7 +167,7 @@ Minimalistic example:
             self.unit = experiment_setup.get("unit", self.unit)
 
             geometry = Geometry(distance, directbeam_y * pixel_size, directbeam_x * pixel_size,
-                                detector=detector, wavelength=wavelength)
+                                detector=detector, wavelength=self.wavelength)
             q_array = geometry.center_array(self.shape, unit=self.unit)
 
             firstq = experiment_setup.get("firstq", 0)
