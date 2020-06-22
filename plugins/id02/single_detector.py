@@ -893,7 +893,7 @@ Possible values for to_save:
                     res = self.workers[meth].process(data, variance=variance,
                                                      normalization_factor=I1_corrected)
                     if variance is not None:
-                        res, err, _ = res
+                        res, err = res
 
                 elif meth == "azim":
                     res = self.workers[meth].process(data, variance=variance,
