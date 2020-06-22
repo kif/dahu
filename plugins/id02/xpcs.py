@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/03/2020"
+__date__ = "22/06/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -45,6 +45,7 @@ class XPCS(Plugin):
 
 Minimalistic example:
 {
+    "plugin_name": "id02.xpcs",
     "data_file": "Janus_Eiger500k_raw.h5",
     "result_file": "Janus_Eiger500k_xpcs.h5",
     "sample": {
@@ -55,8 +56,8 @@ Minimalistic example:
     "detector": {
         "name": "eiger500k",
         "pixel": 75e-6,
-        "mask": None,
-        "flatfield": None
+        "mask": null,
+        "flatfield": null
     },
     "experiment_setup":{
         "wavelength": 1.538, #Å ?
@@ -201,9 +202,8 @@ Minimalistic example:
                 qmask = numexpr.evaluate("where(qmaskf<0, 0, where(qmaskf>(numberq+1),0, where((qmaskf%1)>(widthq/(widthq + stepq)), 0, where(mask, 0, qmaskf))))",
                          out=numpy.empty(q_array.shape, dtype=numpy.uint16),
                          casting="unsafe")
-        self.ai = geometry
-
-        self.qrange = firstq + widthq / 2 + numpy.arange(qmask.max()) * (widthq + stepq)
+            self.ai = geometry
+            self.qrange = firstq + widthq / 2 + numpy.arange(qmask.max()) * (widthq + stepq)
 
         return qmask
 

@@ -1,4 +1,5 @@
 numpy
+numexpr
 h5py
 pyFAI
 dynamix
