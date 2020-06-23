@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/03/2020"
+__date__ = "23/06/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -45,6 +45,7 @@ class XPCS(Plugin):
 
 Minimalistic example:
 {
+    "plugin_name": "id02.xpcs",
     "data_file": "Janus_Eiger500k_raw.h5",
     "result_file": "Janus_Eiger500k_xpcs.h5",
     "sample": {
@@ -55,8 +56,8 @@ Minimalistic example:
     "detector": {
         "name": "eiger500k",
         "pixel": 75e-6,
-        "mask": None,
-        "flatfield": None
+        "mask": null,
+        "flatfield": null
     },
     "experiment_setup":{
         "wavelength": 1.538, #Å ?
@@ -141,37 +142,39 @@ Minimalistic example:
         "create the q_mask from the geometry"
 
         experiment_setup = self.input.get("experiment_setup", {})
+        detector_section = self.input.get("detector", {})
+        pixel_size = detector_section.get("pixel")
+        if pixel_size is None:
+            self.log_error("Pixel size is mandatory in detector description section")
+        detector = Detector(pixel1=pixel_size, pixel2=pixel_size, max_shape=self.shape)
+        wavelength = experiment_setup.get("wavelength")
+        if wavelength is None:
+            self.log_error("wavelength is mandatory in experiment_setup section")
+        else:
+            wavelength *= 1e-10  # Convert Å in m
+        distance = experiment_setup.get("detector_distance")
+        if distance is None:
+            self.log_error("detector_distance is mandatory in experiment_setup section")
+        directbeam_x = experiment_setup.get("directbeam_x")
+        directbeam_y = experiment_setup.get("directbeam_y")
+        if (directbeam_x is None) or (directbeam_y is None):
+            self.log_error("directbeam_[xy] is mandatory in experiment_setup section")
+
+        self.unit = experiment_setup.get("unit", self.unit)
+
+        geometry = Geometry(distance, directbeam_y * pixel_size, directbeam_x * pixel_size,
+                            detector=detector, wavelength=wavelength)
+        self.ai = geometry
+
+        firstq = experiment_setup.get("firstq", 0)
+        widthq = experiment_setup.get("widthq", 0)
+        stepq = experiment_setup.get("stepq", 0)
+        numberq = experiment_setup.get("numberq", (1 << 16) - 2)  # we plan to store the qmask as uint16
+
         if experiment_setup.get("q_mask"):
             qmask = fabio.open(experiment_setup["q_mask"]).data
         else:
-            detector_section = self.input.get("detector", {})
-            pixel_size = detector_section.get("pixel")
-            if pixel_size is None:
-                self.log_error("Pixel size is mandatory in detector description section")
-            detector = Detector(pixel1=pixel_size, pixel2=pixel_size, max_shape=self.shape)
-            wavelength = experiment_setup.get("wavelength")
-            if wavelength is None:
-                self.log_error("wavelength is mandatory in experiment_setup section")
-            else:
-                wavelength *= 1e-10  # Convert Å in m
-            distance = experiment_setup.get("detector_distance")
-            if distance is None:
-                self.log_error("detector_distance is mandatory in experiment_setup section")
-            directbeam_x = experiment_setup.get("directbeam_x")
-            directbeam_y = experiment_setup.get("directbeam_y")
-            if (directbeam_x is None) or (directbeam_y is None):
-                self.log_error("directbeam_[xy] is mandatory in experiment_setup section")
-
-            self.unit = experiment_setup.get("unit", self.unit)
-
-            geometry = Geometry(distance, directbeam_y * pixel_size, directbeam_x * pixel_size,
-                                detector=detector, wavelength=wavelength)
             q_array = geometry.center_array(self.shape, unit=self.unit)
-
-            firstq = experiment_setup.get("firstq", 0)
-            widthq = experiment_setup.get("widthq")
-            stepq = experiment_setup.get("stepq", 0)
-            numberq = experiment_setup.get("numberq", (1 << 16) - 2)  # we plan to store the qmask as uint16
 
             # TODO: manage the different masks!
             detector_maskfile = detector_section.get("mask", '')
@@ -201,9 +204,8 @@ Minimalistic example:
                 qmask = numexpr.evaluate("where(qmaskf<0, 0, where(qmaskf>(numberq+1),0, where((qmaskf%1)>(widthq/(widthq + stepq)), 0, where(mask, 0, qmaskf))))",
                          out=numpy.empty(q_array.shape, dtype=numpy.uint16),
                          casting="unsafe")
-        self.ai = geometry
 
-        self.qrange = firstq + widthq / 2 + numpy.arange(qmask.max()) * (widthq + stepq)
+        self.qrange = firstq + widthq / 2.0 + numpy.arange(qmask.max()) * (widthq + stepq)
 
         return qmask
 
