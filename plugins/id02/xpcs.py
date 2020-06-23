@@ -166,15 +166,15 @@ Minimalistic example:
                             detector=detector, wavelength=wavelength)
         self.ai = geometry
 
+        firstq = experiment_setup.get("firstq", 0)
+        widthq = experiment_setup.get("widthq", 0)
+        stepq = experiment_setup.get("stepq", 0)
+        numberq = experiment_setup.get("numberq", (1 << 16) - 2)  # we plan to store the qmask as uint16
+
         if experiment_setup.get("q_mask"):
             qmask = fabio.open(experiment_setup["q_mask"]).data
         else:
             q_array = geometry.center_array(self.shape, unit=self.unit)
-
-            firstq = experiment_setup.get("firstq", 0)
-            widthq = experiment_setup.get("widthq")
-            stepq = experiment_setup.get("stepq", 0)
-            numberq = experiment_setup.get("numberq", (1 << 16) - 2)  # we plan to store the qmask as uint16
 
             # TODO: manage the different masks!
             detector_maskfile = detector_section.get("mask", '')
@@ -204,7 +204,8 @@ Minimalistic example:
                 qmask = numexpr.evaluate("where(qmaskf<0, 0, where(qmaskf>(numberq+1),0, where((qmaskf%1)>(widthq/(widthq + stepq)), 0, where(mask, 0, qmaskf))))",
                          out=numpy.empty(q_array.shape, dtype=numpy.uint16),
                          casting="unsafe")
-            self.qrange = firstq + widthq / 2 + numpy.arange(qmask.max()) * (widthq + stepq)
+
+        self.qrange = firstq + widthq / 2.0 + numpy.arange(qmask.max()) * (widthq + stepq)
 
         return qmask
 
