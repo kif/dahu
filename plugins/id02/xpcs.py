@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22/06/2020"
+__date__ = "23/06/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -89,7 +89,6 @@ Minimalistic example:
         self.qmask = None  # contains the numpy array with the qmask
         self.unit = "q_nm^-1"
         self.ai = None
-        self.wavelength = None
         self.correlator_name = None
         self.result_filename = None
         self.timestep = None
@@ -143,31 +142,33 @@ Minimalistic example:
         "create the q_mask from the geometry"
 
         experiment_setup = self.input.get("experiment_setup", {})
+        detector_section = self.input.get("detector", {})
+        pixel_size = detector_section.get("pixel")
+        if pixel_size is None:
+            self.log_error("Pixel size is mandatory in detector description section")
+        detector = Detector(pixel1=pixel_size, pixel2=pixel_size, max_shape=self.shape)
+        wavelength = experiment_setup.get("wavelength")
+        if wavelength is None:
+            self.log_error("wavelength is mandatory in experiment_setup section")
+        else:
+            wavelength *= 1e-10  # Convert Å in m
+        distance = experiment_setup.get("detector_distance")
+        if distance is None:
+            self.log_error("detector_distance is mandatory in experiment_setup section")
+        directbeam_x = experiment_setup.get("directbeam_x")
+        directbeam_y = experiment_setup.get("directbeam_y")
+        if (directbeam_x is None) or (directbeam_y is None):
+            self.log_error("directbeam_[xy] is mandatory in experiment_setup section")
+
+        self.unit = experiment_setup.get("unit", self.unit)
+
+        geometry = Geometry(distance, directbeam_y * pixel_size, directbeam_x * pixel_size,
+                            detector=detector, wavelength=wavelength)
+        self.ai = geometry
+
         if experiment_setup.get("q_mask"):
             qmask = fabio.open(experiment_setup["q_mask"]).data
         else:
-            detector_section = self.input.get("detector", {})
-            pixel_size = detector_section.get("pixel")
-            if pixel_size is None:
-                self.log_error("Pixel size is mandatory in detector description section")
-            detector = Detector(pixel1=pixel_size, pixel2=pixel_size, max_shape=self.shape)
-            self.wavelength = experiment_setup.get("wavelength")
-            if self.wavelength is None:
-                self.log_error("wavelength is mandatory in experiment_setup section")
-            else:
-                self.wavelength *= 1e-10  # Convert Å in m
-            distance = experiment_setup.get("detector_distance")
-            if distance is None:
-                self.log_error("detector_distance is mandatory in experiment_setup section")
-            directbeam_x = experiment_setup.get("directbeam_x")
-            directbeam_y = experiment_setup.get("directbeam_y")
-            if (directbeam_x is None) or (directbeam_y is None):
-                self.log_error("directbeam_[xy] is mandatory in experiment_setup section")
-
-            self.unit = experiment_setup.get("unit", self.unit)
-
-            geometry = Geometry(distance, directbeam_y * pixel_size, directbeam_x * pixel_size,
-                                detector=detector, wavelength=self.wavelength)
             q_array = geometry.center_array(self.shape, unit=self.unit)
 
             firstq = experiment_setup.get("firstq", 0)
@@ -203,7 +204,6 @@ Minimalistic example:
                 qmask = numexpr.evaluate("where(qmaskf<0, 0, where(qmaskf>(numberq+1),0, where((qmaskf%1)>(widthq/(widthq + stepq)), 0, where(mask, 0, qmaskf))))",
                          out=numpy.empty(q_array.shape, dtype=numpy.uint16),
                          casting="unsafe")
-            self.ai = geometry
             self.qrange = firstq + widthq / 2 + numpy.arange(qmask.max()) * (widthq + stepq)
 
         return qmask
@@ -258,7 +258,7 @@ Minimalistic example:
             source_grp["probe"] = "X-ray"
             monochromator_grp = nxs.new_class(instrument_grp, "monochromator", "NXmonochromator")
             monochromator_grp["description"] = "Cryogenically cooled Si-111 channel-cut monochromator"
-            wl = self.wavelength * 1e10
+            wl = self.ai.wavelength * 1e10
             resolution = 2e-4
             wl_ds = monochromator_grp.create_dataset("wavelength", data=numpy.float32(wl))
             wl_ds.attrs["units"] = "Å"
