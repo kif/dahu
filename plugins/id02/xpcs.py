@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "24/06/2020"
+__date__ = "25/06/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -176,15 +176,15 @@ Minimalistic example:
         else:
             q_array = geometry.center_array(self.shape, unit=self.unit)
 
-            detector_maskfile = detector_section.get("mask", '')
-            if os.path.exists(detector_maskfile):
+            detector_maskfile = detector_section.get("mask")
+            if detector_maskfile and os.path.exists(detector_maskfile):
                 detector_mask = fabio.open(detector_maskfile).data
             else:
                 detector_mask = detector.mask
                 if detector_mask is None:
                     detector_mask = numpy.zeros(self.shape, dtype=numpy.int8)
-            beamstop_maskfile = experiment_setup.get("beamstop_mask", "")
-            if os.path.exists(beamstop_maskfile, ""):
+            beamstop_maskfile = experiment_setup.get("beamstop_mask")
+            if beamstop_maskfile and os.path.exists(beamstop_maskfile):
                 beamstop_mask = fabio.open(beamstop_maskfile).data
             else:
                 beamstop_mask = numpy.zeros(self.shape, dtype=numpy.int8)
