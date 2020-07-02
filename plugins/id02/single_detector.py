@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22/06/2020"
+__date__ = "02/07/2020"
 __status__ = "development"
 __version__ = "0.9.0"
 
@@ -893,7 +893,7 @@ Possible values for to_save:
                     res = self.workers[meth].process(data, variance=variance,
                                                      normalization_factor=I1_corrected)
                     if variance is not None:
-                        res, err = res
+                        res, err = res[0], res[1]
 
                 elif meth == "azim":
                     res = self.workers[meth].process(data, variance=variance,
