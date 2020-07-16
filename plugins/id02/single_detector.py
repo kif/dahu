@@ -95,8 +95,8 @@ Optional parameters:
 "distortion_filename" Spline file with the distortion correction
 "flat_filename" flat field for intensity response correction
 "metadata_job": number of the metadata job to wait for (unused)
-"scaling_factor": float (default=1) by which all intensity will be multiplied 
-"correct_solid_angle": True by default, set to 0/False to disable such correction 
+"scaling_factor": float (default=1) by which all intensity will be multiplied
+"correct_solid_angle": True by default, set to 0/False to disable such correction
 "correct_I1": True by default, set to false to deactivate scaling by Exposure time / transmitted intensity
 "unit": "q_nm^-1" can be changed to "log(q)_m" for log(q) units
 "variance_formula": calculate the variance from a formula like '0.1*(data-dark)+1.0' "
@@ -129,7 +129,7 @@ Possible values for to_save:
                 "Dummy": float,
                 "PSize": float,
                 "SampleDistance": float,
-                "Wavelength": float, #both are possible ?
+                "Wavelength": float, # both are possible ?
                 "WaveLength": float,
                 "Rot": float
                 }
@@ -285,7 +285,7 @@ Possible values for to_save:
         self.dist = self.metadata.get("SampleDistance")
 
         # Some safety checks, use-input are sometimes False !
-        if self.dist < 0: 
+        if self.dist < 0:
             # which is impossible
             self.log_warning(f"Found negative distance: {self.dist}, considering its absolute value")
             self.dist = forai["SampleDistance"] = abs(self.metadata.get("SampleDistance"))
@@ -489,7 +489,7 @@ Possible values for to_save:
 
     def parse_image_file_old(self):
         """Historical version, works with former LIMA version
-        
+
         @return: dict with interpreted metadata
         """
         metadata = {}
@@ -558,7 +558,7 @@ Possible values for to_save:
 
     def parse_image_file_lima(self):
         """LIMA version working with LIMA-1.9.3
-        
+
         @return: dict with interpreted metadata
         """
         metadata = {}
@@ -637,12 +637,12 @@ Possible values for to_save:
                 self.log_warning("invalid HDF5 file %s: remove and re-create!\n%s" % (outfile, error))
                 os.unlink(outfile)
                 nxs = Nexus(outfile, mode="w", creator="dahu")
-            entry = nxs.new_entry("entry", 
+            entry = nxs.new_entry("entry",
                                   program_name=self.input.get("plugin_name", fully_qualified_name(self.__class__)),
                                   title=self.image_file + ":" + self.images_ds.name)
             entry["program_name"].attrs["version"] = __version__
 
-            #configuration
+            # Configuration
             config_grp = nxs.new_class(entry, "configuration", "NXnote")
             config_grp["type"] = "text/json"
             config_grp["data"] = json.dumps(self.input, indent=2, separators=(",\r\n", ": "))
@@ -802,6 +802,8 @@ Possible values for to_save:
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
                                           detector=self.ai.detector,
+                                          device="gpu",
+                                          method="csr"
                                           )
                 self.workers[ext] = worker
                 if self.distortion is None and worker.distortion is not None:
@@ -818,7 +820,7 @@ Possible values for to_save:
                 self.log_warning("unknown treatment %s" % ext)
 
             if (len(shape) >= 3):
-                compression = { k:v for k, v in COMPRESSION.items()}
+                compression = {k: v for k, v in COMPRESSION.items()}
             else:
                 compression = {}
             output_ds = nxdata.create_dataset("data",
@@ -981,30 +983,30 @@ Possible values for to_save:
         """
         # Finally update the cache:
         to_cache = {}
-        for meth, worker in self.workers.items():
+        for worker in self.workers.values():
             if "ai" in dir(worker):
                 to_cache.update(worker.ai._cached_array)
 
         self.cache.get(self.cache_ai, {}).update(to_cache)
 
         to_close = {}
-        #close also the source
+        # close also the source
         self.output_ds["source"] = self.images_ds
-        for key, ds in self.output_ds.items():
+        for key, ds in self.output_ds.values():
             if not bool(ds):
-                #the dataset is None when the file has been closed
-                continue 
+                # the dataset is None when the file has been closed
+                continue
             try:
                 hdf5_file = ds.file
                 filename = hdf5_file.filename
             except (RuntimeError, ValueError) as err:
                 self.log_warning(f"Unable to retrieve filename of dataset {key}: {err}")
             else:
-                to_close[filename] =  hdf5_file
+                to_close[filename] = hdf5_file
         for filename, hdf5_file in to_close.items():
             try:
                 hdf5_file.close()
-            except (RuntimeError,ValueError) as err:
+            except (RuntimeError, ValueError) as err:
                 self.log_warning(f"Issue in closing file {filename} {type(err)}: {err}")
 
         self.ai = None
