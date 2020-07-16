@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/07/2020"
+__date__ = "16/07/2020"
 __status__ = "development"
 __version__ = "0.9.0"
 
@@ -285,12 +285,12 @@ Possible values for to_save:
         self.dist = self.metadata.get("SampleDistance")
 
         # Some safety checks, use-input are sometimes False !
-        if self.dist<0: 
-            #which is impossible
+        if self.dist < 0: 
+            # which is impossible
             self.log_warning(f"Found negative distance: {self.dist}, considering its absolute value")
             self.dist = forai["SampleDistance"] = abs(self.metadata.get("SampleDistance"))
-             
-        if forai["WaveLength"] <0:
+
+        if forai["WaveLength"] < 0:
             self.log_warning(f"Found negative wavelength: {forai['WaveLength']}, considering its absolute value")
             forai["WaveLength"] = abs(self.metadata.get("WaveLength"))
         self.dummy = self.metadata.get("Dummy", self.dummy)
@@ -872,7 +872,7 @@ Possible values for to_save:
         for i, I1 in enumerate(I1s):
             data = self.images_ds[i]
             if self.variance_formula:
-                variance = self.variance_function(data, self.dark)
+                variance = self.variance_function(data, 0 if self.dark is None else self.dark)
             else:
                 variance = None
             I1_corrected = I1 / self.scaling_factor
