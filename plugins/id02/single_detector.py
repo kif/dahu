@@ -992,7 +992,7 @@ Possible values for to_save:
         to_close = {}
         # close also the source
         self.output_ds["source"] = self.images_ds
-        for key, ds in self.output_ds.values():
+        for key, ds in self.output_ds.items():
             if not bool(ds):
                 # the dataset is None when the file has been closed
                 continue
