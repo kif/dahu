@@ -33,7 +33,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "19/05/2015"
+__date__ = "17/03/2020"
 __status__ = "production"
 
 from ._version import version, version_info, hexversion, date
@@ -47,6 +47,6 @@ except ImportError:
     raise RuntimeError("Do NOT use %s from its sources: build it and use the built version" % project)
 
 from . import utils
-from . import factory
+from .factory import plugin_factory
 from . import plugin
 from . import job

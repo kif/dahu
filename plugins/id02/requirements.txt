@@ -1,0 +1,7 @@
+numpy
+numexpr
+h5py
+pyFAI
+dynamix
+hdf5plugin
+pytango

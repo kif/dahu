@@ -12,11 +12,10 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "07/02/2020"
+__date__ = "17/03/2020"
 __status__ = "production"
 
 import os
-import sys
 import os.path as op
 import logging
 from collections import OrderedDict
@@ -79,7 +78,7 @@ class Factory(object):
             if op.isdir(j) and op.exists(op.join(j, "__init__.py")):
                 python_files.append(i)
                                          
-        logger.warning(" ".join(python_files))
+        logger.info(f"Available modules in dahu from {directory}:{os.linesep}" + " ".join(python_files))
         with self._sem:
             self.plugin_dirs[abs_dir] = python_files
 

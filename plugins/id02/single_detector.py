@@ -1,442 +1,51 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
-
-"""Plugins for ID02:
-
-* Distortion correction
-* Metadata saving (C216)
-* single detector processing
 """
+Distortion correction and azimuthal integration for a single detector 
 
-from __future__ import with_statement, print_function, division
+"""
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "13/11/2018"
-__status__ = "production"
-version = "0.8"
+__date__ = "22/06/2020"
+__status__ = "development"
+__version__ = "0.9.0"
 
-
-import PyTango
-import h5py
-import logging
-import numpy
 import os
-import posixpath
-import pyFAI
-try:
-    import bitshuffle
-    import bitshuffle.h5
-except:
-    bitshuffle = None
-from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
-import pyFAI.worker
-import pyFAI.io
-pyFAI.io.logger.setLevel(logging.ERROR)
-import pyFAI.utils
-import fabio
-import shutil
-import sys
 import time
 import threading
-import copy
-import json
+import shutil
+import posixpath
 from collections import namedtuple
-import dahu
-from dahu.factory import register
-from dahu.plugin import Plugin, plugin_from_function
-from dahu.utils import get_isotime
+import json
+import logging
+logger = logging.getLogger("id02.single_detector")
+import numpy
+import numexpr
+import h5py
+from dahu import version as dahu_version
+from dahu.plugin import Plugin
+from dahu.utils import get_isotime, fully_qualified_name
 from dahu.job import Job
 from dahu.cache import DataCache
-
-import numexpr
-numexpr.set_num_threads(8)
-
-if sys.version_info < (3, 0):
-    StringTypes = (str, unicode)
-else:
-    StringTypes = (str, bytes)
-
-logger = logging.getLogger("dahu.id02")
-# set loglevel at least at INFO
-if logger.getEffectiveLevel() > logging.INFO:
-    logger.setLevel(logging.INFO)
-if logger.getEffectiveLevel() < logging.root.level:
-    logger.setLevel(logging.root.level)
-
-# silence non serious error messages, which are printed
-# because we use h5py in a new thread (not in the main one)
-# this is a bug seems to be fixed on newer version !!
-# see this h5py issue 206: https://code.google.com/p/h5py/issues/detail?id=206
+import fabio
+import pyFAI
+import pyFAI.utils
+from pyFAI.worker import Worker, DistortionWorker, PixelwiseWorker
+from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
+from .common import StringTypes, Nexus
 try:
-    h5py._errors.silence_errors()
-except:
-    pass
+    import hdf5plugin
+except ImportError:
+    COMPRESSION = {}
+else:
+    COMPRESSION = hdf5plugin.Bitshuffle()
 
+numexpr.set_num_threads(8)
 
 CacheKey = namedtuple("CacheKey", ["ai", "mask", "shape"])
 
 
-def preproc(**d):
-    """Take a dict as input and forms a metadata structure as output
-    @param: any dict
-    """
-    dd = d.copy()
-    if "job_id" in dd:
-        dd.pop("job_id")
-    list_f = []
-    list_n = []
-    list_z = []
-    HS32Len = dd.get("HS32Len", 16)
-    HS32Depth = dd.get("HS32Depth", 32)
-    HSI0Factor = dd.get("HSI0Factor", 1)
-    HSI1Factor = dd.get("HSI1Factor", 1)
-    # "0.005 s"
-    if "ShutterOpeningTime" in dd:
-        value = dd["ShutterOpeningTime"]
-        if type(value) in StringTypes:
-            ShutterOpeningTime = float(value.split()[0])
-        else:
-            ShutterOpeningTime = float(value)
-    else:
-        ShutterOpeningTime = 0
-    if "ShutterClosingTime" in dd:
-        value = dd["ShutterClosingTime"]
-        if type(value) in StringTypes:
-            ShutterClosingTime = float(value.split()[0])
-        else:
-            ShutterClosingTime = float(value)
-    else:
-        ShutterClosingTime = 0
-    for ind in map(lambda x: 'HS32F' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
-            list_f.append(float(dd[ind]))
-    for ind in map(lambda x: 'HS32N' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
-            list_n.append(dd[ind])
-    for ind in map(lambda x: 'HS32Z' + '{0:02d}'.format(x), range(1, HS32Len + 1)):
-            list_z.append(float(dd[ind]))
-
-    info_dir = {}
-    for info_ind in dd:
-        if info_ind[0:2].find('HS') == 0:
-            continue
-        elif info_ind[0:2].find('HM') == 0:
-            continue
-        else:
-            info_dir[info_ind] = dd[info_ind]
-
-    final_dir = {"HS32Len": HS32Len,
-                 "HS32Depth": HS32Depth,
-                 "HSI0Factor": HSI0Factor,
-                 "HSI1Factor": HSI1Factor,
-                 "ShutterOpeningTime": ShutterOpeningTime,
-                 "ShutterClosingTime": ShutterClosingTime,
-                 'instrument': 'id02',
-                 'c216': 'id02/c216/0',
-                 'HS32F': list_f,
-                 'HS32Z': list_z,
-                 'HS32N': list_n,
-                 'Info': info_dir}
-    for key in ['HMStartEpoch', 'HMStartTime', "hdf5_filename", "entry", "HSTime", "HSI0", "HSI1"]:
-        if key in dd:
-            final_dir[key] = dd[key]
-    return final_dir
-plugin_from_function(preproc)
-
-
-@register
-class Metadata(Plugin):
-    """Plugin in charge of retrieving all metadata for ID02 and storing them into a HDF5 file
-
-    TODO: rewrite using Nexus class from pyFAI: shorter code
-
-    NOTA: pin number are 1-based (I0, I1, time)
-
-    Structure of the input data:
-input = {
-        "hdf5_filename":"/nobackup/lid02gpu11/metadata/test.h5",
-        "entry": "entry",
-        "instrument":"ESRF-ID02",
-        "c216":"id02/c216/0",
-        "HS32F": [1e-06, 1, 7763480, 8176290, 342239, 967341, 5541980, 1739160, 2753.61, 1351920, 140000000, 16719500, 1, 0.000995868, 0.000995868, 1],
-        "HS32Z": [0, 0, 383.55, 126.4, 6582.1, 6973.6, 162.95, 0, 221.2, 207.8, 315.26, 145.11, 323.76, 170, 170, 228.4],
-        "HS32N": ["TIME", "AUX1", "PIN41", "PIN42", "PIN5", "PIN6", "PIN7", "PIN8", "PIN1", "PIN2", "PIN3", "PIN4", "AUX2", "THC1", "THC2", "PRESS"],
-        "HSI0": 12,
-        "HSI1": 7,
-        "HSTime": 1,
-        "HMStartEpoch": 1405087717.12159,
-        "HMStartTime": "2014-07-11T16:08:37.121591+0200",
-        "Info": {"DetectorInfo":"VxH:detbox=14952.235x0.000x1.000,dettab=-62.000x-245.000",
-                 "ExperimentInfo":"0",
-                 "MachineInfo": "Ie=183.27mA,u35u=100.000mm/0.001mm,u21m=100.000mm/0.000mm,u21d=100.000mm/-0.000mm",
-                 "MirrorInfo": "rz=-3.600mrad,ty=0.455mm,ty1=2.075mm,ty2=-1.165mm,tz1=-0.030mm,tz2=-0.090mm,mir2rz=2.000mrad",
-                 "OpticsInfo": "egy=12460.0eV,theta=9.132deg,hgt=11.7mm,tilt=4.440deg,tra=1.963mm",
-                 "ProposalInfo": 0,
-                 "StationInfo": "ID02"
-                 }
-        }
-
-"""
-    TO_SKIP = ("entry", "hdf5_filename", "plugin_name")
-
-    def __init__(self):
-        Plugin.__init__(self)
-        self.cycle = None
-        self.c216 = None
-        self.nxs = None
-        self.hdf5_filename = None
-        self.entry = None
-        self.instrument = None
-        self.group = None
-        self.tfg_grp = None
-        self.mcs_grp = None
-        self.input2 = {}
-        if "TANGO_HOST" not in os.environ:
-            raise RuntimeError("No TANGO_HOST defined")
-
-    def setup(self, kwargs=None):
-        """
-        see class documentation
-        """
-        Plugin.setup(self, kwargs)
-        if "HS32F10" in self.input:
-            self.input2.update(preproc(**self.input))
-        else:
-            self.input2.update(self.input)
-        # for debugging
-        self.input["input2"] = self.input2
-
-        self.c216 = self.input2.get("c216", "id02/c216/0")
-        self.cycle = self.input2.get("cycle", 1)
-        if "hdf5_filename" not in self.input2:
-            self.log_error("hdf5_filename not in input")
-        self.hdf5_filename = self.input2.get("hdf5_filename")
-        self.entry = self.input2.get("entry", "entry")
-        self.instrument = self.input2.get("instrument", "ESRF-ID02")
-
-    def process(self):
-        self.create_hdf5()
-        self.read_c216()
-
-    def create_hdf5(self):
-        """
-        Create a HDF5 file and data-structure
-        """
-        try:
-            self.nxs = pyFAI.io.Nexus(self.hdf5_filename, "a")
-        except IOError as error:
-            self.log_warning("Unable to open %s: %s. Removing file and starting from scratch" % (self.hdf5_filename, error))
-            os.unlink(outfile)
-            self.nxs = pyFAI.io.Nexus(self.hdf5_filename)
-
-        entry = self.nxs.new_entry(self.entry, program_name="Dahu", title="id02.metadata")
-        #self.group.parent["title"] = numpy.string_("id02.metadata")
-        #self.group.parent["program"] = numpy.string_("Dahu")
-        #self.group.parent["start_time"] = numpy.string_(start_time)
-        self.entry = entry.name
-        entry["program_name"].attrs["version"] = dahu.version
-        entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
-        entry["plugin_name"].attrs["version"] = version
-        entry["input"] = numpy.string_(json.dumps(self.input))
-        entry["input"].attrs["format"] = 'json'
-
-        self.instrument = posixpath.join(self.entry, self.instrument)
-        self.group = self.nxs.h5.require_group(self.instrument)
-        self.group.parent.attrs["NX_class"] = "NXentry"
-        self.group.attrs["NX_class"] = "NXinstrument"
-        # TimeFrameGenerator
-        self.tfg_grp = self.nxs.h5.require_group(posixpath.join(self.instrument, "TFG"))
-        self.tfg_grp.attrs["NX_class"] = "NXcollection"
-        self.tfg_grp["device"] = numpy.string_(self.c216)
-
-        # MultiCounterScaler
-        self.mcs_grp = self.nxs.h5.require_group(posixpath.join(self.instrument, "MCS"))
-        self.mcs_grp.attrs["NX_class"] = "NXcollection"
-        self.mcs_grp["device"] = numpy.string_(self.c216)
-
-        # Static metadata
-        self.info_grp = self.nxs.h5.require_group(posixpath.join(self.instrument, "parameters"))
-        self.info_grp.attrs["NX_class"] = "NXcollection"
-
-        for field, value in self.input2.get("Info", {}).items():
-            if field not in self.TO_SKIP and not isinstance(value, dict):
-                try:
-                    value.encode("ascii")
-                except UnicodeEncodeError:
-                    self.log_warning("Unicode Error in field %s: %s, skipping" % (field, value))
-                except AttributeError as err:
-                    self.log_warning("Attribute Error %s \n in field %s: %s, forcing to string." % (err, field, value))
-                    self.info_grp[field] = numpy.string_(value)
-                else:
-                    self.info_grp[field] = numpy.string_(value)
-
-        start_time = self.input2.get("HMStartTime", get_isotime())
-
-        # Factor
-        HS32F = self.input2.get("HS32F")
-        if HS32F is not None:
-            self.mcs_grp["HS32F"] = HS32F
-        # Zero
-        HS32Z = self.input2.get("HS32Z")
-        if HS32Z is not None:
-            self.mcs_grp["HS32Z"] = HS32Z
-        # Name
-        HS32N = self.input2.get("HS32N")
-        if HS32N is not None:
-            self.mcs_grp["HS32N"] = numpy.array([str(i) for i in HS32N])
-        # Mode
-        HS32M = self.input2.get("HS32M")
-        if HS32M is not None:
-            self.mcs_grp["HS32M"] = HS32M
-
-        if HS32N and HS32Z and HS32F:
-            self.mcs_grp.require_group("interpreted")
-
-    def read_c216(self):
-        """
-        Manage the metadata coming from C216 Time Frame Generator
-        """
-        c216ds = PyTango.DeviceProxy(str(self.c216))
-        if c216ds.CompStatus("Tango::RUNNING") == "Tango::ON":
-            msg = "C216 is running while reading counters ... possible issue"
-            self._logging.append(msg)
-            logger.warning(msg)
-
-        raw_status = c216ds.GetCompleteConfigAndStatus()
-        status = {"TFU_MODE": raw_status[0],
-                  "TFU_FRAME_MODE": raw_status[1],
-                  "START_MODE": raw_status[2],
-                  "FRAMES": raw_status[14] // 2,
-                  "CYCLES": raw_status[17],
-                  "CHANNELS": raw_status[19],
-                  "ACQ_BANK": raw_status[65],
-                  "TFU_CONFIG": raw_status[:28],
-                  "DIGI_IN": raw_status[28:44],
-                  "ANA_IN": raw_status[44:60]}
-
-        cycles = status["CYCLES"]
-        frames = status["FRAMES"]
-        tfg = c216ds.GetTfuFrameTimes()
-        self.tfg_grp["frame_time"] = tfg
-        self.tfg_grp["frame_time"].attrs["interpretation"] = "scalar"
-        self.tfg_grp["cycles"] = cycles
-        self.tfg_grp["frames"] = frames
-        # handle the case of multiple cycles: n*more frames, exposure time always the same
-        tmp = numpy.outer(numpy.ones(cycles), tfg).ravel()
-        live_time = tmp[1::2]
-        self.tfg_grp["live_time"] = live_time
-        self.tfg_grp["live_time"].attrs["interpretation"] = "scalar"
-        self.tfg_grp["dead_time"] = tmp[0::2]
-        self.tfg_grp["dead_time"].attrs["interpretation"] = "scalar"
-        self.tfg_grp["delta_time"] = tmp.cumsum()[0::2]
-        self.tfg_grp["delta_time"].attrs["interpretation"] = "scalar"
-        for key in ["HMStartTime", "HMStartEpoch"]:
-            if key in self.input2:
-                if type(self.input2[key]) in StringTypes:
-                    self.tfg_grp[key] = numpy.string_(self.input2[key])
-                else:
-                    self.tfg_grp[key] = self.input2[key]
-                self.tfg_grp[key].attrs["interpretation"] = "scalar"
-
-        # raw scalers:
-        raw_scalers = c216ds.ReadScalersForNLiveFrames([0, frames - 1])
-        raw_scalers.shape = frames, -1
-        counters = raw_scalers.shape[1]
-        self.mcs_grp["HS32C"] = raw_scalers
-        if "HSTime" in self.input2:
-            pin = int(self.input2["HSTime"])
-            if pin > counters:
-                self.log_error("invalid pin number %s" % pin)
-            self.mcs_grp["HSTime"] = pin
-            self.mcs_grp["HSTime"].attrs["interpretation"] = "scalar"
-            self.mcs_grp["HSTime"].attrs["counter"] = "1-based pin number"
-            pin -= 1  # 1 based pin number
-            time_counter = raw_scalers[:, pin]
-            if "HS32F" in self.mcs_grp:
-                factor = self.mcs_grp["HS32F"][pin]
-            else:
-                self.log_warning("No factors provided for time measurement: defaulting to 1e-6")
-                factor = 1e-6
-            measured_time = time_counter * factor
-            self.mcs_grp["ExposureTime"] = measured_time
-            self.mcs_grp["ExposureTime"].attrs["interpretation"] = "scalar"
-        else:
-            self.log_error("No HSTime pin number, using TFG time")
-            measured_time = tfg[1::2]
-
-        if ("HS32F" in self.mcs_grp) and ("HS32Z" in self.mcs_grp):
-            #             if "interpreted" in self.mcs_grp:
-            modes = numpy.zeros(counters, dtype=numpy.int32)
-            if "HS32M" in self.mcs_grp:
-                raw_modes = numpy.array(self.mcs_grp["HS32M"])
-                modes[:raw_modes.size] = raw_modes
-            # else: mode=0
-            values = numpy.zeros((frames, counters), dtype=numpy.float32)
-            exptime = numpy.outer(tfg[1::2], numpy.ones(counters))
-            zero = numpy.outer(numpy.ones(frames), numpy.array(self.mcs_grp["HS32Z"]))
-            factor = numpy.outer(numpy.ones(frames), numpy.array(self.mcs_grp["HS32F"]))
-            values_int = (raw_scalers - zero * exptime) * factor
-            values_avg = (raw_scalers / exptime - zero) * factor
-            mask = (numpy.outer(numpy.ones(frames), modes)).astype(bool)
-            nmask = numpy.logical_not(mask)
-            values[mask] = values_avg[mask]
-            values[nmask] = values_int[nmask]
-            self.mcs_grp["HS32V"] = values.astype(numpy.float32)
-            self.mcs_grp["HS32V"].attrs["interpretation"] = "scalar"
-            for i, name in enumerate(self.mcs_grp["HS32N"]):
-                fullname = "interpreted/%s" % name
-                self.mcs_grp[fullname] = values[:, i]
-                self.mcs_grp[fullname].attrs["interpretation"] = "scalar"
-
-            sot = self.input2.get("ShutterOpeningTime", 0.0)
-            sct = self.input2.get("ShutterClosingTime", 0.0)
-            for name, value in (("ShutterOpeningTime", sot),
-                                ("ShutterClosingTime", sct)):
-                        self.mcs_grp[name] = value
-                        self.mcs_grp[name].attrs["interpretation"] = "scalar"
-            correction_time = (measured_time - sot + sct) / (measured_time - sot)
-
-            for I in ("HSI0", "HSI1"):
-                if I in self.input2:
-                    dest = "Intensity" + I[-1]
-                    pin = int(self.input2[I])
-                    if pin > counters:
-                        self.log_error("invalid pin number %s" % pin)
-                    self.mcs_grp[I] = pin
-                    self.mcs_grp[I].attrs["interpretation"] = "scalar"
-                    self.mcs_grp[I].attrs["counter"] = "1-based pin number"
-                    pin -= 1  # 1 based pin number got 0 based.
-                    counter = values[:, pin]
-#                     factor = self.mcs_grp["HS32F"][pin]
-#                     zero = self.mcs_grp["HS32Z"][pin]
-#                     measured = (counter - measured_time * zero) * factor
-                    I_factor = float(self.input2.get(I + "Factor", 1.0))
-                    self.mcs_grp[I + "Factor"] = I_factor
-                    self.mcs_grp[I + "Factor"].attrs["interpretation"] = "scalar"
-                    measured = counter * I_factor
-                    self.mcs_grp[dest] = measured
-                    self.mcs_grp[dest].attrs["interpretation"] = "scalar"
-                    self.mcs_grp[dest + "ShutCor"] = measured * correction_time
-                    self.mcs_grp[dest + "ShutCor"].attrs["interpretation"] = "scalar"
-        else:
-            self.log_error("Not factor/zero to calculate I0/I1")
-
-    def teardown(self):
-        self.output["c216_filename"] = self.hdf5_filename
-        if self.group:
-            self.output["c216_path"] = self.group.name
-            #self.group.parent["end_time"] = numpy.string_(get_isotime())
-        if self.nxs:
-            self.nxs.close()
-        Plugin.teardown(self)
-
-
-################################################################################
-# Single Detector plugin
-################################################################################
-@register
 class SingleDetector(Plugin):
     """This plugin does all processing needed for a single camera
 
@@ -520,7 +129,8 @@ Possible values for to_save:
                 "Dummy": float,
                 "PSize": float,
                 "SampleDistance": float,
-                "Wavelength": float,
+                "Wavelength": float, #both are possible ?
+                "WaveLength": float,
                 "Rot": float
                 }
 
@@ -649,8 +259,8 @@ Possible values for to_save:
             self.variance_formula = self.input.get("variance_formula")
             if self.variance_formula:
                 self.variance_function = numexpr.NumExpr(self.variance_formula,
-                                                         [("data", float),
-                                                          ("dark", float)])
+                                                         [("data", numpy.float64),
+                                                          ("dark", numpy.float64)])
 
     def process(self):
         self.metadata = self.parse_image_file()
@@ -671,7 +281,18 @@ Possible values for to_save:
                     "PSize_1", "PSize_2", "Rot_1", "Rot_2", "Rot_3",
                     "SampleDistance", "WaveLength"):
             forai[key] = self.metadata.get(key)
+
         self.dist = self.metadata.get("SampleDistance")
+
+        # Some safety checks, use-input are sometimes False !
+        if self.dist<0: 
+            #which is impossible
+            self.log_warning(f"Found negative distance: {self.dist}, considering its absolute value")
+            self.dist = forai["SampleDistance"] = abs(self.metadata.get("SampleDistance"))
+             
+        if forai["WaveLength"] <0:
+            self.log_warning(f"Found negative wavelength: {forai['WaveLength']}, considering its absolute value")
+            forai["WaveLength"] = abs(self.metadata.get("WaveLength"))
         self.dummy = self.metadata.get("Dummy", self.dummy)
         self.delta_dummy = self.metadata.get("DDummy", self.delta_dummy)
         # read detector distortion distortion_filename
@@ -728,10 +349,11 @@ Possible values for to_save:
                 self.dark = dark
         elif type(self.dark_filename) in (int, float):
             self.dark = float(self.dark_filename)
-        self.ai.set_darkcurrent(self.dark)
+        if numpy.isscalar(self.dark):
+            self.dark = numpy.ones(self.ai.detector.shape) * self.dark
+        self.ai.detector.set_darkcurrent(self.dark)
 
         # Read and Process Flat
-
         self.flat_filename = self.input.get("flat_filename")
         if type(self.flat_filename) in StringTypes and os.path.exists(self.flat_filename):
             if self.flat_filename.endswith(".h5") or self.flat_filename.endswith(".nxs") or self.flat_filename.endswith(".hdf5"):
@@ -760,7 +382,9 @@ Possible values for to_save:
                     else:
                         binning = [i // j for i, j in zip(shape, self.flat.shape)]
                         self.flat = pyFAI.utils.unBinning(self.flat, binsize=binning, norm=False)
-            self.ai.set_flatfield(self.flat)
+            if numpy.isscalar(self.flat):
+                self.flat = numpy.ones(self.ai.detector.shape) * self.flat
+            self.ai.detector.set_flatfield(self.flat)
 
         # Read and Process mask
         if type(self.mask_filename) in StringTypes and os.path.exists(self.mask_filename):
@@ -829,12 +453,12 @@ Possible values for to_save:
         if not os.path.exists(mfile):
             self.log_error("Metadata file %s does not exist" % mfile, do_raise=True)
 
-        self.metadata_nxs = pyFAI.io.Nexus(mfile, "r")
+        self.metadata_nxs = Nexus(mfile, "r")
         I1 = t = None
         if correct_shutter_closing_time:
             key = "Intensity1ShutCor"
         else:
-            key = "Intensity1"
+            key = "Intensity1UnCor"
         for entry in self.metadata_nxs.get_entries():
             for instrument in self.metadata_nxs.get_class(entry, "NXinstrument"):
                 if "MCS" in instrument:
@@ -854,12 +478,22 @@ Possible values for to_save:
         return I1, t
 
     def parse_image_file(self):
-        """
+        self.input_nxs = Nexus(self.image_file, "r")
+        creator = self.input_nxs.h5.attrs.get("creator")
+        if creator is None:
+            return self.parse_image_file_old()
+        elif creator.startswith("LIMA-"):
+            version = creator.split("-")[1]
+            # maybe in the future, test on version of lima
+            return self.parse_image_file_lima()
+
+    def parse_image_file_old(self):
+        """Historical version, works with former LIMA version
+        
         @return: dict with interpreted metadata
         """
         metadata = {}
 
-        self.input_nxs = pyFAI.io.Nexus(self.image_file, "r")
         if "entry" in self.input:
             self.entry = self.input_nxs.get_entry(self.input["entry"])
         else:
@@ -890,6 +524,7 @@ Possible values for to_save:
                 metadata["DetectorName"] = str(detector_information["name"])
         # now read an interpret all static metadata.
         # metadata are on the collection side not instrument
+
         collections = self.input_nxs.get_class(self.entry, class_type="NXcollection")
         if len(collections) == 1:
             collection = collections[0]
@@ -918,7 +553,55 @@ Possible values for to_save:
         for key, value in parameters_grp.items():
             base = key.split("_")[0]
             conv = self.KEY_CONV.get(base, str)
-            metadata[key] = conv(value.value)
+            metadata[key] = conv(value[()])
+        return metadata
+
+    def parse_image_file_lima(self):
+        """LIMA version working with LIMA-1.9.3
+        
+        @return: dict with interpreted metadata
+        """
+        metadata = {}
+
+        if "entry" in self.input:
+            self.entry = self.input_nxs.get_entry(self.input["entry"])
+        else:
+            self.entry = self.input_nxs.get_entries()[0]  # take the last entry
+        instrument = self.input_nxs.get_class(self.entry, class_type="NXinstrument")
+        if len(instrument) == 1:
+            instrument = instrument[0]
+        else:
+            self.log_error("Expected ONE instrument is expected in entry, got %s in %s %s" %
+                           (len(instrument), self.image_file, self.entry))
+        detector_grp = self.input_nxs.get_class(instrument, class_type="NXdetector")
+        if len(detector_grp) == 1:
+            detector_grp = detector_grp[0]
+        elif len(detector_grp) == 0 and "detector" in instrument:
+            detector_grp = instrument["detector"]
+        else:
+            self.log_error("Expected ONE detector is expected in experiment, got %s in %s %s %s" %
+                           (len(detector_grp), self.input_nxs, self.image_file, instrument))
+        self.images_ds = detector_grp.get("data")
+        if isinstance(self.images_ds, h5py.Group):
+            if self.images_ds.attrs.get("NX_class") == "NXdata":
+                # this is an NXdata not a dataset: use the @signal
+                self.images_ds = self.images_ds.get(self.images_ds.attrs.get("signal"))
+        self.in_shape = self.images_ds.shape
+        if "detector_information" in detector_grp:
+            detector_information = detector_grp["detector_information"]
+            if "model" in detector_information:
+                metadata["DetectorName"] = str(detector_information["model"])
+        # now read an interpret all static metadata.
+        # metadata are on the entry/instrument/detector/collection
+        collections = self.input_nxs.get_class(detector_grp, class_type="NXcollection")
+        headers = [grp for grp in collections if posixpath.basename(grp.name) == "header"]
+        if len(headers) != 1:
+            self.log_error("Expected a 'header' NXcollection in detector")
+        parameters_grp = headers[0]
+        for key, value in parameters_grp.items():
+            base = key.split("_")[0]
+            conv = self.KEY_CONV.get(base, str)
+            metadata[key] = conv(value[()])
         return metadata
 
     def create_hdf5(self):
@@ -929,13 +612,12 @@ Possible values for to_save:
         basename = os.path.splitext(os.path.basename(self.image_file))[0]
         if basename.endswith("_raw"):
             basename = basename[:-4]
-        json_config = json.dumps(self.input)
-        isotime = numpy.string_(get_isotime())
+        isotime = str(get_isotime())
         detector_grp = self.input_nxs.find_detector(all=True)
         detector_name = "undefined"
         for grp in detector_grp:
             if "detector_information/name" in grp:
-                detector_name = grp["detector_information/name"].value
+                detector_name = grp["detector_information/name"][()]
         md_entry = self.metadata_nxs.get_entries()[0]
         instruments = self.metadata_nxs.get_class(md_entry, "NXinstrument")
         if instruments:
@@ -950,32 +632,35 @@ Possible values for to_save:
             outfile = os.path.join(self.dest, "%s_%s.h5" % (basename, ext))
             self.output_hdf5[ext] = outfile
             try:
-                nxs = pyFAI.io.Nexus(outfile, "a")
+                nxs = Nexus(outfile, mode="a", creator="dahu")
             except IOError as error:
                 self.log_warning("invalid HDF5 file %s: remove and re-create!\n%s" % (outfile, error))
                 os.unlink(outfile)
-                nxs = pyFAI.io.Nexus(outfile)
-            entry = nxs.new_entry("entry", program_name="dahu", title=self.image_file + ":" + self.images_ds.name)
-            entry["program_name"].attrs["version"] = dahu.version
-            entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
-            entry["plugin_name"].attrs["version"] = version
-            entry["input"] = numpy.string_(json_config)
-            entry["input"].attrs["format"] = 'json'
+                nxs = Nexus(outfile, mode="w", creator="dahu")
+            entry = nxs.new_entry("entry", 
+                                  program_name=self.input.get("plugin_name", fully_qualified_name(self.__class__)),
+                                  title=self.image_file + ":" + self.images_ds.name)
+            entry["program_name"].attrs["version"] = __version__
 
-            entry["detector_name"] = numpy.string_(detector_name)
+            #configuration
+            config_grp = nxs.new_class(entry, "configuration", "NXnote")
+            config_grp["type"] = "text/json"
+            config_grp["data"] = json.dumps(self.input, indent=2, separators=(",\r\n", ": "))
+
+            entry["detector_name"] = str(detector_name)
 
             nxprocess = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
-            nxprocess["program"] = numpy.string_("PyFAI")
-            nxprocess["version"] = numpy.string_(pyFAI.version)
+            nxprocess["program"] = str("PyFAI")
+            nxprocess["version"] = str(pyFAI.version)
             nxprocess["date"] = isotime
-            nxprocess["processing_type"] = numpy.string_(ext)
+            nxprocess["processing_type"] = str(ext)
             nxdata = nxs.new_class(nxprocess, "result_" + ext, class_type="NXdata")
             entry.attrs["default"] = nxdata.name
             metadata_grp = nxprocess.require_group("parameters")
 
-            for key, val in self.metadata.iteritems():
-                if type(val) in [str, unicode]:
-                    metadata_grp[key] = numpy.string_(val)
+            for key, val in self.metadata.items():
+                if type(val) in StringTypes:
+                    metadata_grp[key] = str(val)
                 else:
                     metadata_grp[key] = val
 
@@ -1018,7 +703,7 @@ Possible values for to_save:
                 shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
 
                 ai = self.ai.__copy__()
-                worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), self.unit)
+                worker = Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), self.unit)
                 if self.flat is not None:
                     worker.ai.set_flatfield(self.flat)
                 if self.dark is not None:
@@ -1051,7 +736,7 @@ Possible values for to_save:
                     npt1_rad = self.npt1_rad
                     ai = self.ai
                 shape = (self.in_shape[0], npt1_rad)
-                worker = pyFAI.worker.Worker(ai, self.in_shape[-2:], (1, npt1_rad), unit=unit)
+                worker = Worker(ai, self.in_shape[-2:], (1, npt1_rad), unit=unit)
                 worker.output = "numpy"
                 if self.in_shape[0] < 5:
                     worker.method = "splitbbox"
@@ -1068,34 +753,35 @@ Possible values for to_save:
                     worker.polarization_factor = True
                 self.workers[ext] = worker
             elif ext == "sub":
-                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark,
-                                                      dummy=self.dummy,
-                                                      delta_dummy=self.delta_dummy,
-                                                      )
+                worker = PixelwiseWorker(dark=self.dark,
+                                         dummy=self.dummy,
+                                         delta_dummy=self.delta_dummy,
+                                         )
                 self.workers[ext] = worker
             elif ext == "flat":
-                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark,
-                                                      flat=self.flat,
-                                                      dummy=self.dummy, delta_dummy=self.delta_dummy,
-                                                      )
+                worker = PixelwiseWorker(dark=self.dark,
+                                         flat=self.flat,
+                                         dummy=self.dummy, delta_dummy=self.delta_dummy,
+                                         )
                 self.workers[ext] = worker
             elif ext == "solid":
-                worker = pyFAI.worker.PixelwiseWorker(dark=self.dark,
-                                                      flat=self.flat,
-                                                      solidangle=self.get_solid_angle(),
-                                                      dummy=self.dummy,
-                                                      delta_dummy=self.delta_dummy,
-                                                      polarization=self.polarization
-                                                      )
+                worker = PixelwiseWorker(dark=self.dark,
+                                         flat=self.flat,
+                                         solidangle=self.get_solid_angle(),
+                                         dummy=self.dummy,
+                                         delta_dummy=self.delta_dummy,
+                                         polarization=self.polarization,
+                                         )
                 self.workers[ext] = worker
             elif ext == "dist":
-                worker = pyFAI.worker.DistortionWorker(dark=self.dark,
-                                                       flat=self.flat,
-                                                       solidangle=self.get_solid_angle(),
-                                                       dummy=self.dummy,
-                                                       delta_dummy=self.delta_dummy,
-                                                       polarization=self.polarization,
-                                                       detector=self.ai.detector)
+                worker = DistortionWorker(dark=self.dark,
+                                          flat=self.flat,
+                                          solidangle=self.get_solid_angle(),
+                                          dummy=self.dummy,
+                                          delta_dummy=self.delta_dummy,
+                                          polarization=self.polarization,
+                                          detector=self.ai.detector,
+                                          )
                 self.workers[ext] = worker
                 if self.distortion is None:
                     self.distortion = worker.distortion
@@ -1109,15 +795,16 @@ Possible values for to_save:
                     worker.distortion = self.distortion
 
             elif ext == "norm":
-                worker = pyFAI.worker.DistortionWorker(dark=self.dark,
-                                                       flat=self.flat,
-                                                       solidangle=self.get_solid_angle(),
-                                                       dummy=self.dummy,
-                                                       delta_dummy=self.delta_dummy,
-                                                       polarization=self.polarization,
-                                                       detector=self.ai.detector)
+                worker = DistortionWorker(dark=self.dark,
+                                          flat=self.flat,
+                                          solidangle=self.get_solid_angle(),
+                                          dummy=self.dummy,
+                                          delta_dummy=self.delta_dummy,
+                                          polarization=self.polarization,
+                                          detector=self.ai.detector,
+                                          )
                 self.workers[ext] = worker
-                if self.distortion is None:
+                if self.distortion is None and worker.distortion is not None:
                     self.distortion = worker.distortion
                     self.cache_dis = str(self.ai.detector)
                     if self.cache_dis in self.cache:
@@ -1130,12 +817,10 @@ Possible values for to_save:
             else:
                 self.log_warning("unknown treatment %s" % ext)
 
-            if (len(shape) >= 3) and (bitshuffle is not None):
-                compression = {"compression": bitshuffle.h5.H5FILTER,
-                               "compression_opts": (0, bitshuffle.h5.H5_COMPRESS_LZ4)}
+            if (len(shape) >= 3):
+                compression = { k:v for k, v in COMPRESSION.items()}
             else:
                 compression = {}
-
             output_ds = nxdata.create_dataset("data",
                                               shape,
                                               dtype=numpy.float32,
@@ -1208,7 +893,7 @@ Possible values for to_save:
                     res = self.workers[meth].process(data, variance=variance,
                                                      normalization_factor=I1_corrected)
                     if variance is not None:
-                        res, err, _ = res
+                        res, err = res
 
                 elif meth == "azim":
                     res = self.workers[meth].process(data, variance=variance,
@@ -1273,7 +958,7 @@ Possible values for to_save:
         if not os.path.exists(filename):
             self.log_error("Unable to read dark data from filename %s" % filename,
                            do_raise=True)
-        with pyFAI.io.Nexus(filename, "r") as nxs:
+        with Nexus(filename, "r") as nxs:
             for entry in nxs.get_entries():
                 for instrument in nxs.get_class(entry, "NXinstrument"):
                     for detector in nxs.get_class(instrument, "NXdetector"):
@@ -1302,32 +987,25 @@ Possible values for to_save:
 
         self.cache.get(self.cache_ai, {}).update(to_cache)
 
-        closed_files = []
-        if self.images_ds:
+        to_close = {}
+        #close also the source
+        self.output_ds["source"] = self.images_ds
+        for key, ds in self.output_ds.items():
+            if not bool(ds):
+                #the dataset is None when the file has been closed
+                continue 
             try:
-                filename = self.images_ds.file.filename
-            except RuntimeError:
-                filename = None
-            if filename and filename not in closed_files:
-                try:
-                    self.images_ds.file.close()
-                except RuntimeError:
-                    self.log_warning("Issue in closing file " + filename)
-                else:
-                    closed_files.append(filename)
-
-        for ds in self.output_ds.values():
+                hdf5_file = ds.file
+                filename = hdf5_file.filename
+            except (RuntimeError, ValueError) as err:
+                self.log_warning(f"Unable to retrieve filename of dataset {key}: {err}")
+            else:
+                to_close[filename] =  hdf5_file
+        for filename, hdf5_file in to_close.items():
             try:
-                filename = ds.file.filename
-            except RuntimeError:
-                filename = None
-            if filename and filename not in closed_files:
-                try:
-                    ds.file.close()
-                except RuntimeError:
-                    self.log_warning("Issue in closing file " + filename)
-                else:
-                    closed_files.append(filename)
+                hdf5_file.close()
+            except (RuntimeError,ValueError) as err:
+                self.log_warning(f"Issue in closing file {filename} {type(err)}: {err}")
 
         self.ai = None
         self.polarization = None
