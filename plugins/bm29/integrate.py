@@ -455,11 +455,10 @@ class IntegrateMultiframe(Plugin):
         logger.debug("in process1_integration")
         intensity = numpy.empty((self.nb_frames, self.npt), dtype=numpy.float32)
         sigma = numpy.empty((self.nb_frames, self.npt), dtype=numpy.float32)
-
-        for idx, frame in enumerate(data):
-            i1 = self.monitor_values[idx]/self.normalization_factor
+        idx = 0
+        for i1, frame in zip(self.monitor_values, data):
             res = self.ai._integrate1d_ng(frame, self.npt, 
-                                          normalization_factor=i1,
+                                          normalization_factor=i1/self.normalization_factor,
                                           error_model="poisson",
                                           polarization_factor=polarization_factor,
                                           unit=self.unit,
@@ -469,6 +468,7 @@ class IntegrateMultiframe(Plugin):
             sigma[idx] = res.sigma
             if self.ispyb.url:
                 self.to_pyarch[idx] = res
+            idx += 1
         return IntegrationResult(res.radial, intensity, sigma)
 
     def process2_cormap(self, curves, fidelity_abs, fidelity_rel):
