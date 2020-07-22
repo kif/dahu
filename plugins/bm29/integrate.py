@@ -213,6 +213,8 @@ class IntegrateMultiframe(Plugin):
         current_ds.attrs["interpretation"] = "spectrum"
     
         #Sample:
+        if not self.sample.name:
+            self.sample.name = "Unknown sample"
         sample_grp = nxs.new_class(entry_grp, self.sample.name, "NXsample")
         if self.sample.description is not None:
             sample_grp["description"] = self.sample.description
