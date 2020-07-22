@@ -507,5 +507,5 @@ class IntegrateMultiframe(Plugin):
     
     def send_to_ispyb(self):
         if self.ispyb.url:
-            ispyb = IspybConnector(**self.ispyb)
+            ispyb = IspybConnector(*self.ispyb)
             ispyb.send_averaged(self.to_pyarch)
