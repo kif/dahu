@@ -6,16 +6,16 @@ Reprocess a job using the current
 import os, json, sys, logging, time
 from argparse import ArgumentParser
 import dahu.factory
+from dahu.job import Job
 from dahu.utils import get_workdir
 logging.basicConfig()
 
-STATE_UNINITIALIZED = "uninitialized"
-STATE_RUNNING = "running"
-STATE_SUCCESS = "success"
-STATE_FAILURE = "failure"
-STATE_ABORTED = "aborted"
-STATE = [STATE_UNINITIALIZED, STATE_RUNNING, STATE_SUCCESS, STATE_FAILURE, STATE_ABORTED]
-
+STATE_UNINITIALIZED = Job.STATE_UNINITIALIZED
+STATE_RUNNING = Job.STATE_RUNNING
+STATE_SUCCESS = Job.STATE_SUCCESS
+STATE_FAILURE = Job.STATE_FAILURE
+STATE_ABORTED = Job.STATE_ABORTED
+STATE = Job.STATE
 
 
 def parse():
@@ -84,6 +84,10 @@ def process(args):
         plugin_name = dico["plugin_name"]
         dico["job_id"] = idx
         plugin = dahu.factory.plugin_factory(plugin_name)
+        #Drop some keys from input specific for reprocess
+        for ignore in plugin.REPROCESS_IGNORE:
+            if ignore in dico:
+                dico.pop(ignore, None)
         start_time = time.time()
         plugin.input = dico
         state = _run_(plugin, "setup")

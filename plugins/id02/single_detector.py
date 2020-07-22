@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/03/2020"
+__date__ = "22/06/2020"
 __status__ = "development"
 __version__ = "0.9.0"
 
@@ -349,10 +349,11 @@ Possible values for to_save:
                 self.dark = dark
         elif type(self.dark_filename) in (int, float):
             self.dark = float(self.dark_filename)
-        self.ai.set_darkcurrent(self.dark)
+        if numpy.isscalar(self.dark):
+            self.dark = numpy.ones(self.ai.detector.shape) * self.dark
+        self.ai.detector.set_darkcurrent(self.dark)
 
         # Read and Process Flat
-
         self.flat_filename = self.input.get("flat_filename")
         if type(self.flat_filename) in StringTypes and os.path.exists(self.flat_filename):
             if self.flat_filename.endswith(".h5") or self.flat_filename.endswith(".nxs") or self.flat_filename.endswith(".hdf5"):
@@ -381,7 +382,9 @@ Possible values for to_save:
                     else:
                         binning = [i // j for i, j in zip(shape, self.flat.shape)]
                         self.flat = pyFAI.utils.unBinning(self.flat, binsize=binning, norm=False)
-            self.ai.set_flatfield(self.flat)
+            if numpy.isscalar(self.flat):
+                self.flat = numpy.ones(self.ai.detector.shape) * self.flat
+            self.ai.detector.set_flatfield(self.flat)
 
         # Read and Process mask
         if type(self.mask_filename) in StringTypes and os.path.exists(self.mask_filename):
@@ -640,7 +643,7 @@ Possible values for to_save:
             entry["program_name"].attrs["version"] = __version__
 
             #configuration
-            config_grp = self.nxs.new_class(entry, "configuration", "NXnote")
+            config_grp = nxs.new_class(entry, "configuration", "NXnote")
             config_grp["type"] = "text/json"
             config_grp["data"] = json.dumps(self.input, indent=2, separators=(",\r\n", ": "))
 
@@ -767,7 +770,7 @@ Possible values for to_save:
                                          solidangle=self.get_solid_angle(),
                                          dummy=self.dummy,
                                          delta_dummy=self.delta_dummy,
-                                         polarization=self.polarization
+                                         polarization=self.polarization,
                                          )
                 self.workers[ext] = worker
             elif ext == "dist":
@@ -777,7 +780,8 @@ Possible values for to_save:
                                           dummy=self.dummy,
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
-                                          detector=self.ai.detector)
+                                          detector=self.ai.detector,
+                                          )
                 self.workers[ext] = worker
                 if self.distortion is None:
                     self.distortion = worker.distortion
@@ -797,9 +801,10 @@ Possible values for to_save:
                                           dummy=self.dummy,
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
-                                          detector=self.ai.detector)
+                                          detector=self.ai.detector,
+                                          )
                 self.workers[ext] = worker
-                if self.distortion is None:
+                if self.distortion is None and worker.distortion is not None:
                     self.distortion = worker.distortion
                     self.cache_dis = str(self.ai.detector)
                     if self.cache_dis in self.cache:
@@ -888,7 +893,7 @@ Possible values for to_save:
                     res = self.workers[meth].process(data, variance=variance,
                                                      normalization_factor=I1_corrected)
                     if variance is not None:
-                        res, err, _ = res
+                        res, err = res
 
                 elif meth == "azim":
                     res = self.workers[meth].process(data, variance=variance,

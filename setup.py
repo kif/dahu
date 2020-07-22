@@ -1,5 +1,5 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
+# coding: utf8 
 # /*##########################################################################
 #
 # Copyright (c) 2013-2020 European Synchrotron Radiation Facility
@@ -31,7 +31,7 @@ __authors__ = ["Jérôme Kieffer", "Thomas Vincent"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/06/2020"
+__date__ = "23/06/2020"
 __status__ = "development"
 
 import sys
@@ -40,18 +40,23 @@ import glob
 import logging
 logger = logging.getLogger("dahu.setup")
 
-from numpy.distutils.misc_util import Configuration
+if sys.version_info[0] < 3:
+    raise SystemError("Freesas requires Python3 !")
 
+from numpy.distutils.misc_util import Configuration
 try:
-    # setuptools allows the creation of wheels
-    from setuptools import setup, Command
+    from setuptools import Command, setup
     from setuptools.command.build_py import build_py as _build_py
     from setuptools.command.sdist import sdist
-except ImportError as err:
-    print(err)
-    from numpy.distutils.core import setup, Command
+    logger.info("Use setuptools.setup")
+except ImportError:
+    try:
+        from numpy.distutils.core import Command, setup
+    except ImportError:
+        from distutils.core import Command
     from distutils.command.build_py import build_py as _build_py
     from distutils.command.sdist import sdist
+    logger.info("Use distutils.core.setup")
 
 PROJECT = "dahu"
 cmdclass = {}
