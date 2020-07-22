@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/06/2020"
+__date__ = "22/07/2020"
 __status__ = "development"
 version = "0.0.1"
 
@@ -88,7 +88,7 @@ class Sample(NamedTuple):
         "temperature": 20,
         "temperature_env": 20},  
     """
-    name: str=None
+    name: str="Unknown sample"
     description: str=None
     buffer: str=None
     concentration: float=None
