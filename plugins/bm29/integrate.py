@@ -116,7 +116,9 @@ class IntegrateMultiframe(Plugin):
         
         self.ispyb = Ispyb._fromdict(self.input.get("ispyb", {}))
         self.sample = Sample._fromdict(self.input.get("sample", {}))
-        
+        if not self.sample.name:
+            self.sample = Sample("Unknown sample", *self.sample[1:])
+
         self.input_file = self.input.get("input_file")
         if self.input_file is None:
             self.log_error("No input file provided", do_raise=True)
@@ -213,8 +215,6 @@ class IntegrateMultiframe(Plugin):
         current_ds.attrs["interpretation"] = "spectrum"
     
         #Sample:
-        if not self.sample.name:
-            self.sample.name = "Unknown sample"
         sample_grp = nxs.new_class(entry_grp, self.sample.name, "NXsample")
         if self.sample.description is not None:
             sample_grp["description"] = self.sample.description
@@ -243,7 +243,6 @@ class IntegrateMultiframe(Plugin):
         nrj_ds = monochromator_grp.create_dataset("energy", data=self.energy)
         nrj_ds.attrs["units"] = "keV" 
         nrj_ds.attrs["resolution"] = 0.014
-        
         
         detector_grp = nxs.new_class(instrument_grp, str(self.ai.detector), "NXdetector")
         dist_ds = detector_grp.create_dataset("distance", data=self.ai.dist)
