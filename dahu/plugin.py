@@ -13,7 +13,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/03/2020"
+__date__ = "20/07/2020"
 __status__ = "production"
 
 from .factory import plugin_factory, register
@@ -38,6 +38,8 @@ class Plugin(object):
     DEFAULT_PROCESS = "process"  # specify how to run the default processing
     DEFAULT_TEAR_DOWN = "teardown"  # name of the method used to tear-down the plugin (close connection, files)
     DEFAULT_ABORT = "abort"  # name of the method used to abort the plugin (if any. Tear_Down will be called)
+    REPROCESS_IGNORE = [] #list of keys from input to be ignored when reprocessing data 
+
 
     def __init__(self):
         """
