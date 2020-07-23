@@ -9,7 +9,7 @@ __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "23/07/2020"
 __status__ = "development"
-__version__ = "0.9.0"
+__version__ = "0.9.1"
 
 import os
 import time
