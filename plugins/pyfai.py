@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "14/03/2015"
+__date__ = "23/07/2020"
 __status__ = "development"
 version = "0.3.0"
 
@@ -66,31 +66,31 @@ class PluginIntegrate(Plugin):
         Plugin.setup(self, kwargs)
         logger.debug("PluginPyFAIv1_0.setup")
         ai = pyFAI.AzimuthalIntegrator()
-        if sdi.geometryFit2D is not None:
-            xsGeometry = sdi.geometryFit2D
-            detector = self.getDetector(xsGeometry.detector)
-            d = {"direct": EDUtilsUnit.getSIValue(xsGeometry.distance) * 1000, #fit2D takes the distance in mm
-               "centerX": xsGeometry.beamCentreInPixelsX.value ,
-               "centerY":xsGeometry.beamCentreInPixelsY.value  ,
-               "tilt": xsGeometry.angleOfTilt.value,
-               "tiltPlanRotation": xsGeometry.tiltRotation.value}
-            d.update(detector.getFit2D())
-            ai.setFit2D(**d)
-        elif sdi.geometryPyFAI is not None:
-            xsGeometry = sdi.geometryPyFAI
-            detector = self.getDetector(xsGeometry.detector)
-            d = {"dist": EDUtilsUnit.getSIValue(xsGeometry.sampleDetectorDistance),
-               "poni1": EDUtilsUnit.getSIValue(xsGeometry.pointOfNormalIncidence1),
-               "poni2": EDUtilsUnit.getSIValue(xsGeometry.pointOfNormalIncidence2),
-               "rot1": EDUtilsUnit.getSIValue(xsGeometry.rotation1),
-               "rot2": EDUtilsUnit.getSIValue(xsGeometry.rotation2),
-               "rot3": EDUtilsUnit.getSIValue(xsGeometry.rotation3)}
-            d.update(detector.getPyFAI())
-            ai.setPyFAI(**d)
-        else:
-            strError = "Geometry definition in %s, not recognized as a valid geometry%s %s" % (sdi, os.linesep, sdi.marshal())
-            self.ERROR(strError)
-            raise RuntimeError(strError)
+#         if sdi.geometryFit2D is not None:
+#             xsGeometry = sdi.geometryFit2D
+#             detector = self.getDetector(xsGeometry.detector)
+#             d = {"direct": EDUtilsUnit.getSIValue(xsGeometry.distance) * 1000, #fit2D takes the distance in mm
+#                "centerX": xsGeometry.beamCentreInPixelsX.value ,
+#                "centerY":xsGeometry.beamCentreInPixelsY.value  ,
+#                "tilt": xsGeometry.angleOfTilt.value,
+#                "tiltPlanRotation": xsGeometry.tiltRotation.value}
+#             d.update(detector.getFit2D())
+#             ai.setFit2D(**d)
+#         elif sdi.geometryPyFAI is not None:
+#             xsGeometry = sdi.geometryPyFAI
+#             detector = self.getDetector(xsGeometry.detector)
+#             d = {"dist": EDUtilsUnit.getSIValue(xsGeometry.sampleDetectorDistance),
+#                "poni1": EDUtilsUnit.getSIValue(xsGeometry.pointOfNormalIncidence1),
+#                "poni2": EDUtilsUnit.getSIValue(xsGeometry.pointOfNormalIncidence2),
+#                "rot1": EDUtilsUnit.getSIValue(xsGeometry.rotation1),
+#                "rot2": EDUtilsUnit.getSIValue(xsGeometry.rotation2),
+#                "rot3": EDUtilsUnit.getSIValue(xsGeometry.rotation3)}
+#             d.update(detector.getPyFAI())
+#             ai.setPyFAI(**d)
+#         else:
+#             strError = "Geometry definition in %s, not recognized as a valid geometry%s %s" % (sdi, os.linesep, sdi.marshal())
+#             self.ERROR(strError)
+#             raise RuntimeError(strError)
 
         ########################################################################
         # Choose the azimuthal integrator
@@ -103,28 +103,28 @@ class PluginIntegrate(Plugin):
                 self.__class__._dictGeo[tuple(ai.param)] = ai
                 self.ai = ai
 
-        self.data = EDUtilsArray.getArray(self.dataInput.input).astype(float)
-        if sdi.dark is not None:
-            self.data -= EDUtilsArray.getArray(sdi.dark)
-        if sdi.flat is not None:
-            self.data /= EDUtilsArray.getArray(sdi.flat)
-        if sdi.mask is not None:
-            self.mask = EDUtilsArray.getArray(sdi.mask)
-        if sdi.wavelength is not None:
-            self.ai.wavelength = EDUtilsUnit.getSIValue(sdi.wavelength)
-        if sdi.output is not None:
-            self.strOutputFile = sdi.output.path.value
-        if sdi.dummy is not None:
-            self.dummy = sdi.dummy.value
-        if sdi.deltaDummy is not None:
-            self.delta_dummy = sdi.deltaDummy.value
-        if sdi.nbPt:
-            self.nbPt = sdi.nbPt.value
+#         self.data = EDUtilsArray.getArray(self.dataInput.input).astype(float)
+#         if sdi.dark is not None:
+#             self.data -= EDUtilsArray.getArray(sdi.dark)
+#         if sdi.flat is not None:
+#             self.data /= EDUtilsArray.getArray(sdi.flat)
+#         if sdi.mask is not None:
+#             self.mask = EDUtilsArray.getArray(sdi.mask)
+#         if sdi.wavelength is not None:
+#             self.ai.wavelength = EDUtilsUnit.getSIValue(sdi.wavelength)
+#         if sdi.output is not None:
+#             self.strOutputFile = sdi.output.path.value
+#         if sdi.dummy is not None:
+#             self.dummy = sdi.dummy.value
+#         if sdi.deltaDummy is not None:
+#             self.delta_dummy = sdi.deltaDummy.value
+#         if sdi.nbPt:
+#             self.nbPt = sdi.nbPt.value
 
     def process(self):
         Plugin.process(self)
         logger.debug("PluginPyFAIv1_0.process")
-        data = EDUtilsArray.getArray(self.dataInput.input)
+#         data = EDUtilsArray.getArray(self.dataInput.input)
         if self.dataInput.saxsWaxs and self.dataInput.saxsWaxs.value.lower().startswith("s"):
             out = self.ai.saxs(self.data,
                                nbPt=self.nbPt,
