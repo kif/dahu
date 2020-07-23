@@ -10,5 +10,5 @@ then
     echo killing dahu @pid ${pid}
     kill ${pid}
     sleep 1
-    kill ${pid}
+    kill -9 ${pid}
 fi
