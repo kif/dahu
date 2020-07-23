@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/07/2020"
+__date__ = "23/07/2020"
 __status__ = "development"
 __version__ = "0.9.0"
 
@@ -33,7 +33,7 @@ import pyFAI
 import pyFAI.utils
 from pyFAI.worker import Worker, DistortionWorker, PixelwiseWorker
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
-from .common import StringTypes, Nexus
+from .common import StringTypes, Nexus, ensure_str
 try:
     import hdf5plugin
 except ImportError:
@@ -522,7 +522,7 @@ Possible values for to_save:
         if "detector_information" in detector_grp:
             detector_information = detector_grp["detector_information"]
             if "name" in detector_information:
-                metadata["DetectorName"] = str(detector_information["name"])
+                metadata["DetectorName"] = ensure_str(detector_information["name"])
         # now read an interpret all static metadata.
         # metadata are on the collection side not instrument
 
@@ -591,7 +591,7 @@ Possible values for to_save:
         if "detector_information" in detector_grp:
             detector_information = detector_grp["detector_information"]
             if "model" in detector_information:
-                metadata["DetectorName"] = str(detector_information["model"])
+                metadata["DetectorName"] = ensure_str(detector_information["model"][()])
         # now read an interpret all static metadata.
         # metadata are on the entry/instrument/detector/collection
         collections = self.input_nxs.get_class(detector_grp, class_type="NXcollection")
@@ -613,7 +613,7 @@ Possible values for to_save:
         basename = os.path.splitext(os.path.basename(self.image_file))[0]
         if basename.endswith("_raw"):
             basename = basename[:-4]
-        isotime = str(get_isotime())
+        isotime = get_isotime()
         detector_grp = self.input_nxs.find_detector(all=True)
         detector_name = "undefined"
         for grp in detector_grp:
@@ -648,20 +648,20 @@ Possible values for to_save:
             config_grp["type"] = "text/json"
             config_grp["data"] = json.dumps(self.input, indent=2, separators=(",\r\n", ": "))
 
-            entry["detector_name"] = str(detector_name)
+            entry["detector_name"] = ensure_str(detector_name)
 
             nxprocess = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
-            nxprocess["program"] = str("PyFAI")
-            nxprocess["version"] = str(pyFAI.version)
+            nxprocess["program"] = "PyFAI"
+            nxprocess["version"] = ensure_str(pyFAI.version)
             nxprocess["date"] = isotime
-            nxprocess["processing_type"] = str(ext)
+            nxprocess["processing_type"] = ensure_str(ext)
             nxdata = nxs.new_class(nxprocess, "result_" + ext, class_type="NXdata")
             entry.attrs["default"] = nxdata.name
             metadata_grp = nxprocess.require_group("parameters")
 
             for key, val in self.metadata.items():
                 if type(val) in StringTypes:
-                    metadata_grp[key] = str(val)
+                    metadata_grp[key] = ensure_str(val)
                 else:
                     metadata_grp[key] = val
 

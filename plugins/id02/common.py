@@ -6,7 +6,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/03/2020"
+__date__ = "23/07/2020"
 __status__ = "development"
 __version__ = "1.0.0"
 
@@ -35,6 +35,13 @@ if sys.version_info[0] < 3:
 else:
     StringTypes = (str, bytes)
 
+def ensure_str(junk):
+    "return a unicode string, regardless to the input"
+    if isinstance(junk, bytes):
+        return junk.decode()
+    else:
+        return str(junk)
+    
 """ Remaining code from former single file plugin 
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
