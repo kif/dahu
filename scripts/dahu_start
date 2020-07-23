@@ -9,10 +9,19 @@ mkdir -p ${logdir}
 logfile=${logdir}/dahu_output.log
 
 echo Log files are in ${logfile}
+
+if [ ! -d ${HOME}/.dahu ]
+then
+    mkdir -p ${HOME}/.dahu
+fi
+
+
 nohup dahu_server -l ${logdir} gpu1 2>&1 > ${logfile} &
-echo $1
+pid=$!
+echo $pid>${HOME}/.dahu/pid
+echo ${logfile}>${HOME}/.dahu/log
+
 if [  $1 ]
 then
   tail -f ${logfile}
 fi  
-
