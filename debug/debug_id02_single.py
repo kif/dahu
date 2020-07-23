@@ -51,7 +51,7 @@ data = {
 
 
 
-print dahu.initPlugin(plugin)
+print(dahu.initPlugin(plugin))
 pid = dahu.startJob([plugin, json.dumps(data)])
 print("%s id: %i" % (plugin, pid))
 print("Input: %s" % dahu.getJobInput(pid))
