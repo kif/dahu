@@ -27,14 +27,11 @@ Thus 2.1.0a3 is hexversion 0x020100a3.
 
 """
 
-
-from __future__ import absolute_import, print_function, division, with_statement
-
 __author__ = "Jerome Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "14/02/2020"
+__date__ = "01/09/2020"
 __status__ = "producton"
 __docformat__ = 'restructuredtext'
 RELEASE_LEVEL_VALUE = {"dev": 0,
@@ -45,7 +42,7 @@ RELEASE_LEVEL_VALUE = {"dev": 0,
                        "final": 15}
 
 MAJOR = 0
-MINOR = 7
+MINOR = 8
 MICRO = 0
 RELEV = "rc"  # <16
 SERIAL = 0  # <16
