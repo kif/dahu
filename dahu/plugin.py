@@ -7,20 +7,21 @@ Data Analysis RPC server over Tango:
 
 Definiton of plugins
 """
-from __future__ import with_statement, print_function, absolute_import, division
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/07/2020"
+__date__ = "01/09/2020"
 __status__ = "production"
 
-from .factory import plugin_factory, register
-from .utils import fully_qualified_name, get_workdir
 import os
 import logging
 import cProfile
+import time
+from .factory import plugin_factory
+from .utils import get_workdir
+
 logger = logging.getLogger("dahu.plugin")
 
 
@@ -118,6 +119,31 @@ class Plugin(object):
         err = "Warning in %s: %s" % (self.get_name(), txt)
         logger.warning(err)
         self._logging.append(err)
+
+    def wait_for(self, job_id):
+        """Wait for another job to be finished ...
+
+        :param job_id: identifier for the job
+        :return: the job object
+        """
+        from .job import Job
+        assert isinstance(job_id, int)
+        TIMEOUT = getattr(self, 'TIMEOUT', 10.0) #default timeout to 10s
+        if job_id>Job._id_class:
+            self.log_warning("Not synchronizing job, invalid id: %s" % job_id)
+        else:
+            status = Job.synchronize_job(job_id, TIMEOUT)
+            abort_time = time.time() + TIMEOUT
+            while status == Job.STATE_UNINITIALIZED:
+                # Wait for job to start
+                time.sleep(1.0)
+                status = Job.synchronize_job(job_id, TIMEOUT)
+                if time.time() > abort_time:
+                    self.log_error("Timeout while waiting metadata plugin to finish")
+                    break
+            if status != Job.STATE_SUCCESS:
+                self.log_error("Other job ended in %s: aborting myself" % status)
+            return Job.getJobFromId(job_id)
 
 
 class PluginFromFunction(Plugin):
