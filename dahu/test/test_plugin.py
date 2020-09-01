@@ -50,7 +50,7 @@ class TestPlugin(unittest.TestCase):
         p.wait_for(j.id)
         
         #Test failure when it does not start (timeout)
-        p.TIMEOUT=0.5
+        p.TIMEOUT=0.2
         j = Job("example.square", {"x": 6})
         try:
             p.wait_for(j.id)
