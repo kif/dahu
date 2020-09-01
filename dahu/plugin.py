@@ -136,10 +136,10 @@ class Plugin(object):
             abort_time = time.time() + TIMEOUT
             while status == Job.STATE_UNINITIALIZED:
                 # Wait for job to start
-                time.sleep(1.0)
+                time.sleep(0.1)
                 status = Job.synchronize_job(job_id, TIMEOUT)
                 if time.time() > abort_time:
-                    self.log_error("Timeout while waiting metadata plugin to finish")
+                    self.log_error("Timeout while waiting other job to finish")
                     break
             if status != Job.STATE_SUCCESS:
                 self.log_error("Other job ended in %s: aborting myself" % status)
