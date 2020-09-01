@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/06/2020"
+__date__ = "01/09/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -63,10 +63,8 @@ class SubtractBuffer(Plugin):
         "pyarch": "/data/pyarch/mx1234/sample", 
         "measurement_id": -1,
         "collection_id": -1
-       } 
-      # TODO ... "wait_for" = ["job1", "job2"]
-
-      
+       },
+      "wait_for" = [jobid_buffer1, jobid_buffer2, jobid_sample]
     } 
     """
     def __init__(self):
