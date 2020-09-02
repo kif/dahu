@@ -250,6 +250,7 @@ Possible values for to_save:
                                                           ("dark", numpy.float64)])
 
     def process(self):
+        dummy=None
         self.metadata = self.parse_image_file()
         self.mask_filename = self.input.get("regrouping_mask_filename")
         shape = self.in_shape[-2:]
@@ -318,7 +319,8 @@ Possible values for to_save:
         if self.input.get("do_polarization"):
             self.polarization = self.ai.polarization(factor=self.input.get("polarization_factor"),
                                                      axis_offset=self.input.get("polarization_axis_offset", 0))
-
+        
+        mask = numpy.empty(shape, dtype=bool)
         # Read and Process dark
         if type(self.dark_filename) in StringTypes and os.path.exists(self.dark_filename):
             dark = self.read_data(self.dark_filename)
@@ -354,6 +356,12 @@ Possible values for to_save:
                 except:
                     self.log_error("Dummy value in mask is unconsistent %s" % dummy)
                     dummy = None
+                ddummy = flat_fabio.header.get("DDummy")
+                try:
+                    ddummy = float(ddummy)
+                except:
+                    self.log_error("DDummy value in mask is unconsitent %s" % ddummy)
+                    ddummy = 0
 
             if flat.ndim == 3:
                 self.flat = pyFAI.average.average_dark(flat, center_method="median")
@@ -370,15 +378,21 @@ Possible values for to_save:
                         binning = [i // j for i, j in zip(shape, self.flat.shape)]
                         self.flat = pyFAI.utils.unBinning(self.flat, binsize=binning, norm=False)
             if numpy.isscalar(self.flat):
-                self.flat = numpy.ones(self.ai.detector.shape) * self.flat
+                self.flat = numpy.ones(shape) * self.flat
             self.ai.detector.set_flatfield(self.flat)
+            if dummy:
+                if ddummy:
+                    numpy.logical_or(mask, abs(self.flat - dummy) <= ddummy, out=mask)
+                else:
+                    numpy.logical_or(mask, self.flat == dummy, out=mask)
+
 
         # Read and Process mask
-        if type(self.mask_filename) in StringTypes and os.path.exists(self.mask_filename):
+        if isinstance(self.mask_filename, StringTypes) and os.path.exists(self.mask_filename):
             try:
                 mask_fabio = fabio.open(self.mask_filename)
             except:
-                mask = self.read_data(self.mask_filename) != 0
+                lmask = self.read_data(self.mask_filename) != 0
             else:  # this is very ID02 specific !!!!
                 dummy = mask_fabio.header.get("Dummy")
                 try:
@@ -393,26 +407,27 @@ Possible values for to_save:
                     self.log_error("DDummy value in mask is unconsitent %s" % ddummy)
                     ddummy = 0
                 if ddummy:
-                    mask = abs(mask_fabio.data - dummy) <= ddummy
+                    lmask = abs(mask_fabio.data - dummy) <= ddummy
                 else:
-                    mask = (mask_fabio.data == dummy)
+                    lmask = mask_fabio.data == dummy
                 self.log_warning("found %s pixel masked out" % (mask.sum()))
                 self.dummy = dummy
                 self.delta_dummy = ddummy
             if mask.ndim == 3:
-                mask = pyFAI.average.average_dark(mask, center_method="median")
-            if (mask is not None) and (mask.shape != shape):
-                binning = [j / i for i, j in zip(shape, mask.shape)]
+                lmask = pyFAI.average.average_dark(lmask, center_method="median")
+            if (lmask is not None) and (lmask.shape != shape):
+                binning = [j / i for i, j in zip(shape, lmask.shape)]
                 if tuple(binning) != (1, 1):
                     self.log_warning("Binning for mask is %s" % binning)
                     if max(binning) > 1:
                         binning = [int(i) for i in binning]
-                        mask = pyFAI.utils.binning(mask, binsize=binning, norm=True) > 0
+                        lmask = pyFAI.utils.binning(lmask, binsize=binning, norm=True) > 0
                     else:
-                        binning = [i // j for i, j in zip(shape, mask.shape)]
-                        mask = pyFAI.utils.unBinning(mask, binsize=binning, norm=False) > 0
+                        binning = [i // j for i, j in zip(shape, lmask.shape)]
+                        lmask = pyFAI.utils.unBinning(lmask, binsize=binning, norm=False) > 0
+            numpy.logical_or(mask, lmask, out=mask)
             # nota: this is assigned to the detector !
-            self.ai.mask = mask
+        self.ai.detector.mask = mask
 
         # bug specific to ID02, dummy=0 means no dummy !
         if self.dummy == 0:
