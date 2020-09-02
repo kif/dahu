@@ -13,15 +13,13 @@ __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "01/09/2020"
 __status__ = "development"
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 import os
 import json
 from math import log, pi
 from collections import namedtuple
 from dahu.plugin import Plugin
-from dahu.factory import register
-from dahu.cache import DataCache
 from dahu.utils import fully_qualified_name
 import logging
 logger = logging.getLogger("bm29.subtract")
@@ -32,14 +30,12 @@ except ImportError:
     logger.error("Numexpr is not installed, falling back on numpy's implementations")
     numexpr = None
 import h5py
-import fabio
 import pyFAI, pyFAI.azimuthalIntegrator
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap, freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier
 from freesas.bift import BIFT
 from scipy.optimize import minimize
-from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     Sample
@@ -86,6 +82,10 @@ class SubtractBuffer(Plugin):
     def setup(self, kwargs=None):
         logger.debug("SubtractBuffer.setup")
         Plugin.setup(self, kwargs)
+        
+        for job_id in self.input.get("wait_for", []):
+            self.wait_for(job_id)
+        
         self.sample_file = self.input.get("sample_file")
         if self.sample_file is None:
             self.log_error("No sample file provided", do_raise=True)
