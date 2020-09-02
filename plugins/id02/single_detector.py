@@ -12,7 +12,6 @@ __status__ = "development"
 __version__ = "0.9.1"
 
 import os
-import time
 import threading
 import shutil
 import posixpath
@@ -26,11 +25,9 @@ import h5py
 from dahu import version as dahu_version
 from dahu.plugin import Plugin
 from dahu.utils import get_isotime, fully_qualified_name
-from dahu.job import Job
 from dahu.cache import DataCache
 import fabio
-import pyFAI
-import pyFAI.utils
+import pyFAI, pyFAI.utils
 from pyFAI.worker import Worker, DistortionWorker, PixelwiseWorker
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import StringTypes, Nexus, ensure_str
