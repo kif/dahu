@@ -14,7 +14,8 @@ __status__ = "development"
 version = "0.2.0"
 
 import time
-from dahu.plugin import plugin_from_function, Plugin, register
+from dahu.plugin import plugin_from_function, Plugin
+from dahu.factory import register
 import logging
 logger = logging.getLogger("plugin.example")
 
