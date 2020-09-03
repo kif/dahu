@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/09/2020"
+__date__ = "03/09/2020"
 __status__ = "development"
 __version__ = "0.9.1"
 
@@ -40,7 +40,7 @@ else:
 
 numexpr.set_num_threads(8)
 
-CacheKey = namedtuple("CacheKey", ["ai", "mask", "shape"])
+CacheKey = namedtuple("CacheKey", ["ai", "shape"])
 
 
 class SingleDetector(Plugin):
@@ -163,6 +163,8 @@ Possible values for to_save:
         self.flat_filename = None
         self.flat = None
         self.mask_filename = None
+        self.distortion_mask = None
+        self.regrouping_mask = None
         self.distortion_filename = None
         self.output_hdf5 = {}
         self.dist = 1.0
@@ -251,9 +253,10 @@ Possible values for to_save:
 
     def process(self):
         dummy=None
-        self.metadata = self.parse_image_file()
-        self.mask_filename = self.input.get("regrouping_mask_filename")
+        self.metadata = self.parse_image_file()        
         shape = self.in_shape[-2:]
+        
+        
         if self.I1 is None:
             self.I1 = numpy.ones(shape, dtype=float)
         elif self.I1.size < self.in_shape[0]:
@@ -283,10 +286,6 @@ Possible values for to_save:
             forai["WaveLength"] = abs(self.metadata.get("WaveLength"))
         self.dummy = self.metadata.get("Dummy", self.dummy)
         self.delta_dummy = self.metadata.get("DDummy", self.delta_dummy)
-        # read detector distortion distortion_filename
-
-        # self.log_warning("Metadata: " + str(self.metadata))
-        # self.log_warning("forai: " + str(forai))
 
         self.ai = AzimuthalIntegrator()
         self.ai.setSPD(**forai)
@@ -303,7 +302,7 @@ Possible values for to_save:
 
         self.log_warning("AI:%s" % self.ai)
 
-        self.cache_ai = CacheKey(str(self.ai), self.mask_filename, shape)
+        self.cache_ai = CacheKey(str(self.ai), shape)
 
         if self.cache_ai in self.cache:
             self.ai._cached_array.update(self.cache.get(self.cache_ai))
@@ -320,9 +319,13 @@ Possible values for to_save:
             self.polarization = self.ai.polarization(factor=self.input.get("polarization_factor"),
                                                      axis_offset=self.input.get("polarization_axis_offset", 0))
         
-        mask = numpy.empty(shape, dtype=bool)
+        #Static mask is used for distortion correction
+        static_mask = self.ai.detector.mask
+        if static_mask is None:
+            static_mask = numpy.zeros(shape, dtype=bool)
+        
         # Read and Process dark
-        if type(self.dark_filename) in StringTypes and os.path.exists(self.dark_filename):
+        if isinstance(self.dark_filename, StringTypes) and os.path.exists(self.dark_filename):
             dark = self.read_data(self.dark_filename)
             if dark.ndim == 3:
                 method = self.input.get("dark_filter")
@@ -380,19 +383,22 @@ Possible values for to_save:
             if numpy.isscalar(self.flat):
                 self.flat = numpy.ones(shape) * self.flat
             self.ai.detector.set_flatfield(self.flat)
+            #extend the static mask with dummy pixels from the flat-field image
             if dummy:
                 if ddummy:
-                    numpy.logical_or(mask, abs(self.flat - dummy) <= ddummy, out=mask)
+                    numpy.logical_or(static_mask, abs(self.flat - dummy) <= ddummy, out=static_mask)
                 else:
-                    numpy.logical_or(mask, self.flat == dummy, out=mask)
+                    numpy.logical_or(static_mask, self.flat == dummy, out=static_mask)
+            self.distortion_mask = static_mask
+        self.ai.detector.mask = self.distortion_mask
 
-
-        # Read and Process mask
+        # Read and Process mask for integration
+        self.mask_filename = self.input.get("regrouping_mask_filename")
         if isinstance(self.mask_filename, StringTypes) and os.path.exists(self.mask_filename):
             try:
                 mask_fabio = fabio.open(self.mask_filename)
             except:
-                lmask = self.read_data(self.mask_filename) != 0
+                local_mask = self.read_data(self.mask_filename) != 0
             else:  # this is very ID02 specific !!!!
                 dummy = mask_fabio.header.get("Dummy")
                 try:
@@ -407,28 +413,26 @@ Possible values for to_save:
                     self.log_error("DDummy value in mask is unconsitent %s" % ddummy)
                     ddummy = 0
                 if ddummy:
-                    lmask = abs(mask_fabio.data - dummy) <= ddummy
+                    local_mask = abs(mask_fabio.data - dummy) <= ddummy
                 else:
-                    lmask = mask_fabio.data == dummy
+                    local_mask = mask_fabio.data == dummy
                 self.log_warning("found %s pixel masked out" % (mask.sum()))
                 self.dummy = dummy
                 self.delta_dummy = ddummy
-            if mask.ndim == 3:
-                lmask = pyFAI.average.average_dark(lmask, center_method="median")
-            if (lmask is not None) and (lmask.shape != shape):
-                binning = [j / i for i, j in zip(shape, lmask.shape)]
+            if local_mask.ndim == 3:
+                local_mask = pyFAI.average.average_dark(local_mask, center_method="median")
+            if (local_mask is not None) and (local_mask.shape != shape):
+                binning = [j / i for i, j in zip(shape, local_mask.shape)]
                 if tuple(binning) != (1, 1):
                     self.log_warning("Binning for mask is %s" % binning)
                     if max(binning) > 1:
                         binning = [int(i) for i in binning]
-                        lmask = pyFAI.utils.binning(lmask, binsize=binning, norm=True) > 0
+                        local_mask = pyFAI.utils.binning(local_mask, binsize=binning, norm=True) > 0
                     else:
-                        binning = [i // j for i, j in zip(shape, lmask.shape)]
-                        lmask = pyFAI.utils.unBinning(lmask, binsize=binning, norm=False) > 0
-            numpy.logical_or(mask, lmask, out=mask)
-            # nota: this is assigned to the detector !
-        self.ai.detector.mask = mask
-
+                        binning = [i // j for i, j in zip(shape, local_mask.shape)]
+                        local_mask = pyFAI.utils.unBinning(local_mask, binsize=binning, norm=False) > 0
+            self.regrouping_mask = numpy.logical_or(self.distortion_mask, local_mask)
+        self.ai.detector.mask = self.regrouping_mask
         # bug specific to ID02, dummy=0 means no dummy !
         if self.dummy == 0:
             self.dummy = None
@@ -486,7 +490,9 @@ Possible values for to_save:
             return self.parse_image_file_old()
         elif creator.startswith("LIMA-"):
             version = creator.split("-")[1]
-            # maybe in the future, test on version of lima
+            #test on version of lima
+            if version<"1.":
+                self.log_warning("Suspicious version of LIMA: %s"%creator)
             return self.parse_image_file_lima()
 
     def parse_image_file_old(self):
@@ -804,7 +810,7 @@ Possible values for to_save:
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
                                           detector=self.ai.detector,
-                                          mask=self.detector.mask, 
+                                          mask=self.distortion_mask, 
                                           device="gpu",
                                           method="csr"
                                           )
