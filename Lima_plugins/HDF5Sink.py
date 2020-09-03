@@ -11,7 +11,7 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "GPLv3+"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "28/03/2014"
+__date__ = "03/09/2020"
 __status__ = "beta"
 __docformat__ = 'restructuredtext'
 
@@ -182,7 +182,7 @@ class HDF5Sink(Core.Processlib.SinkTaskBase):
         
         @param config_dict: dict or json-serialized dict or file containing this dict.
         """
-        self._writer.setConfig(jsonconfig)
+        self._writer.setConfig(config_dict)
 
 class HDF5Writer(object):
     """
