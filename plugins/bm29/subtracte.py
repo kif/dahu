@@ -324,7 +324,7 @@ class SubtractBuffer(Plugin):
         ai2_std_ds.attrs["interpretation"] ="spectrum"
         ai2_int_ds.attrs["units"] = "arbitrary"
     
-        if self.ispyb.server:
+        if self.ispyb.url and parse_url(self.ispyb.url).host:
             self.to_pyarch["subtracted"] = res3
     
     # Process 4: Guinier analysis
@@ -405,7 +405,7 @@ class SubtractBuffer(Plugin):
                 guinier_autorg["qₘₐₓ·Rg"] =  autorg.Rg * res3.radial[autorg.end_point - 1] 
 
         guinier = guinier or autorg or gpa #take one of the fits
-        if self.ispyb.server:
+        if self.ispyb.url and parse_url(self.ispyb.url).host:
             self.to_pyarch["guinier"] = guinier
             
     # Stage #4 Guinier plot generation:
