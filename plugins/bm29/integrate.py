@@ -17,6 +17,7 @@ __version__ = "0.2.0"
 
 import os
 import json
+from urllib3.util import import parse_url
 from collections import namedtuple
 from dahu.plugin import Plugin
 from dahu.factory import register
@@ -506,6 +507,6 @@ class IntegrateMultiframe(Plugin):
         return AverageResult(intensity_avg, intensity_std)
     
     def send_to_ispyb(self):
-        if self.ispyb.url:
+        if self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
             ispyb.send_averaged(self.to_pyarch)
