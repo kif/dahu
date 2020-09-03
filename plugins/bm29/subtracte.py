@@ -19,6 +19,7 @@ import os
 import json
 from math import log, pi
 from collections import namedtuple
+from urllib3.util import parse_url
 from dahu.plugin import Plugin
 from dahu.utils import fully_qualified_name
 import logging
@@ -39,6 +40,7 @@ from scipy.optimize import minimize
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     Sample
+from .ispyb import IspybConnector
 
 NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I poni mask energy polarization method signal2d error2d sample")
 
@@ -48,7 +50,7 @@ class SubtractBuffer(Plugin):
     
         Typical JSON file:
     {
-      "buffers_files": ["buffer_001.h5", "buffer_002.h5"],
+      "buffer_files": ["buffer_001.h5", "buffer_002.h5"],
       "sample_file": "sample.h5",
       "output_file": "subtracted.h5"
       "fidelity":= 0.001,
@@ -235,7 +237,7 @@ class SubtractBuffer(Plugin):
         buffer_average = numpy.mean([self.buffer_juices[i].signal2d for i in range(*tomerge)], axis=0)
         buffer_variance = numpy.sum([(self.buffer_juices[i].error2d)**2 for i in range(*tomerge)], axis=0) / (tomerge[1] - tomerge[0])**2
         sample_average = self.sample_juice.signal2d
-        sample_variance = sample_juice.error2d**2
+        sample_variance = self.sample_juice.error2d**2
         sub_average = self.sample_juice.signal2d - buffer_average
         sub_variance = sample_variance + buffer_variance
         sub_std = numpy.sqrt(sub_variance)
@@ -253,7 +255,7 @@ class SubtractBuffer(Plugin):
         int_std_ds.attrs["method"] = "quadratic sum of sample error and buffer errors"
         average_grp.attrs["default"] = average_data.name
 
-        if self.ispyb.server:
+        if self.ispyb.url and parse_url(self.ispyb.url).host:
             #we need to provide the sample record and the best_buffer so let's generate it
             #This is a waist of time & resources ... 
             res1 = ai._integrate1d_ng(sample_average, key_cache.npt, 
