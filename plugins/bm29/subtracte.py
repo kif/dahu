@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "01/09/2020"
+__date__ = "03/09/2020"
 __status__ = "development"
 __version__ = "0.1.1"
 
@@ -48,10 +48,10 @@ class SubtractBuffer(Plugin):
     
         Typical JSON file:
     {
-      "buffers_files" = ["buffer_001.h5", "buffer_002.h5"],
-      "sample_file" = "sample.h5",
-      "output_file" = "subtracted.h5"
-      "fidelity" = 0.001,
+      "buffers_files": ["buffer_001.h5", "buffer_002.h5"],
+      "sample_file": "sample.h5",
+      "output_file": "subtracted.h5"
+      "fidelity":= 0.001,
       "ispyb": {
         "url": "http://ispyb.esrf.fr:1234",
         "login": "mx1234",
@@ -60,7 +60,8 @@ class SubtractBuffer(Plugin):
         "measurement_id": -1,
         "collection_id": -1
        },
-      "wait_for" = [jobid_buffer1, jobid_buffer2, jobid_sample]
+      "wait_for": [jobid_buffer1, jobid_buffer2, jobid_sample],
+      "plugin_name": "bm29.subtractbuffer"
     } 
     """
     def __init__(self):
