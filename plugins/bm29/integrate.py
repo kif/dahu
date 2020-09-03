@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22/07/2020"
+__date__ = "03/09/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -58,7 +58,7 @@ class IntegrateMultiframe(Plugin):
       "output_file": "/tmp/file1.h5", # optional
       "max_frame": 1000,
       "frame_ids": [101, 102],
-      "timestamps": [1580985678.47, 1580985678.58],
+      "time_stamps": [1580985678.47, 1580985678.58],
       "monitor_values": [1, 1.1],
       "storage_ring_current": [199.6, 199.5]
       "exposure_time": 0.1, 
@@ -263,8 +263,8 @@ class IntegrateMultiframe(Plugin):
         mask_ds.attrs["filename"] = self.input.get("mask_file")
         ct_ds = detector_grp.create_dataset("count_time",data=self.input.get("exposure_time"))
         ct_ds.attrs["units"] = "s"
-        time_ds = detector_grp.create_dataset("timestamps",
-                                              data=numpy.ascontiguousarray(self.input.get("timestamps", []), dtype=numpy.float64))
+        time_ds = detector_grp.create_dataset("time_stamps",
+                                              data=numpy.ascontiguousarray(self.input.get("time_stamps", []), dtype=numpy.float64))
         time_ds.attrs["interpretation"] = "spectrum"
         if self.COPY_IMAGES:
             data = self.input_frames
@@ -297,7 +297,7 @@ class IntegrateMultiframe(Plugin):
         
         # few hard links
         measurement_grp["diode"] = diode_ds
-        measurement_grp["timestamps"] = time_ds
+        measurement_grp["time_stamps"] = time_ds
         measurement_grp["ring_curent"] = current_ds
     
     # Process 1: pyFAI
