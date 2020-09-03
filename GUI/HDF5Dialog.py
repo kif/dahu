@@ -33,7 +33,7 @@ __author__ = u"Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "GPLv3+"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "23/07/2020"
+__date__ = "03/09/2020"
 __status__ = "development"
 
 import logging

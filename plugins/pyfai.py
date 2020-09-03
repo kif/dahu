@@ -2,15 +2,14 @@
 # -*- coding: utf-8 -*-
 
 """
-Data Analysis Highly tailored fror Upbl09a 
+Demo plugin for pyFAI 
 """
 
-from __future__ import with_statement, print_function
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "23/07/2020"
+__date__ = "03/09/2020"
 __status__ = "development"
 version = "0.3.0"
 
@@ -66,6 +65,8 @@ class PluginIntegrate(Plugin):
         Plugin.setup(self, kwargs)
         logger.debug("PluginPyFAIv1_0.setup")
         ai = pyFAI.AzimuthalIntegrator()
+        #TODO: setup the integrator from the input
+#        sdi = self.input.get("data")
 #         if sdi.geometryFit2D is not None:
 #             xsGeometry = sdi.geometryFit2D
 #             detector = self.getDetector(xsGeometry.detector)
@@ -124,7 +125,8 @@ class PluginIntegrate(Plugin):
     def process(self):
         Plugin.process(self)
         logger.debug("PluginPyFAIv1_0.process")
-#         data = EDUtilsArray.getArray(self.dataInput.input)
+        #TODO: read the actual data
+        data = 0#EDUtilsArray.getArray(self.dataInput.input)
         if self.dataInput.saxsWaxs and self.dataInput.saxsWaxs.value.lower().startswith("s"):
             out = self.ai.saxs(self.data,
                                nbPt=self.nbPt,
