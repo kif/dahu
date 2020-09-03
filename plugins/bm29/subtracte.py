@@ -646,7 +646,9 @@ class SubtractBuffer(Plugin):
         return NexusJuice(filename, h5path, npt, unit, q, I, poni, mask, energy, polarization, method, image2d, error2d, sample)
 
     def send_to_ispyb(self):
-        if self.ispyb.url:
+        if self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(**self.ispyb)
             ispyb.send_subtracted(self.to_pyarch)
+        else:
+            self.log_warning("Not sending to ISPyB: no valid URL %s"%self.ispyb.url)
 
