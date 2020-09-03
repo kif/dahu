@@ -804,6 +804,7 @@ Possible values for to_save:
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
                                           detector=self.ai.detector,
+                                          mask=self.detector.mask, 
                                           device="gpu",
                                           method="csr"
                                           )
