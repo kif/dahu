@@ -17,7 +17,7 @@ __version__ = "0.2.0"
 
 import os
 import json
-from urllib3.util import import parse_url
+from urllib3.util import parse_url
 from collections import namedtuple
 from dahu.plugin import Plugin
 from dahu.factory import register
