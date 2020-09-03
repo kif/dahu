@@ -510,3 +510,5 @@ class IntegrateMultiframe(Plugin):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
             ispyb.send_averaged(self.to_pyarch)
+        else:
+            self.log_warning("Not sending to ISPyB: no valid URL %s"%self.ispyb.url)
