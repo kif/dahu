@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "11/04/2018"
+__date__ = "03/09/2020"
 __status__ = "development"
 version = "0.4.0"
 
@@ -30,14 +30,13 @@ from threading import Thread, Event
 
 logger = logging.getLogger("id15")
 
-try:
-    from queue import Queue
-except:
-    from Queue import Queue
+from queue import Queue
 try:
     import pyFAI
 except ImportError:
     logger.error("Failed to import PyFAI: download and install it from pypi")
+else:
+    import pyFAI.io
 try:
     import fabio
 except ImportError:

@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/06/2020"
+__date__ = "03/09/2020"
 __status__ = "development"
 version = "0.0.1"
 
@@ -114,13 +114,13 @@ class IspybConnector:
                                            str(gnom.Dmax_avg),
                                            str(gnom.logP_avg),
                                            str(data["volume"]),
-                                            str(sampleAvgOneDimensionalFiles),
-                                            str(bufferAvgOneDimensionalFiles),
-                                            self.averageSample,                     #sampleAverageFilePath,
-                                            self.bestBuffer,                        #bufferAverageFilePath,
-                                           sub,                #subtractedFilePath,
-                                            self.scatterPlot,                       #experimentalDataPlotFilePath,
-                                            self.densityPlot,                       #densityPlotFilePath,
-                                            self.guinierPlot,                       #guinierPlotFilePath,
-                                            self.kratkyPlot,                        #kratkyPlotFilePath,
-                                            self.gnomFile)                          #gnomOutputFilePath
+                                           str(sampleAvgOneDimensionalFiles),
+                                           str(bufferAvgOneDimensionalFiles),
+                                           self.averageSample,                     #sampleAverageFilePath,
+                                           self.bestBuffer,                        #bufferAverageFilePath,
+                                           sub,                                    #subtractedFilePath,
+                                           self.scatterPlot,                       #experimentalDataPlotFilePath,
+                                           self.densityPlot,                       #densityPlotFilePath,
+                                           self.guinierPlot,                       #guinierPlotFilePath,
+                                           self.kratkyPlot,                        #kratkyPlotFilePath,
+                                           self.gnomFile)                          #gnomOutputFilePath

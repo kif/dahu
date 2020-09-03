@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "07/02/2020"
+__date__ = "01/09/2020"
 __status__ = "development"
 
 import os
@@ -32,8 +32,9 @@ class TestJob(unittest.TestCase):
             logger.error(os.linesep.join(j.output_data["error"]))
 
         logger.info(j.input_data)
-        assert self.called
-        assert j.output_data["result"] == 25
+        self.assert_(self.called)
+        print(j.output_data)
+        self.assertEqual(j.output_data["result"], 25, "result OK")
 
     def callback(self, *args, **kwargs):
         logger.info("callback actually called with  arguments %s and kwargs %s" % (args, kwargs))

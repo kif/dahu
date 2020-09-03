@@ -8,14 +8,11 @@ Contains the Job class which handles jobs.
 A static part of the class contains statistics of the class
 """
 
-from __future__ import with_statement, print_function, absolute_import, division
-
-
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/07/2020"
+__date__ = "01/09/2020"
 __status__ = "production"
 
 
@@ -73,6 +70,7 @@ class Job(Thread):
     start is overridden with a call to the factory to instanciate the plugin
 
     """
+    STATE_INEXISTANT = "inexistant"
     STATE_UNINITIALIZED = "uninitialized"
     STATE_STARTING = "starting"
     STATE_RUNNING = "running"
@@ -395,15 +393,15 @@ class Job(Thread):
         :param timeout: timeout in second to wait
         :return: status of the job
         """
-        logger.debug("Job.synchronize_job class method for id=%s (timeout=%s)" % (jobId, timeout))
+        logger.debug("Job.synchronize_job class method for id=%s (timeout=%s)", jobId, timeout)
         job = cls.getJobFromID(jobId)
 
         if job is None:
-            res = "No such jobid %s" % jobId
+            res = cls.STATE_INEXISTANT
         else:
             job.join(timeout)
             res = job.status
-        logger.debug("Job.synchronize_job(jobid=%s) ==>  %s" % (jobId, res))
+        logger.debug("Job.synchronize_job(jobid=%s) ==>  %s", jobId, res)
         return res
 
     @classmethod
