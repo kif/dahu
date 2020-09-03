@@ -33,7 +33,7 @@ __author__ = u"Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "GPLv3+"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "15/07/2014"
+__date__ = "03/09/2020"
 __status__ = "development"
 
 import logging
@@ -102,6 +102,6 @@ class HDF5Dialog(QtGui.QDialog):
 if __name__ == "__main__":
     app = QtGui.QApplication(sys.argv)
     f = QtGui.QFileDialog.getOpenFileName()
-    print f
+    print(f)
     d = HDF5Dialog.getPath(f)
-    print d
+    print(d)

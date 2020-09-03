@@ -85,7 +85,7 @@ def process(args):
         dico["job_id"] = idx
         plugin = dahu.factory.plugin_factory(plugin_name)
         #Drop some keys from input specific for reprocess
-        for ignore in plugin.REPROCESS_IGNORE:
+        for ignore in getattr(plugin, "REPROCESS_IGNORE", []):
             if ignore in dico:
                 dico.pop(ignore, None)
         start_time = time.time()

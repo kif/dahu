@@ -5,13 +5,11 @@
  
 """
 
-from __future__ import with_statement, print_function
-
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "08/03/2019"
+__date__ = "03/09/2020"
 __status__ = "development"
 version = "0.5.0"
 
@@ -30,7 +28,7 @@ logger = logging.getLogger("id15v2")
 
 try:
     import fabio
-    import pyFAI
+    import pyFAI, pyFAI.io
     from pyFAI import azimuthalIntegrator
     from pyFAI.method_registry import IntegrationMethod
     from silx.opencl.codec.byte_offset import ByteOffset
@@ -156,7 +154,7 @@ class IntegrateManyFrames(Plugin):
             integration_dim = 1
         else:
             integration_dim = 2
-        if isinstance(method, (str, unicode)):
+        if isinstance(method, (str, bytes)):
             self.method = IntegrationMethod.select_old_method(integration_dim, method)
         else:
             self.method = IntegrationMethod.select_one_available(method, dim=integration_dim, degradable=True)
