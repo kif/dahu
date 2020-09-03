@@ -20,7 +20,7 @@ data = { "image_file": "/nobackup/lid02gpu11/FRELON/test_laurent_saxs_0000.h5",
 #              "do_dark":false,
 #              "do_flat":false,
               }
-print dahu.initPlugin(plugin)
+print(dahu.initPlugin(plugin))
 pid = dahu.startJob([plugin, json.dumps(data)])
 print("%s id: %i" % (plugin, pid))
 print("Input: %s" % dahu.getJobInput(pid))

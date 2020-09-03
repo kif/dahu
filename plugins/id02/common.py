@@ -6,11 +6,10 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/03/2020"
+__date__ = "03/09/2020"
 __status__ = "development"
 __version__ = "1.0.0"
 
-import sys
 import logging
 import h5py
 import pyFAI.io
@@ -30,10 +29,7 @@ try:
 except:
     pass
 
-if sys.version_info[0] < 3:
-    StringTypes = (str, unicode)
-else:
-    StringTypes = (str, bytes)
+StringTypes = (str, bytes)
 
 """ Remaining code from former single file plugin 
 #!/usr/bin/env python
