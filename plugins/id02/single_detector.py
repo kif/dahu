@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/09/2020"
+__date__ = "04/09/2020"
 __status__ = "development"
 __version__ = "0.9.1"
 
@@ -416,7 +416,6 @@ Possible values for to_save:
                     local_mask = abs(mask_fabio.data - dummy) <= ddummy
                 else:
                     local_mask = mask_fabio.data == dummy
-                self.log_warning("found %s pixel masked out" % (mask.sum()))
                 self.dummy = dummy
                 self.delta_dummy = ddummy
             if local_mask.ndim == 3:
@@ -432,6 +431,7 @@ Possible values for to_save:
                         binning = [i // j for i, j in zip(shape, local_mask.shape)]
                         local_mask = pyFAI.utils.unBinning(local_mask, binsize=binning, norm=False) > 0
             self.regrouping_mask = numpy.logical_or(self.distortion_mask, local_mask)
+            self.log_warning("found %s pixel masked out" % (local_mask.sum()))
         self.ai.detector.mask = self.regrouping_mask
         # bug specific to ID02, dummy=0 means no dummy !
         if self.dummy == 0:
