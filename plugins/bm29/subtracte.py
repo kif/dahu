@@ -327,6 +327,10 @@ class SubtractBuffer(Plugin):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             self.to_pyarch["subtracted"] = res3
     
+        #Finally declare the default entry and default dataset ...
+        #overlay the BIFT fitted data on top of the scattering curve 
+        entry_grp.attrs["default"] = ai2_data.name
+
     # Process 4: Guinier analysis
         guinier_grp = nxs.new_class(entry_grp, "4_Guinier_analysis", "NXprocess")
         guinier_grp["sequence_index"] = 4
@@ -601,9 +605,6 @@ class SubtractBuffer(Plugin):
             bift_ds.attrs["interpretation"] = "spectrum"
             ai2_data.attrs["auxiliary_signals"] = "BIFT"
             bift_grp.attrs["default"] = bift_data.name
-        #Finally declare the default entry and default dataset ...
-        #overlay the BIFT fitted data on top of the scattering curve 
-        entry_grp.attrs["default"] = ai2_data.name
         
     @staticmethod
     def read_nexus(filename):
