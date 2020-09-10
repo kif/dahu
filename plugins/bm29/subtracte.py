@@ -409,7 +409,19 @@ class SubtractBuffer(Plugin):
                 guinier_autorg["qₘᵢₙ·Rg"] =  autorg.Rg * res3.radial[autorg.start_point]
                 guinier_autorg["qₘₐₓ·Rg"] =  autorg.Rg * res3.radial[autorg.end_point - 1] 
 
-        guinier = guinier or autorg or gpa #take one of the fits
+        #take one of the fits
+        if guinier:
+            guinier_data["source"] = "auto_guinier"
+        elif autorg:
+            guinier = autorg
+            guinier_data["source"] = "autorg"
+        elif gpa:
+            guinier = gpa
+            guinier_data["source"] = "gpa"
+        else:
+            guinier = None
+            guinier_data["source"] = "None"
+
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             self.to_pyarch["guinier"] = guinier
             
