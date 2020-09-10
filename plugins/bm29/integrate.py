@@ -248,6 +248,9 @@ class IntegrateMultiframe(Plugin):
         time_ds = detector_grp.create_dataset("time_stamps",
                                               data=numpy.ascontiguousarray(self.input.get("time_stamps", []), dtype=numpy.float64))
         time_ds.attrs["interpretation"] = "spectrum"
+        frame_ds = detector_grp.create_dataset("frame_ids",
+                                              data=numpy.ascontiguousarray(self.input.get("frame_ids", []), dtype=numpy.uint32))
+        frame_ds.attrs["interpretation"] = "spectrum"
         if self.COPY_IMAGES:
             data = self.input_frames
             frames_ds = detector_grp.create_dataset("frames",
