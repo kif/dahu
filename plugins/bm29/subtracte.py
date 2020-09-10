@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/09/2020"
+__date__ = "10/09/2020"
 __status__ = "development"
 __version__ = "0.1.1"
 
@@ -573,7 +573,7 @@ class SubtractBuffer(Plugin):
             stats = bo.calc_stats()
             bift_grp["alpha"] = stats.alpha_avg
             bift_grp["alpha_error"] = stats.alpha_std
-            bift_grp["Dmax"]=stats.Dmax_avg
+            self.Dmax=bift_grp["Dmax"]=stats.Dmax_avg
             bift_grp["Dmax_error"]=stats.Dmax_std
             bift_grp["S0"]=stats.regularization_avg
             bift_grp["S0_error"]=stats.regularization_std
