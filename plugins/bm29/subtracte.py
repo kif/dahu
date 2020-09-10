@@ -11,17 +11,16 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/06/2020"
+__date__ = "03/09/2020"
 __status__ = "development"
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 import os
 import json
 from math import log, pi
 from collections import namedtuple
+from urllib3.util import parse_url
 from dahu.plugin import Plugin
-from dahu.factory import register
-from dahu.cache import DataCache
 from dahu.utils import fully_qualified_name
 import logging
 logger = logging.getLogger("bm29.subtract")
@@ -32,17 +31,16 @@ except ImportError:
     logger.error("Numexpr is not installed, falling back on numpy's implementations")
     numexpr = None
 import h5py
-import fabio
 import pyFAI, pyFAI.azimuthalIntegrator
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap, freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier
 from freesas.bift import BIFT
 from scipy.optimize import minimize
-from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     Sample
+from .ispyb import IspybConnector
 
 NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I poni mask energy polarization method signal2d error2d sample")
 
@@ -52,10 +50,10 @@ class SubtractBuffer(Plugin):
     
         Typical JSON file:
     {
-      "buffers_files" = ["buffer_001.h5", "buffer_002.h5"],
-      "sample_file" = "sample.h5",
-      "output_file" = "subtracted.h5"
-      "fidelity" = 0.001,
+      "buffer_files": ["buffer_001.h5", "buffer_002.h5"],
+      "sample_file": "sample.h5",
+      "output_file": "subtracted.h5"
+      "fidelity":= 0.001,
       "ispyb": {
         "url": "http://ispyb.esrf.fr:1234",
         "login": "mx1234",
@@ -63,10 +61,9 @@ class SubtractBuffer(Plugin):
         "pyarch": "/data/pyarch/mx1234/sample", 
         "measurement_id": -1,
         "collection_id": -1
-       } 
-      # TODO ... "wait_for" = ["job1", "job2"]
-
-      
+       },
+      "wait_for": [jobid_buffer1, jobid_buffer2, jobid_sample],
+      "plugin_name": "bm29.subtractbuffer"
     } 
     """
     def __init__(self):
@@ -88,6 +85,10 @@ class SubtractBuffer(Plugin):
     def setup(self, kwargs=None):
         logger.debug("SubtractBuffer.setup")
         Plugin.setup(self, kwargs)
+        
+        for job_id in self.input.get("wait_for", []):
+            self.wait_for(job_id)
+        
         self.sample_file = self.input.get("sample_file")
         if self.sample_file is None:
             self.log_error("No sample file provided", do_raise=True)
@@ -236,7 +237,7 @@ class SubtractBuffer(Plugin):
         buffer_average = numpy.mean([self.buffer_juices[i].signal2d for i in range(*tomerge)], axis=0)
         buffer_variance = numpy.sum([(self.buffer_juices[i].error2d)**2 for i in range(*tomerge)], axis=0) / (tomerge[1] - tomerge[0])**2
         sample_average = self.sample_juice.signal2d
-        sample_variance = sample_juice.error2d**2
+        sample_variance = self.sample_juice.error2d**2
         sub_average = self.sample_juice.signal2d - buffer_average
         sub_variance = sample_variance + buffer_variance
         sub_std = numpy.sqrt(sub_variance)
@@ -254,7 +255,7 @@ class SubtractBuffer(Plugin):
         int_std_ds.attrs["method"] = "quadratic sum of sample error and buffer errors"
         average_grp.attrs["default"] = average_data.name
 
-        if self.ispyb.server:
+        if self.ispyb.url and parse_url(self.ispyb.url).host:
             #we need to provide the sample record and the best_buffer so let's generate it
             #This is a waist of time & resources ... 
             res1 = ai._integrate1d_ng(sample_average, key_cache.npt, 
@@ -323,7 +324,7 @@ class SubtractBuffer(Plugin):
         ai2_std_ds.attrs["interpretation"] ="spectrum"
         ai2_int_ds.attrs["units"] = "arbitrary"
     
-        if self.ispyb.server:
+        if self.ispyb.url and parse_url(self.ispyb.url).host:
             self.to_pyarch["subtracted"] = res3
     
     # Process 4: Guinier analysis
@@ -404,7 +405,7 @@ class SubtractBuffer(Plugin):
                 guinier_autorg["qₘₐₓ·Rg"] =  autorg.Rg * res3.radial[autorg.end_point - 1] 
 
         guinier = guinier or autorg or gpa #take one of the fits
-        if self.ispyb.server:
+        if self.ispyb.url and parse_url(self.ispyb.url).host:
             self.to_pyarch["guinier"] = guinier
             
     # Stage #4 Guinier plot generation:
@@ -645,7 +646,9 @@ class SubtractBuffer(Plugin):
         return NexusJuice(filename, h5path, npt, unit, q, I, poni, mask, energy, polarization, method, image2d, error2d, sample)
 
     def send_to_ispyb(self):
-        if self.ispyb.url:
+        if self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(**self.ispyb)
             ispyb.send_subtracted(self.to_pyarch)
+        else:
+            self.log_warning("Not sending to ISPyB: no valid URL %s"%self.ispyb.url)
 
