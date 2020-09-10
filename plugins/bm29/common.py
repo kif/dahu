@@ -153,7 +153,7 @@ def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
 
 def create_nexus_sample(nxs, entry, sample):
     "Create a NXsample inside the NXentry"
-    sample_grp = nxs.new_class(entry_grp, sample.name, "NXsample")
+    sample_grp = nxs.new_class(entry, sample.name, "NXsample")
     if sample.description is not None:
         sample_grp["description"] = sample.description
     if sample.concentration is not None:
