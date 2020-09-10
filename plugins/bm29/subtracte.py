@@ -172,7 +172,7 @@ class SubtractBuffer(Plugin):
 
         for idx, buffer_file in enumerate(self.buffer_files):
             buffer_juice = self.validate_buffer(buffer_file)
-            if buffer_file is not None:
+            if buffer_juice is not None:
                 rel_path = os.path.relpath(os.path.abspath(buffer_file), os.path.dirname(os.path.abspath(self.output_file)))
                 input_grp["buffer_%i"%idx] = h5py.ExternalLink(rel_path, buffer_juice.h5path)     
                 self.buffer_juices.append(buffer_juice)
