@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/09/2020"
+__date__ = "10/09/2020"
 __status__ = "development"
 __version__ = "0.1.1"
 
@@ -39,7 +39,7 @@ from freesas.bift import BIFT
 from scipy.optimize import minimize
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
-                    Sample
+                    Sample, create_nexus_sample
 from .ispyb import IspybConnector
 
 NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I poni mask energy polarization method signal2d error2d sample")
@@ -172,10 +172,13 @@ class SubtractBuffer(Plugin):
 
         for idx, buffer_file in enumerate(self.buffer_files):
             buffer_juice = self.validate_buffer(buffer_file)
-            if buffer_file is not None:
+            if buffer_juice is not None:
                 rel_path = os.path.relpath(os.path.abspath(buffer_file), os.path.dirname(os.path.abspath(self.output_file)))
                 input_grp["buffer_%i"%idx] = h5py.ExternalLink(rel_path, buffer_juice.h5path)     
                 self.buffer_juices.append(buffer_juice)
+
+        #Sample: outsourced !
+        create_nexus_sample(nxs, entry_grp, self.sample_juice.sample)
         
     #Process 1: CorMap
         cormap_grp = nxs.new_class(entry_grp, "1_correlation_mapping", "NXprocess")
@@ -255,6 +258,9 @@ class SubtractBuffer(Plugin):
         int_std_ds.attrs["method"] = "quadratic sum of sample error and buffer errors"
         average_grp.attrs["default"] = average_data.name
 
+        key_cache = KeyCache(self.sample_juice.npt, self.sample_juice.unit, self.sample_juice.poni, self.sample_juice.mask, self.sample_juice.energy)
+        ai = get_integrator(key_cache)
+        
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             #we need to provide the sample record and the best_buffer so let's generate it
             #This is a waist of time & resources ... 
@@ -280,8 +286,6 @@ class SubtractBuffer(Plugin):
         ai2_grp["program"] = "pyFAI"
         ai2_grp["version"] = pyFAI.version
         ai2_grp["date"] = get_isotime()
-        key_cache = KeyCache(self.sample_juice.npt, self.sample_juice.unit, self.sample_juice.poni, self.sample_juice.mask, self.sample_juice.energy)
-        ai = get_integrator(key_cache)
         radial_unit, unit_name = str(key_cache.unit).split("_", 1)
         ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
         ai2_data.attrs["SILX_style"] = SAXS_STYLE
@@ -408,7 +412,19 @@ class SubtractBuffer(Plugin):
                 guinier_autorg["qₘᵢₙ·Rg"] =  autorg.Rg * res3.radial[autorg.start_point]
                 guinier_autorg["qₘₐₓ·Rg"] =  autorg.Rg * res3.radial[autorg.end_point - 1] 
 
-        guinier = guinier or autorg or gpa #take one of the fits
+        #take one of the fits
+        if guinier:
+            guinier_data["source"] = "auto_guinier"
+        elif autorg:
+            guinier = autorg
+            guinier_data["source"] = "autorg"
+        elif gpa:
+            guinier = gpa
+            guinier_data["source"] = "gpa"
+        else:
+            guinier = None
+            guinier_data["source"] = "None"
+
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             self.to_pyarch["guinier"] = guinier
             
@@ -513,13 +529,11 @@ class SubtractBuffer(Plugin):
         sigma_mass_ds = rti_data.create_dataset("mass_error", data=rti.sigma_mass)
         sigma_mass_ds.attrs["unit"] = "kDa"
         
-        for k,v in rti._asdict().items():
-            rti_data[k] = v
         self.Vc = rti.Vc
         self.mass = rti.mass
         
         self.volume = freesas.invariants.calc_Porod(sasm, guinier)
-        volume_ds = rti_data.create_dataset("volume", data=v)
+        volume_ds = rti_data.create_dataset("volume", data=self.volume)
         volume_ds.attrs["unit"] = "nm³"
         volume_ds.attrs["formula"] = "Porod: V = 2*π²I₀²/(sum_q I(q)q² dq)"
         
@@ -574,7 +588,7 @@ class SubtractBuffer(Plugin):
             stats = bo.calc_stats()
             bift_grp["alpha"] = stats.alpha_avg
             bift_grp["alpha_error"] = stats.alpha_std
-            bift_grp["Dmax"]=stats.Dmax_avg
+            self.Dmax=bift_grp["Dmax"]=stats.Dmax_avg
             bift_grp["Dmax_error"]=stats.Dmax_std
             bift_grp["S0"]=stats.regularization_avg
             bift_grp["S0_error"]=stats.regularization_std
@@ -636,12 +650,13 @@ class SubtractBuffer(Plugin):
             #Read the sample description:
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
             sample_name = sample_grp.name
-            buffer = sample_grp.get("buffer", "")
-            concentration = sample_grp.get("concentration")
-            description = sample_grp.get("description", "")
-            hplc = sample_grp.get("hplc")
-            temperature = sample_grp.get("temperature")
-            temperature_env = sample_grp.get("temperature_env")
+            
+            buffer = sample_grp["buffer"][()] if "buffer" in sample_grp else ""
+            concentration = sample_grp["concentration"][()] if "concentration" in sample_grp else ""
+            description = sample_grp["description"][()] if "description" in sample_grp else ""
+            hplc = sample_grp["hplc"][()] if "hplc" in sample_grp else ""
+            temperature = sample_grp["temperature"][()] if "temperature" in sample_grp else ""
+            temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
             sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
             
         return NexusJuice(filename, h5path, npt, unit, q, I, poni, mask, energy, polarization, method, image2d, error2d, sample)
