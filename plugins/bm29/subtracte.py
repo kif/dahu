@@ -650,12 +650,12 @@ class SubtractBuffer(Plugin):
             #Read the sample description:
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
             sample_name = sample_grp.name
-            buffer = sample_grp.get("buffer", "")
-            concentration = sample_grp.get("concentration")
-            description = sample_grp.get("description", "")
-            hplc = sample_grp.get("hplc")
-            temperature = sample_grp.get("temperature")
-            temperature_env = sample_grp.get("temperature_env")
+            buffer = sample_grp.get("buffer", "")[()]
+            concentration = sample_grp.get("concentration")[()]
+            description = sample_grp.get("description", "")[()]
+            hplc = sample_grp.get("hplc")[()]
+            temperature = sample_grp.get("temperature")[()]
+            temperature_env = sample_grp.get("temperature_env")[()]
             sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
             
         return NexusJuice(filename, h5path, npt, unit, q, I, poni, mask, energy, polarization, method, image2d, error2d, sample)
