@@ -255,6 +255,9 @@ class SubtractBuffer(Plugin):
         int_std_ds.attrs["method"] = "quadratic sum of sample error and buffer errors"
         average_grp.attrs["default"] = average_data.name
 
+        key_cache = KeyCache(self.sample_juice.npt, self.sample_juice.unit, self.sample_juice.poni, self.sample_juice.mask, self.sample_juice.energy)
+        ai = get_integrator(key_cache)
+        
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             #we need to provide the sample record and the best_buffer so let's generate it
             #This is a waist of time & resources ... 
@@ -280,8 +283,6 @@ class SubtractBuffer(Plugin):
         ai2_grp["program"] = "pyFAI"
         ai2_grp["version"] = pyFAI.version
         ai2_grp["date"] = get_isotime()
-        key_cache = KeyCache(self.sample_juice.npt, self.sample_juice.unit, self.sample_juice.poni, self.sample_juice.mask, self.sample_juice.energy)
-        ai = get_integrator(key_cache)
         radial_unit, unit_name = str(key_cache.unit).split("_", 1)
         ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
         ai2_data.attrs["SILX_style"] = SAXS_STYLE
@@ -513,13 +514,11 @@ class SubtractBuffer(Plugin):
         sigma_mass_ds = rti_data.create_dataset("mass_error", data=rti.sigma_mass)
         sigma_mass_ds.attrs["unit"] = "kDa"
         
-        for k,v in rti._asdict().items():
-            rti_data[k] = v
         self.Vc = rti.Vc
         self.mass = rti.mass
         
         self.volume = freesas.invariants.calc_Porod(sasm, guinier)
-        volume_ds = rti_data.create_dataset("volume", data=v)
+        volume_ds = rti_data.create_dataset("volume", data=self.volume)
         volume_ds.attrs["unit"] = "nm³"
         volume_ds.attrs["formula"] = "Porod: V = 2*π²I₀²/(sum_q I(q)q² dq)"
         
