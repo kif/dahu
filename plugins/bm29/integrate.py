@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/09/2020"
+__date__ = "10/09/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -37,7 +37,7 @@ import freesas, freesas.cormap
 
 #from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, get_integrator, KeyCache,\
-                    method, polarization_factor,Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE
+                    method, polarization_factor,Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, create_nexus_sample
 from .ispyb import IspybConnector
 
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
@@ -215,27 +215,8 @@ class IntegrateMultiframe(Plugin):
         current_ds.attrs["units"] = "mA"
         current_ds.attrs["interpretation"] = "spectrum"
     
-        #Sample:
-        sample_grp = nxs.new_class(entry_grp, self.sample.name, "NXsample")
-        if self.sample.description is not None:
-            sample_grp["description"] = self.sample.description
-        if self.sample.concentration is not None:
-            concentration_ds = sample_grp.create_dataset("concentration", data=self.sample.concentration)
-            concentration_ds.attrs["units"] = "mg/mL"
-        if self.sample.buffer is not None:
-            buffer_ds = sample_grp.create_dataset("buffer", data=self.sample.buffer)
-            buffer_ds.attrs["comment"] = "Buffer description"
-        if self.sample.hplc:
-            hplc_ds = sample_grp.create_dataset("hplc", data=self.sample.hplc)
-            hplc_ds.attrs["comment"] = "Conditions for HPLC experiment"
-        if self.sample.temperature is not None:
-            tempe_ds = sample_grp.create_dataset("temperature", data=self.sample.temperature)
-            tempe_ds.attrs["units"] = "°C"
-            tempe_ds.attrs["comment"] = "Exposure temperature"
-        if self.sample.temperature_env is not None:
-            tempv_ds = sample_grp.create_dataset("temperature_env", data=self.sample.temperature_env)
-            tempv_ds.attrs["units"] = "°C"
-            tempv_ds.attrs["comment"] = "Storage temperature"
+        #Sample: outsourced !
+        create_nexus_sample(self.nxs, entry_grp, self.sample)
         
         monochromator_grp = nxs.new_class(instrument_grp, "multilayer", "NXmonochromator")
         wl_ds = monochromator_grp.create_dataset("wavelength", data=numpy.float32(self.ai.wavelength*1e10))

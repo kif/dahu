@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22/07/2020"
+__date__ = "10/09/2020"
 __status__ = "development"
 version = "0.0.1"
 
@@ -149,3 +149,28 @@ def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
             sizes.append(end_j - start_j)
             res.append((start_j, end_j))
     return res[numpy.argmax(sizes)]
+
+
+def create_nexus_sample(nxs, entry, sample):
+    "Create a NXsample inside the NXentry"
+    sample_grp = nxs.new_class(entry_grp, sample.name, "NXsample")
+    if sample.description is not None:
+        sample_grp["description"] = sample.description
+    if sample.concentration is not None:
+        concentration_ds = sample_grp.create_dataset("concentration", data=sample.concentration)
+        concentration_ds.attrs["units"] = "mg/mL"
+    if sample.buffer is not None:
+        buffer_ds = sample_grp.create_dataset("buffer", data=sample.buffer)
+        buffer_ds.attrs["comment"] = "Buffer description"
+    if sample.hplc:
+        hplc_ds = sample_grp.create_dataset("hplc", data=sample.hplc)
+        hplc_ds.attrs["comment"] = "Conditions for HPLC experiment"
+    if sample.temperature is not None:
+        tempe_ds = sample_grp.create_dataset("temperature", data=sample.temperature)
+        tempe_ds.attrs["units"] = "°C"
+        tempe_ds.attrs["comment"] = "Exposure temperature"
+    if sample.temperature_env is not None:
+        tempv_ds = sample_grp.create_dataset("temperature_env", data=sample.temperature_env)
+        tempv_ds.attrs["units"] = "°C"
+        tempv_ds.attrs["comment"] = "Storage temperature"
+

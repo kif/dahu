@@ -39,7 +39,7 @@ from freesas.bift import BIFT
 from scipy.optimize import minimize
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
-                    Sample
+                    Sample, create_nexus_sample
 from .ispyb import IspybConnector
 
 NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I poni mask energy polarization method signal2d error2d sample")
@@ -176,6 +176,9 @@ class SubtractBuffer(Plugin):
                 rel_path = os.path.relpath(os.path.abspath(buffer_file), os.path.dirname(os.path.abspath(self.output_file)))
                 input_grp["buffer_%i"%idx] = h5py.ExternalLink(rel_path, buffer_juice.h5path)     
                 self.buffer_juices.append(buffer_juice)
+
+        #Sample: outsourced !
+        create_nexus_sample(nxs, entry_grp, self.sample_juice.sample)
         
     #Process 1: CorMap
         cormap_grp = nxs.new_class(entry_grp, "1_correlation_mapping", "NXprocess")
