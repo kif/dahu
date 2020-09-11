@@ -297,15 +297,6 @@ class DahuDS(PyTango.LatestDeviceImpl):
             res = Job.synchronize_job(jobId)
         return res
 
-    def setSerial(self, value):
-        """
-        Switch the execution mode between 
-        
-        @value value: serialize or not jobs running within the Tango device server
-        """
-        self._serialize = bool(value)
-    
-    def 
 
 class DahuDSClass(PyTango.DeviceClass):
     #    Class Properties
