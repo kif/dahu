@@ -975,7 +975,7 @@ Possible values for to_save:
                     for detector in nxs.get_class(instrument, "NXdetector"):
                         data = detector.get("data")
                         if isinstance(data, h5py.Group):
-                            if data.attrs.get("NX_class") == "NXdata":
+                            if data.attrs.get("NX_class") in ("NXdata", b"NXdata"):
                                 # this is an NXdata not a dataset: use the @signal
                                 data = data.get(data.attrs.get("signal"))
                         return numpy.array(data)
