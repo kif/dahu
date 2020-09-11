@@ -11,7 +11,7 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "07/02/2020"
+__date__ = "11/09/2020"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
@@ -59,6 +59,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
         self.last_failure = -1
         self.last_success = -1
         self.statistics_threads = None
+        self._serialize = False
 #         self._ncpu_sem = threading.Semaphore(multiprocessing.cpu_count())
         # start the two threads related to queues: process_job and event_queue
         t2 = threading.Thread(target=self.process_job)
@@ -98,6 +99,12 @@ class DahuDS(PyTango.LatestDeviceImpl):
 
     def read_statisticsCollected(self, attr):
         attr.set_value(self.last_stats)
+
+    def read_serialize(self, attr):
+        attr.set_value(bool(self._serialize))
+
+    def write_serialize(self, attr):
+        self._serialize = bool(attr.get_value())
 
     def getJobState(self, jobId):
         return Job.getStatusFromID(jobId)
@@ -169,6 +176,8 @@ class DahuDS(PyTango.LatestDeviceImpl):
             job = self.job_queue.get()
             job.connect_callback(self.finished_processing)
             job.start()
+            if self._serialize:
+                job.join()
 
     def finished_processing(self, job):
         """
@@ -288,6 +297,15 @@ class DahuDS(PyTango.LatestDeviceImpl):
             res = Job.synchronize_job(jobId)
         return res
 
+    def setSerial(self, value):
+        """
+        Switch the execution mode between 
+        
+        @value value: serialize or not jobs running within the Tango device server
+        """
+        self._serialize = bool(value)
+    
+    def 
 
 class DahuDSClass(PyTango.DeviceClass):
     #    Class Properties
@@ -317,6 +335,7 @@ class DahuDSClass(PyTango.DeviceClass):
         'getJobError': [[PyTango.DevLong, "job id"], [PyTango.DevString, "Error message"]],
         'listPlugins': [[PyTango.DevVoid, "nothing needed"], [PyTango.DevString, "prints the list of all plugin classes currently loaded"]],
         'waitJob': [[PyTango.DevLong, "job id"], [PyTango.DevString, "job state"]],
+        'waitJob': [[PyTango.DevLong, "job id"], [PyTango.DevString, "job state"]],
         }
 
 
@@ -334,11 +353,13 @@ class DahuDSClass(PyTango.DeviceClass):
             [[PyTango.DevString,
             PyTango.SCALAR,
             PyTango.READ]],
+        'serialize':
+            [[PyTango.DevBoolean,
+            PyTango.SCALAR,
+            PyTango.READ_WRITE]],
     }
 
     def __init__(self, name):
         PyTango.DeviceClass.__init__(self, name)
         self.set_type(name);
         logger.debug("In DahuDSClass  constructor")
-
-
