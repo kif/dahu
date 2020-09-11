@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "04/09/2020"
+__date__ = "11/09/2020"
 __status__ = "development"
 __version__ = "0.9.1"
 
@@ -522,7 +522,7 @@ Possible values for to_save:
                            (len(detector_grp), self.input_nxs, self.image_file, instrument))
         self.images_ds = detector_grp.get("data")
         if isinstance(self.images_ds, h5py.Group):
-            if self.images_ds.attrs.get("NX_class") == "NXdata":
+            if self.images_ds.attrs.get("NX_class") in ("NXdata", b"NXdata"):
                 # this is an NXdata not a dataset: use the @signal
                 self.images_ds = self.images_ds.get(self.images_ds.attrs.get("signal"))
         self.in_shape = self.images_ds.shape
