@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/09/2020"
+__date__ = "11/09/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -68,8 +68,9 @@ class IntegrateMultiframe(Plugin):
       "mask_file": "/tmp/mask.edf",
       "npt": 1000,
       "energy": 12.0, #keV
-      "fidelity_abs": 0.1,
-      "fidelity_rel": 0.5,
+      "fidelity_abs": 1e-5,
+      "fidelity_rel": 1e-3,
+      "hplc_mode": 0,
       "sample": {
         "name": "bsa",
         "description": "protein description like Bovine Serum Albumin",
@@ -327,6 +328,10 @@ class IntegrateMultiframe(Plugin):
         sum_ds = integration_data.create_dataset("sum", data=numpy.ascontiguousarray(integrate1_results.intensity.sum(axis=-1), dtype=numpy.float32))
         sum_ds.attrs["interpretation"] = "spectrum" 
 
+        
+        if self.input.get("hplc_mode"):
+            self.log_warning("HPLC mode detected, stopping after frame per frame integration")
+            return
         
     # Process 2: Freesas cormap 
         cormap_grp = nxs.new_class(entry_grp, "2_correlation_mapping", "NXprocess")
