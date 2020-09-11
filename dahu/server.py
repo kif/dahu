@@ -104,7 +104,8 @@ class DahuDS(PyTango.LatestDeviceImpl):
         attr.set_value(bool(self._serialize))
 
     def write_serialize(self, attr):
-        self._serialize = bool(attr.get_value())
+        self._serialize = bool(attr.value)
+        print("serialize", self._serialize, attr.value)
 
     def getJobState(self, jobId):
         return Job.getStatusFromID(jobId)
