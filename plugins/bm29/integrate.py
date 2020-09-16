@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "11/09/2020"
+__date__ = "16/09/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -57,7 +57,6 @@ class IntegrateMultiframe(Plugin):
     {
       "input_file": "/tmp/file1.h5",
       "output_file": "/tmp/file1.h5", # optional
-      "max_frame": 1000,
       "frame_ids": [101, 102],
       "time_stamps": [1580985678.47, 1580985678.58],
       "monitor_values": [1, 1.1],
@@ -331,6 +330,7 @@ class IntegrateMultiframe(Plugin):
         
         if self.input.get("hplc_mode"):
             self.log_warning("HPLC mode detected, stopping after frame per frame integration")
+            entry_grp.attrs["default"] = integration_data.name
             return
         
     # Process 2: Freesas cormap 
