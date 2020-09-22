@@ -13,8 +13,9 @@ __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "10/09/2020"
 __status__ = "development"
-version = "0.0.1"
+version = "0.0.2"
 
+from pathlib import Path
 from collections import namedtuple
 from typing import NamedTuple
 import json
@@ -52,6 +53,14 @@ method = IntegrationMethod.select_method(1, "no", "csr", "opencl")[0]
 #This cache contains azimuthal integrators shared between the different plugins
 KeyCache = namedtuple("KeyCache", "npt unit poni mask energy")
 shared_cache = DataCache(10)
+
+#Try to load the default login and passwd for Ispyb:
+_default_passwd = {}
+_ispyb_passwd_file = os.path.join(str(Path.home()), ".ispyb")
+if os.path.exists(_ispyb_passwd_file):
+    with open(_ispyb_passwd_file) as f:
+        _default_passwd = json.load(f)
+
 
 def get_integrator(keycache):
     "retrieve or build an azimuthal integrator based on the keycache provided "
@@ -104,8 +113,8 @@ class Sample(NamedTuple):
         
 class Ispyb(NamedTuple):        
     url: str=None
-    login: str=None
-    passwd: str=None
+    login: str=_default_passwd.get("password")
+    passwd: str=_default_passwd.get("username")
     pyarch: str=None
     collection_id: int=-1
     measurement_id: int=-1

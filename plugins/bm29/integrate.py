@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/09/2020"
+__date__ = "22/09/2020"
 __status__ = "development"
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 import os
 import json
@@ -121,6 +121,7 @@ class IntegrateMultiframe(Plugin):
             self.sample = Sample("Unknown sample", *self.sample[1:])
 
         self.input_file = self.input.get("input_file")
+        self.to_pyarch["basename"] = os.path.splitext(os.path.basename(self.input_file))[0]
         if self.input_file is None:
             self.log_error("No input file provided", do_raise=True)
         self.output_file = self.input.get("output_file")

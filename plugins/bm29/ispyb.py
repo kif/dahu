@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/09/2020"
+__date__ = "22229/2020"
 __status__ = "development"
-version = "0.0.1"
+version = "0.0.2"
 
 import logging
 logger = logging.getLogger("bm29.ispyb")
@@ -52,16 +52,17 @@ class IspybConnector:
                 "merged": list of index merged
                 0,1,2,3 the different indexes for individual frames.     
         """
+        basename = data.pop("basename")
         discarded = []
         frames = []
         merged = data.pop("merged") 
         
         aver_data = data.pop("avg")
-        averaged = self.save_curve("avg", aver_data)
+        averaged = self.save_curve("avg", aver_data, basename)
             
         for k,v in data:
             if isinstance(k, int):
-                fn = self.save_curve(k, v)
+                fn = self.save_curve(k, v, basename)
                 if k in merged:
                     frames.append(fn)
                 else:
@@ -72,7 +73,7 @@ class IspybConnector:
                                         str(discarded),
                                         str(averaged))
     
-    def save_curve(self, index, integrate_result):
+    def save_curve(self, index, integrate_result, basename="frame"):
         """Save a  1D curve into the pyarch. Not those file do not exist outside pyarch
         
         :param: index: prefix or index value for 
@@ -83,9 +84,9 @@ class IspybConnector:
         if not os.path.isdir(dest):
             os.makedirs(dest)
         if isinstance(index, int):
-            filename = os.path.join(dest, "frame_%04i.dat"%index)
+            filename = os.path.join(dest, "%s_%04d.dat"%(basename,index))
         else:
-            filename = os.path.join(dest, "frame_%s.dat"%index)
+            filename = os.path.join(dest, "%s_%s.dat"%(basename, index))
         sasl = numpy.vstack((integrate_result.radius, integrate_result.intensity, integrate_result.sigma))
         numpy.savetxt(filename, sasl.T)
         return filename
@@ -98,7 +99,7 @@ class IspybConnector:
         guinier = data.get("guinier", *([-1.]*8))
         gnom = data.get("bift", *([-1.]*8))
         subtracted = data.get("subtracted")
-        sub = self.save_curve("subtracted", subtracted)
+        sub = self.save_curve("subtracted", subtracted, data.get("basename", "frame"))
         sasm = numpy.vstack((subtracted.radius, subtracted.intensity, subtracted.sigma))
         
         self.client.service.addSubtraction(str(self.measurement_id),
