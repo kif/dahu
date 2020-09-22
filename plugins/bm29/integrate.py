@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "11/09/2020"
+__date__ = "16/09/2020"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -57,7 +57,6 @@ class IntegrateMultiframe(Plugin):
     {
       "input_file": "/tmp/file1.h5",
       "output_file": "/tmp/file1.h5", # optional
-      "max_frame": 1000,
       "frame_ids": [101, 102],
       "time_stamps": [1580985678.47, 1580985678.58],
       "monitor_values": [1, 1.1],
@@ -251,6 +250,7 @@ class IntegrateMultiframe(Plugin):
         time_ds.attrs["interpretation"] = "spectrum"
         frame_ds = detector_grp.create_dataset("frame_ids",
                                               data=numpy.ascontiguousarray(self.input.get("frame_ids", []), dtype=numpy.uint32))
+        frame_ds.attrs["long_name"] = "Frame number"
         frame_ds.attrs["interpretation"] = "spectrum"
         if self.COPY_IMAGES:
             data = self.input_frames
@@ -300,8 +300,6 @@ class IntegrateMultiframe(Plugin):
         pol_ds.attrs["comment"] = "Between -1 and +1, 0 for circular"
         cfg_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
         integration_data = nxs.new_class(integration_grp, "results", "NXdata")
-        integration_grp.attrs["SILX_style"] = SAXS_STYLE
-        integration_grp.attrs["default"] = integration_data.name
         integration_grp.attrs["title"] = str(self.sample)
         
     # Stage 1 processing: Integration frame per frame
@@ -310,14 +308,14 @@ class IntegrateMultiframe(Plugin):
         radial_unit, unit_name = str(self.unit).split("_", 1)
         q_ds = integration_data.create_dataset(radial_unit, data=numpy.ascontiguousarray(integrate1_results.radial, numpy.float32))
         q_ds.attrs["units"] = unit_name
-        q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
+        q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"        
 
         int_ds = integration_data.create_dataset("I", data=numpy.ascontiguousarray(integrate1_results.intensity, dtype=numpy.float32))
         std_ds = integration_data.create_dataset("errors", data=numpy.ascontiguousarray(integrate1_results.sigma, dtype=numpy.float32))
         integration_data.attrs["signal"] = "I"
         integration_data.attrs["axes"] = [".", radial_unit]
-        integration_data.attrs["SILX_style"] = SAXS_STYLE
-        
+        integration_data.attrs["SILX_style"] = SAXS_STYLE            
+
         int_ds.attrs["interpretation"] = "spectrum" 
         int_ds.attrs["units"] = "arbitrary"
         int_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
@@ -325,14 +323,23 @@ class IntegrateMultiframe(Plugin):
         int_ds.attrs["scale"] = "log"
         std_ds.attrs["interpretation"] = "spectrum"
 
-        sum_ds = integration_data.create_dataset("sum", data=numpy.ascontiguousarray(integrate1_results.intensity.sum(axis=-1), dtype=numpy.float32))
+        hplc_data = nxs.new_class(integration_grp, "hplc", "NXdata")
+        hplc_data.attrs["title"] = "Chromatogram"
+        sum_ds = hplc_data.create_dataset("sum", data=numpy.ascontiguousarray(integrate1_results.intensity.sum(axis=-1), dtype=numpy.float32))
         sum_ds.attrs["interpretation"] = "spectrum" 
-
+        sum_ds.attrs["long_name"] = "Summed Intensity"
+        hplc_data["frame_ids"] = frame_ds
+        hplc_data.attrs["signal"] = "sum"
+        hplc_data.attrs["axes"] = "frame_ids"
         
         if self.input.get("hplc_mode"):
+            entry_grp.attrs["default"] = entry_grp.attrs["default"] = integration_grp.attrs["default"] = hplc_data.name
             self.log_warning("HPLC mode detected, stopping after frame per frame integration")
+            
             return
-        
+        else:
+            integration_grp.attrs["default"] = integration_data.name
+            
     # Process 2: Freesas cormap 
         cormap_grp = nxs.new_class(entry_grp, "2_correlation_mapping", "NXprocess")
         cormap_grp["sequence_index"] = 2
