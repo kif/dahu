@@ -15,6 +15,7 @@ __date__ = "10/09/2020"
 __status__ = "development"
 version = "0.0.2"
 
+import os
 from pathlib import Path
 from collections import namedtuple
 from typing import NamedTuple
@@ -115,7 +116,7 @@ class Ispyb(NamedTuple):
     url: str=None
     login: str=_default_passwd.get("password")
     passwd: str=_default_passwd.get("username")
-    pyarch: str=None
+    pyarch: str=""
     collection_id: int=-1
     measurement_id: int=-1
 

@@ -38,8 +38,11 @@ class IspybConnector:
         """
         self.authentication = HttpAuthenticated(username=login, password=passwd)
         self.client = Client(url, transport=self.authentication, cache=None)
-        if os.path.isdir(pyarch):
-            self.pyarch = os.path.abspath()
+        if pyarch:
+            self.pyarch = os.path.abspath(pyarch)
+        else:
+            logger.error("No `pyarch` destination provided ... things will go wrong")
+            
         self.collection_id = collection_id
         self.measurement_id = measurement_id
         
@@ -60,7 +63,7 @@ class IspybConnector:
         aver_data = data.pop("avg")
         averaged = self.save_curve("avg", aver_data, basename)
             
-        for k,v in data:
+        for k,v in data.items():
             if isinstance(k, int):
                 fn = self.save_curve(k, v, basename)
                 if k in merged:
@@ -87,7 +90,7 @@ class IspybConnector:
             filename = os.path.join(dest, "%s_%04d.dat"%(basename,index))
         else:
             filename = os.path.join(dest, "%s_%s.dat"%(basename, index))
-        sasl = numpy.vstack((integrate_result.radius, integrate_result.intensity, integrate_result.sigma))
+        sasl = numpy.vstack((integrate_result.radial, integrate_result.intensity, integrate_result.sigma))
         numpy.savetxt(filename, sasl.T)
         return filename
         
