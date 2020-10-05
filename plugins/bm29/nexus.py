@@ -4,7 +4,7 @@ __author__ = "Jerome Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/02/2020"
+__date__ = "05/10/2020"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
@@ -268,6 +268,21 @@ class Nexus(object):
                 if isinstance(grp[name], h5py.Dataset) and
                 self.get_attr(grp[name], attr) == value]
         return coll
+
+    def get_default_NXdata(self):
+        """Return the default plot configured in the nexus structure.
+        
+        :return: the group with the default plot or None if not found
+        """
+        entry_name = self.h5.attrs.get("default")
+        if entry_name:
+            entry_grp = self.h5.get(entry_name)
+            nxdata_name = entry_grp.attrs.get("default")
+            if nxdata_name:
+                if nxdata_name.startswith("/"):
+                    return self.h5.get(nxdata_name)
+                else:
+                    return entry_grp.get(nxdata_name)
 
     def deep_copy(self, name, obj, where="/", toplevel=None, excluded=None, overwrite=False):
         """
