@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22/09/2020"
+__date__ = "05/10/2020"
 __status__ = "development"
 __version__ = "0.2.1"
 
@@ -183,7 +183,8 @@ class IntegrateMultiframe(Plugin):
         logger.debug("IntegrateMultiframe.process")
         self.ai = get_integrator(KeyCache(self.npt, self.unit, self.poni, self.mask, self.energy))
         self.create_nexus()
-        self.send_to_ispyb()
+        if not self.input.get("hplc_mode"):
+            self.send_to_ispyb()
 
     def create_nexus(self):
         creation_time = os.stat(self.input_file).st_ctime
