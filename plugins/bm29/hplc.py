@@ -67,10 +67,14 @@ class HPLC(Plugin):
 
     def setup(self):
         Plugin.setup(self)
+
+        for job_id in self.input.get("wait_for", []):
+            self.wait_for(job_id)
+
         self.input_files = [os.path.abspath(i) for i in self.input.get("integrated_files", "")]
 
         self.output_file = self.input.get("output_file")
-        if self.output_file is None:
+        if not self.output_file:
             self.output_file = os.path.commonprefix(self.input_files) + "_hplc.h5"
             self.log_warning("No output file provided, using " + self.output_file)
 
