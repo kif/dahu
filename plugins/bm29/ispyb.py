@@ -54,7 +54,6 @@ class IspybConnector:
         self.collection_id = collection_id
         self.measurement_id = measurement_id
 
-    @staticmethod
     def send_averaged(self, data):
         """Send this to ISPyB and backup to PyArch
         
