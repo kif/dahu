@@ -19,10 +19,16 @@ import logging
 logger = logging.getLogger("bm29.ispyb")
 import os
 import shutil
+import json
 import numpy
 from suds.client            import Client
 from suds.transport.https   import HttpAuthenticated
 from freesas.collections import RG_RESULT
+
+
+def str_list(lst):
+    "Helper function to convert list of path to smth compatible with ispyb"
+    return json.dumps([{"filePath": i} for i in lst])
 
 
 class IspybConnector:
@@ -48,6 +54,7 @@ class IspybConnector:
         self.collection_id = collection_id
         self.measurement_id = measurement_id
 
+    @staticmethod
     def send_averaged(self, data):
         """Send this to ISPyB and backup to PyArch
         
@@ -74,8 +81,8 @@ class IspybConnector:
                     discarded.append(fn)
         self.client.service.addAveraged(str(self.measurement_id),
                                         str(self.collection_id),
-                                        str(frames),
-                                        str(discarded),
+                                        str_list(frames),
+                                        str_list(discarded),
                                         str(averaged))
 
     def save_curve(self, index, integrate_result, basename="frame"):
