@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "05/10/2020"
+__date__ = "07/10/2020"
 __status__ = "development"
 __version__ = "0.0.1"
 
@@ -112,9 +112,6 @@ class HPLC(Plugin):
         chroma_grp["sequence_index"] = 1
         nframes = max(i.idx.max() for i in self.juices) + 1
         nbin = self.juices[0].q.size
-
-        print(self.juices[0].q)
-        print(nframes, nbin)
 
         I = numpy.zeros((nframes, nbin), dtype=numpy.float32)
         sigma = numpy.zeros((nframes, nbin), dtype=numpy.float32)
