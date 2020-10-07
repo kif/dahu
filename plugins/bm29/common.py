@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/09/2020"
+__date__ = "07/10/2020"
 __status__ = "development"
 version = "0.0.2"
 
@@ -183,4 +183,3 @@ def create_nexus_sample(nxs, entry, sample):
         tempv_ds = sample_grp.create_dataset("temperature_env", data=sample.temperature_env)
         tempv_ds.attrs["units"] = "°C"
         tempv_ds.attrs["comment"] = "Storage temperature"
-
