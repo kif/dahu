@@ -12,7 +12,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "07/10/2020"
+__date__ = "08/10/2020"
 __status__ = "production"
 
 from threading import Thread, Semaphore
@@ -26,21 +26,12 @@ import logging
 import traceback
 logger = logging.getLogger("dahu.job")
 # logger.setLevel(logging.DEBUG)
-import numpy
 from . import utils
 from .factory import plugin_factory
+from .utils import NumpyEncoder
 
 # Python 2to3 compatibility
 StringTypes = (six.binary_type, six.text_type)
-
-
-class NumpyEncoder(json.JSONEncoder):
-    "Numpy aware JSON encoder"
-
-    def default(self, obj):
-        if isinstance(obj, numpy.ndarray):
-            return obj.tolist()
-        return json.JSONEncoder.default(self, obj)
 
 
 class Job(Thread):
