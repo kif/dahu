@@ -1,13 +1,14 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 """
 Reprocess a job using the current
 """
+
 import os, json, sys, logging, time
 from argparse import ArgumentParser
 import dahu.factory
 from dahu.job import Job
-from dahu.utils import get_workdir
+from dahu.utils import get_workdir, NumpyEncoder
 logging.basicConfig()
 
 STATE_UNINITIALIZED = Job.STATE_UNINITIALIZED
@@ -100,13 +101,13 @@ def process(args):
                 state = STATE_FAILURE
         print("Finished with state: %s" % state)
         plugin.output["job_runtime"] = time.time() - start_time
-        result = json.dumps(plugin.output, indent=2)
+        result = json.dumps(plugin.output, indent=4, cls=NumpyEncoder)
         print(result)
         basename = os.path.join(working_dir, "%05i_%s" % (idx, plugin.get_name()))
         with open(basename + ".out", "w") as fp:
-            fp.write(result)
+	        fp.write(result)
         with open(basename + ".inp", "w") as fp:
-            fp.write(json.dumps(plugin.input, indent=2))
+            json.dump(plugin.input, fp, indent=4, cls=NumpyEncoder))
 
 if __name__ == "__main__":
     args = parse()
