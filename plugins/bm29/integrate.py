@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "07/10/2020"
+__date__ = "08/10/2020"
 __status__ = "development"
 __version__ = "0.2.1"
 
@@ -386,9 +386,6 @@ class IntegrateMultiframe(Plugin):
         
     # Stage 3 processing
         res3 = self.process3_average(cormap_results.tomerge)    
-        self.output["q"] = res3.radial
-        self.output["I"] = res3.intensity
-        self.output["std"] = res3.deviation
         int_avg_ds =  average_data.create_dataset("intensity_normed", 
                                                   data=numpy.ascontiguousarray(res3.average, dtype=numpy.float32),
                                                   **cmp_float)
@@ -441,6 +438,7 @@ class IntegrateMultiframe(Plugin):
         ai2_int_ds = ai2_data.create_dataset("I", data=numpy.ascontiguousarray(res2.intensity, dtype=numpy.float32))
         ai2_std_ds = ai2_data.create_dataset("errors", 
                                              data=numpy.ascontiguousarray(res2.sigma, dtype=numpy.float32))
+
         
         
         ai2_int_ds.attrs["interpretation"] ="spectrum"     
@@ -451,6 +449,12 @@ class IntegrateMultiframe(Plugin):
         ai2_int_ds.attrs["units"] = "arbitrary"
         #Finally declare the default entry and default dataset ...
         entry_grp.attrs["default"] = ai2_data.name
+
+        #Export this to the output JSON        
+        self.output["q"] = res2.radial
+        self.output["I"] = res2.intensity
+        self.output["std"] = res2.sigma
+
     
     def process1_integration(self, data):
         "First step of the processing, integrate all frames, return a IntegrationResult namedtuple"
