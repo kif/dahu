@@ -10,11 +10,13 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "05/10/2020"
+__date__ = "12/10/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
 from dahu.factory import register
+import os
+os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 from .integrate import IntegrateMultiframe
 from .subtracte import SubtractBuffer
 from .hplc import HPLC
