@@ -4,7 +4,7 @@ __author__ = "Jerome Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "05/10/2020"
+__date__ = "12/10/2020"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
@@ -105,7 +105,13 @@ class Nexus(object):
                 self.mode = "r"
             else:
                 self.mode = "a"
-        self.h5 = h5py.File(self.filename, mode=self.mode)
+
+        if self.mode == "r":
+            self.file_handle = open(self.filename, mode=self.mode + "b")
+            self.h5 = h5py.File(self.file_handle, mode=self.mode)
+        else:
+            self.file_handle = None
+            self.h5 = h5py.File(self.filename, mode=self.mode)
         self.to_close = []
 
         if not pre_existing:
@@ -125,6 +131,8 @@ class Nexus(object):
                 entry["end_time"] = end_time
             self.h5.attrs["file_update_time"] = get_isotime()
         self.h5.close()
+        if self.file_handle:
+            self.file_handle.close()
 
     # Context manager for "with" statement compatibility
     def __enter__(self, *arg, **kwarg):

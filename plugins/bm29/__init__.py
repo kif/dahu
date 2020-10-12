@@ -15,8 +15,6 @@ __status__ = "development"
 __version__ = "0.1.0"
 
 from dahu.factory import register
-import os
-os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 from .integrate import IntegrateMultiframe
 from .subtracte import SubtractBuffer
 from .hplc import HPLC
