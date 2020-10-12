@@ -7,20 +7,33 @@ Data Analysis RPC server over Tango:
 
 Some utilities
 """
-from __future__ import with_statement, print_function, absolute_import, division
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "07/02/2020"
+__date__ = "08/10/2020"
 __status__ = "production"
 
 
 import time
 import os
 import tempfile
+import json
+import numpy
+
+
 workdir = None
+
+
+class NumpyEncoder(json.JSONEncoder):
+    "Numpy aware JSON encoder"
+
+    def default(self, obj):
+        if isinstance(obj, numpy.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
+
 
 
 def get_isotime(forceTime=None, for_path=False):
