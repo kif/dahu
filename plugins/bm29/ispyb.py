@@ -23,7 +23,8 @@ import json
 import numpy
 from suds.client            import Client
 from suds.transport.https   import HttpAuthenticated
-from freesas.collections import RG_RESULT
+from freesas.collections import RG_RESULT, RT_RESULT, StatsResult
+from freesas.plot import kratky_plot, guinier_plot, scatter_plot, density_plot
 
 
 def str_list(lst):
@@ -84,6 +85,16 @@ class IspybConnector:
                                         str_list(discarded),
                                         str(averaged))
 
+    def _mk_filename(self, index, path, basename="frame", ext=".dat"):
+        dest = os.path.join(self.pyarch, path)
+        if not os.path.isdir(dest):
+            os.makedirs(dest)
+        if isinstance(index, int):
+            filename = os.path.join(dest, "%s_%04d%s" % (basename, index, ext))
+        else:
+            filename = os.path.join(dest, "%s_%s%s" % (basename, index, ext))
+        return filename
+
     def save_curve(self, index, integrate_result, basename="frame"):
         """Save a  1D curve into the pyarch. Not those file do not exist outside pyarch
         
@@ -91,28 +102,68 @@ class IspybConnector:
         :param: integrate_result: an IntegrationResult to be saved.  
         :return: the full path of the file in pyarch 
         """
-        dest = os.path.join(self.pyarch, "1d")
-        if not os.path.isdir(dest):
-            os.makedirs(dest)
-        if isinstance(index, int):
-            filename = os.path.join(dest, "%s_%04d.dat" % (basename, index))
-        else:
-            filename = os.path.join(dest, "%s_%s.dat" % (basename, index))
+        filename = self._mk_filename(index, "1d", basename)
         sasl = numpy.vstack((integrate_result.radial, integrate_result.intensity, integrate_result.sigma))
         numpy.savetxt(filename, sasl.T)
         return filename
 
+    def save_bift(self, bift, basename="frame"):
+        """Save a  IFT curve into the pyarch. Not those file do not exist outside pyarch
+        
+        :param: index: prefix or index value for 
+        :param: bift: an StatResults object to be saved (freesas >= 0.8.4).  
+        :return: the full path of the file in pyarch 
+        """
+        filename = self._mk_filename("BIFT", "plot", basename)
+        bift.save(filename)
+        return filename
+
+    def kratky_plot(self, sasm, guinier, basename="frame"):
+        filename = self._mk_filename("Kratky", "plot", basename, ext=".svg")
+        kratky_plot(sasm, guinier,
+                    filename=filename, format="svg", unit="nm",
+                    title="Dimensionless Kratky plot",
+                    ax=None, labelsize=None, fontsize=None)
+        return filename
+    
+    def guinier_plot(self, sasm, guinier, basename="frame"):
+        filename = self._mk_filename("Guinier", "plot", basename, ext=".svg")
+        guinier_plot(sasm, guinier, filename=filename,
+                 format="svg", unit="nm", 
+                 ax=None, labelsize=None, fontsize=None)
+        return filename
+    
+    def scatter_plot(self, sasm, guinier, ift, basename="frame"):
+        filename = self._mk_filename("Scattering", "plot", basename, ext=".svg")
+        scatter_plot(sasm, guinier, ift,
+                 filename=filename, format="svg", unit="nm",
+                 title="Scattering curve ",
+                 ax=None, labelsize=None, fontsize=None)
+        return filename
+    
+    def density_plot(self, ift, basename="frame"):
+        filename = self._mk_filename("Scattering", "plot", basename, ext=".svg")
+        density_plot(ift, filename=filename, format="svg", unit="nm",
+                     ax=None, labelsize=None, fontsize=None)
+        
     def send_subtracted(self, data):
         """send the result of the subtraction to Ispyb
         
         :param data: a dict with all information to be saved in Ispyb
         """
-        guinier = data.get("guinier", *([-1.] * 8))
-        gnom = data.get("bift", *([-1.] * 8))
+        guinier = data.get("guinier", RG_RESULT(*([-1.] * 8)))
+        rti = data.get("rti", RT_RESULT(*([-1.] * 8)))
+        volume = data.get("volume", -1) 
+        gnom = data.get("bift", StatsResult*([-1.] * 17))
         subtracted = data.get("subtracted")
-        sub = self.save_curve("subtracted", subtracted, data.get("basename", "frame"))
+        basename = data.get("basename", "frame")
+        sub = self.save_curve("subtracted", subtracted, basename)
         sasm = numpy.vstack((subtracted.radius, subtracted.intensity, subtracted.sigma))
-        """ TODO
+        gnomFile = self.save_bift("subtracted", gnom, basename)
+        kratkyPlot = self.kratky_plot(sasm, guinier, basename)
+        guinierPlot = self.guinier_plot(sasm, guinier, basename)
+        scatterPlot = self.scatter_plot(sasm, guinier, gnom, basename)
+        densityPlot = self.density_plot(gnom, basename)
         self.client.service.addSubtraction(str(self.measurement_id),
                                            str(guinier.Rg),
                                            str(guinier.sigma_Rg),
@@ -125,15 +176,15 @@ class IspybConnector:
                                            str(gnom.Rg_avg),
                                            str(gnom.Dmax_avg),
                                            str(gnom.logP_avg),
-                                           str(data["volume"]),
-                                           str(sampleAvgOneDimensionalFiles),
-                                           str(bufferAvgOneDimensionalFiles),
-                                           self.averageSample,                     #sampleAverageFilePath,
-                                           self.bestBuffer,                        #bufferAverageFilePath,
+                                           str(volume),
+                                           "",  ##sampleOneDimensionalFiles
+                                           "",  ##bufferOneDimensionalFiles
+                                           "",  ##sampleAverageFilePath,
+                                           "",  ##bufferAverageFilePath,
                                            sub,                                    #subtractedFilePath,
-                                           self.scatterPlot,                       #experimentalDataPlotFilePath,
-                                           self.densityPlot,                       #densityPlotFilePath,
-                                           self.guinierPlot,                       #guinierPlotFilePath,
-                                           self.kratkyPlot,                        #kratkyPlotFilePath,
-                                           self.gnomFile)                          #gnomOutputFilePath
-"""
+                                           scatterPlot,
+                                           densityPlot,
+                                           guinierPlot,
+                                           kratkyPlot, 
+                                           gnomFile)                          
+

@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/09/2020"
+__date__ = "13/10/2020"
 __status__ = "development"
 __version__ = "0.1.1"
 
@@ -532,10 +532,11 @@ class SubtractBuffer(Plugin):
         self.Vc = rti.Vc
         self.mass = rti.mass
         
-        self.volume = freesas.invariants.calc_Porod(sasm, guinier)
-        volume_ds = rti_data.create_dataset("volume", data=self.volume)
+        volume = self.to_pyarch["volume"] = freesas.invariants.calc_Porod(sasm, guinier)
+        volume_ds = rti_data.create_dataset("volume", data=volume)
         volume_ds.attrs["unit"] = "nm³"
         volume_ds.attrs["formula"] = "Porod: V = 2*π²I₀²/(sum_q I(q)q² dq)"
+        self.to_pyarch["rti"] = rti
         
     # stage 7: Pair distribution function, what is the equivalent of datgnom
         bift_grp = nxs.new_class(entry_grp, "7_indirect_Fourier_transformation", "NXprocess")
