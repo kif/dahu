@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "07/10/2020"
+__date__ = "13/10/2020"
 __status__ = "development"
 version = "0.0.2"
 
@@ -28,10 +28,9 @@ from hdf5plugin import Bitshuffle, Zfp
 import pyFAI, pyFAI.units
 from pyFAI.method_registry import IntegrationMethod
 import fabio
-if pyFAI.version_info < (0, 20):
-    from .nexus import Nexus, get_isotime
-else:
-    from pyFAI.io import Nexus, get_isotime
+from .nexus import Nexus, get_isotime
+# else:
+#     from pyFAI.io import Nexus, get_isotime
     
 #cmp contains the compression options, shared by all plugins. Used mainly for images 
 cmp = cmp_int = Bitshuffle()
