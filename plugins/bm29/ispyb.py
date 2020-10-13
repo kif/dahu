@@ -114,7 +114,7 @@ class IspybConnector:
         :param: bift: an StatResults object to be saved (freesas >= 0.8.4).  
         :return: the full path of the file in pyarch 
         """
-        filename = self._mk_filename("BIFT", "plot", basename)
+        filename = self._mk_filename("BIFT", "plot", basename, ext=".out")
         bift.save(filename)
         return filename
 
@@ -142,9 +142,10 @@ class IspybConnector:
         return filename
     
     def density_plot(self, ift, basename="frame"):
-        filename = self._mk_filename("Scattering", "plot", basename, ext=".svg")
+        filename = self._mk_filename("Density", basename, ext=".svg")
         density_plot(ift, filename=filename, format="svg", unit="nm",
                      ax=None, labelsize=None, fontsize=None)
+        return filename
         
     def send_subtracted(self, data):
         """send the result of the subtraction to Ispyb
@@ -152,18 +153,25 @@ class IspybConnector:
         :param data: a dict with all information to be saved in Ispyb
         """
         guinier = data.get("guinier", RG_RESULT(*([-1.] * 8)))
-        rti = data.get("rti", RT_RESULT(*([-1.] * 8)))
+        rti = data.get("rti", RT_RESULT(*([-1.] * 6)))
         volume = data.get("volume", -1) 
-        gnom = data.get("bift", StatsResult*([-1.] * 17))
+        gnom = data.get("bift", None)
         subtracted = data.get("subtracted")
         basename = data.get("basename", "frame")
         sub = self.save_curve("subtracted", subtracted, basename)
-        sasm = numpy.vstack((subtracted.radius, subtracted.intensity, subtracted.sigma))
-        gnomFile = self.save_bift("subtracted", gnom, basename)
+        buf = self.save_curve("buffer", data.get("buffer"), basename)
+        sample = self.save_curve("sample", data.get("sample"), basename)
+        if gnom is not None: 
+            gnomFile = self.save_bift(gnom, basename)
+        sasm = numpy.vstack((subtracted.radial, subtracted.intensity, subtracted.sigma)).T
         kratkyPlot = self.kratky_plot(sasm, guinier, basename)
         guinierPlot = self.guinier_plot(sasm, guinier, basename)
         scatterPlot = self.scatter_plot(sasm, guinier, gnom, basename)
-        densityPlot = self.density_plot(gnom, basename)
+        if gnom is not None:
+            densityPlot = self.density_plot(gnom, basename)
+        else:
+            densityPlot = None
+
         self.client.service.addSubtraction(str(self.measurement_id),
                                            str(guinier.Rg),
                                            str(guinier.sigma_Rg),
@@ -173,18 +181,18 @@ class IspybConnector:
                                            str(guinier.end_point),
                                            str(guinier.quality),
                                            str(guinier.aggregated),
-                                           str(gnom.Rg_avg),
-                                           str(gnom.Dmax_avg),
-                                           str(gnom.logP_avg),
+                                           str(gnom.Rg_avg if gnom else -1),
+                                           str(gnom.Dmax_avg if gnom else -1),
+                                           str(gnom.evidence_avg if gnom else -1),
                                            str(volume),
-                                           "",  ##sampleOneDimensionalFiles
-                                           "",  ##bufferOneDimensionalFiles
-                                           "",  ##sampleAverageFilePath,
-                                           "",  ##bufferAverageFilePath,
+                                           "[{'filePath': '%s'}]"%sample,  ##sampleOneDimensionalFiles
+                                           "[{'filePath': '%s'}]"%buf,  ##bufferOneDimensionalFiles
+                                           sample,  ##sampleAverageFilePath,
+                                           buf,  ##bufferAverageFilePath,
                                            sub,                                    #subtractedFilePath,
                                            scatterPlot,
-                                           densityPlot,
+                                           densityPlot if gnom else "",
                                            guinierPlot,
                                            kratkyPlot, 
-                                           gnomFile)                          
+                                           gnomFile if gnom else "")          
 

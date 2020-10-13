@@ -124,7 +124,9 @@ class SubtractBuffer(Plugin):
         Plugin.process(self)
         logger.debug("SubtractBuffer.process")
         self.sample_juice = self.read_nexus(self.sample_file)
+        self.to_pyarch["basename"] = os.path.splitext(os.path.basename(self.sample_file))[0]
         self.create_nexus()
+        self.send_to_ispyb()
         
     def validate_buffer(self, buffer_file):
         "Validate if a buffer is consitent with the sample, return some buffer_juice or None when unconsistent"
@@ -620,6 +622,7 @@ class SubtractBuffer(Plugin):
             bift_ds.attrs["interpretation"] = "spectrum"
             ai2_data.attrs["auxiliary_signals"] = "BIFT"
             bift_grp.attrs["default"] = bift_data.name
+            self.to_pyarch["bift"] = stats 
         
     @staticmethod
     def read_nexus(filename):
@@ -664,7 +667,7 @@ class SubtractBuffer(Plugin):
 
     def send_to_ispyb(self):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
-            ispyb = IspybConnector(**self.ispyb)
+            ispyb = IspybConnector(*self.ispyb)
             ispyb.send_subtracted(self.to_pyarch)
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s"%self.ispyb.url)
