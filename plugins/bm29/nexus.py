@@ -141,6 +141,10 @@ class Nexus(object):
     def __exit__(self, *arg, **kwarg):
         self.close()
 
+    def flush(self):
+        if self.h5:
+            self.h5.flush()
+
     def get_entry(self, name):
         """
         Retrieves an entry from its name
@@ -187,14 +191,13 @@ class Nexus(object):
         return result
 
     def new_entry(self, entry="entry", program_name="pyFAI",
-                  title="description of experiment",
-                  force_time=None, force_name=False):
+                  title=None, force_time=None, force_name=False):
         """
         Create a new entry
 
         :param entry: name of the entry
         :param program_name: value of the field as string
-        :param title: value of the field as string
+        :param title: description of experiment as str
         :param force_time: enforce the start_time (as string!)
         :param force_name: force the entry name as such, without numerical suffix.
         :return: the corresponding HDF5 group
@@ -206,7 +209,7 @@ class Nexus(object):
         entry_grp = self.h5.require_group(entry)
         self.h5.attrs["default"] = entry
         entry_grp.attrs["NX_class"] = "NXentry"
-        entry_grp["title"] = title
+        entry_grp["title"] = str(title)
         entry_grp["program_name"] = program_name
         if isinstance(force_time, str):
             entry_grp["start_time"] = force_time
@@ -234,7 +237,7 @@ class Nexus(object):
         :return: subgroup created
         """
         sub = grp.require_group(name)
-        sub.attrs["NX_class"] = class_type
+        sub.attrs["NX_class"] = str(class_type)
         return sub
 
     def new_detector(self, name="detector", entry="entry", subentry="pyFAI"):
@@ -248,8 +251,8 @@ class Nexus(object):
         from . import __version__ as version
         entry_grp = self.new_entry(entry)
         pyFAI_grp = self.new_class(entry_grp, subentry, "NXsubentry")
-        pyFAI_grp["definition_local"] = "pyFAI"
-        pyFAI_grp["definition_local"].attrs["version"] = version
+        pyFAI_grp["definition_local"] = str("pyFAI")
+        pyFAI_grp["definition_local"].attrs["version"] = str(version)
         det_grp = self.new_class(pyFAI_grp, name, "NXdetector")
         return det_grp
 

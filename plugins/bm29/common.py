@@ -113,8 +113,8 @@ class Sample(NamedTuple):
         
 class Ispyb(NamedTuple):        
     url: str=None
-    login: str=_default_passwd.get("password")
-    passwd: str=_default_passwd.get("username")
+    login: str=_default_passwd.get("username")
+    passwd: str=_default_passwd.get("password")
     pyarch: str=""
     collection_id: int=-1
     measurement_id: int=-1
