@@ -165,7 +165,7 @@ class IspybConnector:
         sub = self.save_curve("subtracted", subtracted, basename)
         buf = self.save_curve("buffer_avg", data.get("buffer"), basename)
         individual_buffers = []
-        for i, bufi in enumerate(data.get("buffers"), []):
+        for i, bufi in enumerate(data.get("buffers", [])):
             individual_buffers.append(self.save_curve("buffer_%d" % i, bufi, basename))
 
         sample = self.save_curve("sample", data.get("sample"), basename)
