@@ -32,6 +32,7 @@ except ImportError:
     numexpr = None
 import h5py
 import pyFAI, pyFAI.azimuthalIntegrator
+from pyFAI.containers import Integrate1dResult
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap, freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier
@@ -42,7 +43,7 @@ from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integra
                     Sample, create_nexus_sample
 from .ispyb import IspybConnector
 
-NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I poni mask energy polarization method signal2d error2d sample")
+NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I sigma poni mask energy polarization method signal2d error2d sample")
 
 
 class SubtractBuffer(Plugin):
@@ -58,13 +59,13 @@ class SubtractBuffer(Plugin):
         "url": "http://ispyb.esrf.fr:1234",
         "login": "mx1234",
         "passwd": "secret",
-        "pyarch": "/data/pyarch/mx1234/sample", 
+        "pyarch": "/data/pyarch/mx1234/sample"
         "measurement_id": -1,
         "collection_id": -1
        },
       "wait_for": [jobid_buffer1, jobid_buffer2, jobid_sample],
       "plugin_name": "bm29.subtractbuffer"
-    } 
+    }
     """
     def __init__(self):
         Plugin.__init__(self)
@@ -151,6 +152,11 @@ class SubtractBuffer(Plugin):
         if buffer_juice.sample.concentration:
             self.log_warning(f"Sample {buffer_file} concentration not null, discarding")
             return
+        if "buffers" not in self.to_pyarch:
+            buffers = self.to_pyarch["buffers"] = []
+        else:
+            buffers = self.to_pyarch["buffers"]
+        buffers.append(Integrate1dResult(buffer_juice.q, buffer_juice.I, buffer_juice.sigma))
         return buffer_juice
 
     def create_nexus(self):
@@ -163,7 +169,7 @@ class SubtractBuffer(Plugin):
     # Configuration
         cfg_grp = nxs.new_class(entry_grp, "configuration", "NXnote")
         cfg_grp.create_dataset("data", data=json.dumps(self.input, indent=2, separators=(",\r\n", ":\t")))
-        cfg_grp.create_dataset("format", data = "text/json")
+        cfg_grp.create_dataset("format", data="text/json")
 
     # Process 0: Measurement group
         input_grp = nxs.new_class(entry_grp, "0_measurement", "NXcollection")
@@ -200,8 +206,8 @@ class SubtractBuffer(Plugin):
             count[i, i] = 0
             for j in range(i):
                 res = freesas.cormap.gof(self.buffer_juices[i].I, self.buffer_juices[j].I)
-                proba[i,j] = proba[j,i] = res.P
-                count[i,j] = count[j,i] = res.c
+                proba[i, j] = proba[j, i] = res.P
+                count[i, j] = count[j, i] = res.c
         fidelity = self.input.get("fidelity", 0)
         cfg_grp["fidelity_abs"] = fidelity
         cfg_grp["fidelity_rel"] = fidelity
@@ -216,7 +222,7 @@ class SubtractBuffer(Plugin):
         count_ds.attrs["interpretation"] = "image"
         count_ds.attrs["long_name"] = "Longest sequence where curves do not cross each other"
 
-        to_merge_ds = cormap_data.create_dataset("to_merge",data= numpy.arange(*tomerge, dtype=numpy.uint16))
+        to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*tomerge, dtype=numpy.uint16))
         to_merge_ds.attrs["long_name"] = "Index of equivalent frames" 
         cormap_grp.attrs["default"] = cormap_data.name
 
@@ -633,6 +639,7 @@ class SubtractBuffer(Plugin):
             axis = nxdata_grp.attrs["axes"]
             I = nxdata_grp[signal][()]
             q = nxdata_grp[axis][()]
+            sigma = nxdata_grp["errors"][()]
             npt = len(q)
             unit = pyFAI.units.to_unit(axis + "_" + nxdata_grp[axis].attrs["units"])
             integration_grp = nxdata_grp.parent
@@ -661,7 +668,7 @@ class SubtractBuffer(Plugin):
             temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
             sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
 
-        return NexusJuice(filename, h5path, npt, unit, q, I, poni, mask, energy, polarization, method, image2d, error2d, sample)
+        return NexusJuice(filename, h5path, npt, unit, q, I, sigma, poni, mask, energy, polarization, method, image2d, error2d, sample)
 
     def send_to_ispyb(self):
         if self.ispyb.url and parse_url(self.ispyb.url).host:

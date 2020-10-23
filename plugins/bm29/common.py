@@ -111,14 +111,14 @@ class Sample(NamedTuple):
         return f"{self.name}, {self.concentration} mg/mL in {self.buffer}"
 
 
-class Ispyb(NamedTuple):        
-    url: str=None
-    login: str=_default_passwd.get("username")
-    passwd: str=_default_passwd.get("password")
-    pyarch: str=""
+class Ispyb(NamedTuple):
+    url: str = None
+    login: str = _default_passwd.get("username")
+    passwd: str = _default_passwd.get("password")
+    pyarch: str = ""
     collection_id: int = -1 # This is now deprecated
-    measurement_id: int=-1
-    run_number: int - 1
+    measurement_id: int = -1
+    run_number: object = None  # This could be a integer (single run) or a list of integers.
 
     _fromdict = classmethod(_fromdict)
 

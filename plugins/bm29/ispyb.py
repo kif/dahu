@@ -155,6 +155,7 @@ class IspybConnector:
 
         :param data: a dict with all information to be saved in Ispyb
         """
+        run_number = list(self.run_number)
         guinier = data.get("guinier", RG_RESULT(*([-1.] * 8)))
         # rti = data.get("rti", RT_RESULT(*([-1.] * 6)))
         volume = data.get("volume", -1)
@@ -162,7 +163,11 @@ class IspybConnector:
         subtracted = data.get("subtracted")
         basename = data.get("basename", "frame")
         sub = self.save_curve("subtracted", subtracted, basename)
-        buf = self.save_curve("buffer", data.get("buffer"), basename)
+        buf = self.save_curve("buffer_avg", data.get("buffer"), basename)
+        individual_buffers = []
+        for i, bufi in enumerate(data.get("buffers"), []):
+            individual_buffers.append(self.save_curve("buffer_%d" % i, bufi, basename))
+
         sample = self.save_curve("sample", data.get("sample"), basename)
         if gnom is not None:
             gnomFile = self.save_bift(gnom, basename)
@@ -176,7 +181,7 @@ class IspybConnector:
             densityPlot = None
 
         self.client.service.addSubtraction(str(self.measurement_id),
-                                           str(self.run_number),
+                                           str(run_number),
                                            str(guinier.Rg),
                                            str(guinier.sigma_Rg),
                                            str(guinier.I0),
@@ -190,7 +195,7 @@ class IspybConnector:
                                            str(gnom.evidence_avg if gnom else -1),
                                            str(volume),
                                            "[{'filePath': '%s'}]" % sample,  # sampleOneDimensionalFiles
-                                           "[{'filePath': '%s'}]" % buf,  # bufferOneDimensionalFiles
+                                           str_list(individual_buffers),  # bufferOneDimensionalFiles
                                            sample,  # sampleAverageFilePath,
                                            buf,  # bufferAverageFilePath,
                                            sub,  # subtractedFilePath,
