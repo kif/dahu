@@ -155,9 +155,6 @@ class IspybConnector:
         """
         run_number = list(self.run_number)
         guinier = data.get("guinier")
-        if not isinstance(guinier, RG_RESULT):
-            guinier = RG_RESULT(*([-1.] * 8))
-        # rti = data.get("rti", RT_RESULT(*([-1.] * 6)))
         gnom = data.get("bift")
         subtracted = data.get("subtracted")
         basename = data.get("basename", "frame")
