@@ -154,7 +154,9 @@ class IspybConnector:
         :param data: a dict with all information to be saved in Ispyb
         """
         run_number = list(self.run_number)
-        guinier = data.get("guinier", RG_RESULT(*([-1.] * 8)))
+        guinier = data.get("guinier")
+        if not isinstance(guinier, RG_RESULT):
+            guinier = RG_RESULT(*([-1.] * 8))
         # rti = data.get("rti", RT_RESULT(*([-1.] * 6)))
         volume = data.get("volume", -1)
         gnom = data.get("bift", None)
