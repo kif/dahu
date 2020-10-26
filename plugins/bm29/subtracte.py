@@ -13,7 +13,7 @@ __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "26/10/2020"
 __status__ = "development"
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 import os
 import json
@@ -348,6 +348,10 @@ class SubtractBuffer(Plugin):
 
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             self.to_pyarch["subtracted"] = res3
+        #Export this to the output JSON        
+        self.output["q"] = res3.radial
+        self.output["I"] = res3.intensity
+        self.output["std"] = res3.sigma
 
         #  Finally declare the default entry and default dataset ...
         #  overlay the BIFT fitted data on top of the scattering curve

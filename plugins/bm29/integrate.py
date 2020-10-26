@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "23/10/2020"
+__date__ = "26/10/2020"
 __status__ = "development"
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 import os
 import json

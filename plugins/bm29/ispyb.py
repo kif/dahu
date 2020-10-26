@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22229/2020"
+__date__ = "26/10/2020"
 __status__ = "development"
-version = "0.0.2"
+version = "0.1.0"
 
 import logging
 logger = logging.getLogger("bm29.ispyb")
