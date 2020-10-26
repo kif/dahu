@@ -134,8 +134,10 @@ class SubtractBuffer(Plugin):
                 try:
                     self.send_to_ispyb()
                 except Exception as err2:
-                    self.log_warning("Processing failed and unable to send remaining data to ISPyB: %s %s"%(type(err2), err2))
-            raise(err)
+                    import traceback
+                    self.log_warning("Processing failed and unable to send remaining data to ISPyB: %s %s\n%s" % 
+                                     (type(err2), err2, "\n".join(traceback.format_exc(limit=10)))
+                raise(err)
         else:
             self.send_to_ispyb()  
         

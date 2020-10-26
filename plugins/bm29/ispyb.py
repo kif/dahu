@@ -158,8 +158,7 @@ class IspybConnector:
         if not isinstance(guinier, RG_RESULT):
             guinier = RG_RESULT(*([-1.] * 8))
         # rti = data.get("rti", RT_RESULT(*([-1.] * 6)))
-        volume = data.get("volume", -1)
-        gnom = data.get("bift", None)
+        gnom = data.get("bift")
         subtracted = data.get("subtracted")
         basename = data.get("basename", "frame")
         sub = self.save_curve("subtracted", subtracted, basename)
@@ -172,35 +171,40 @@ class IspybConnector:
         if gnom is not None:
             gnomFile = self.save_bift(gnom, basename)
         sasm = numpy.vstack((subtracted.radial, subtracted.intensity, subtracted.sigma)).T
-        kratkyPlot = self.kratky_plot(sasm, guinier, basename)
-        guinierPlot = self.guinier_plot(sasm, guinier, basename)
+        if guinier:
+            kratkyPlot = self.kratky_plot(sasm, guinier, basename)
+            guinierPlot = self.guinier_plot(sasm, guinier, basename)
+        else:
+            kratkyPlot = ""
+            guinierPlot = ""
+
         scatterPlot = self.scatter_plot(sasm, guinier, gnom, basename)
         if gnom is not None:
             densityPlot = self.density_plot(gnom, basename)
         else:
-            densityPlot = None
+            densityPlot = ""
 
         self.client.service.addSubtraction(str(self.experiment_id),
                                            str(run_number),
-                                           str(guinier.Rg),
-                                           str(guinier.sigma_Rg),
-                                           str(guinier.I0),
-                                           str(guinier.sigma_I0),
-                                           str(guinier.start_point),
-                                           str(guinier.end_point),
-                                           str(guinier.quality),
-                                           str(guinier.aggregated),
+                                           str(guinier.Rg if guinier else -1),
+                                           str(guinier.sigma_Rg if guinier else -1),
+                                           str(guinier.I0 if guinier else -1),
+                                           str(guinier.sigma_I0 if guinier else -1),
+                                           str(guinier.start_point if guinier else -1),
+                                           str(guinier.end_point if guinier else -1),
+                                           str(guinier.quality if guinier else -1),
+                                           str(guinier.aggregated if guinier else -1),
                                            str(gnom.Rg_avg if gnom else -1),
                                            str(gnom.Dmax_avg if gnom else -1),
                                            str(gnom.evidence_avg if gnom else -1),
-                                           str(volume),
+                                           str(data.get("volume", -1)),
                                            "[{'filePath': '%s'}]" % sample,  # sampleOneDimensionalFiles
                                            str_list(individual_buffers),  # bufferOneDimensionalFiles
                                            sample,  # sampleAverageFilePath,
                                            buf,  # bufferAverageFilePath,
                                            sub,  # subtractedFilePath,
                                            scatterPlot,
-                                           densityPlot if gnom else "",
+                                           densityPlot,
                                            guinierPlot,
                                            kratkyPlot,
                                            gnomFile if gnom else "")
