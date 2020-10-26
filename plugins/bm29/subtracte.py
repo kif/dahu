@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "23/10/2020"
+__date__ = "26/10/2020"
 __status__ = "development"
 __version__ = "0.1.1"
 
@@ -106,6 +106,7 @@ class SubtractBuffer(Plugin):
     def teardown(self):
         Plugin.teardown(self)
         logger.debug("SubtractBuffer.teardown")
+                
         # export the output file location
         self.output["output_file"] = self.output_file
         self.output["Rg"] = self.Rg
@@ -125,8 +126,19 @@ class SubtractBuffer(Plugin):
         logger.debug("SubtractBuffer.process")
         self.sample_juice = self.read_nexus(self.sample_file)
         self.to_pyarch["basename"] = os.path.splitext(os.path.basename(self.sample_file))[0]
-        self.create_nexus()
-        self.send_to_ispyb()
+        try:
+            self.create_nexus()
+        except Exception as err:
+            #try to register in test-mode
+            if self.input.get("test_mode"):
+                try:
+                    self.send_to_ispyb()
+                except Exception as err2:
+                    self.log_warning("Processing failed and unable to send remaining data to ISPyB: %s %s"%(type(err2), err2))
+            raise(err)
+        else:
+            self.send_to_ispyb()  
+        
 
     def validate_buffer(self, buffer_file):
         "Validate if a buffer is consitent with the sample, return some buffer_juice or None when unconsistent"
