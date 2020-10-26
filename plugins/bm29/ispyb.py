@@ -36,15 +36,14 @@ class IspybConnector:
     "This class is a conector to the web-service"
 
     def __init__(self, url, login=None, passwd=None, pyarch=None,
-                 collection_id=-1, measurement_id=-1, run_number=-1):
+                 experiment_id=-1, run_number=-1, **kwargs):
         """Constructor of the ISPyB connections
 
         :param server: url of the service
         :param login: name used to authenticate
         :param passwd: password to use
         :param pyarch: folder for archiving data
-        :param collection_id: identifier for the collection --> deprecated
-        :param measurement_id: identifier for the measurement
+        :param experiment_id: identifies the experiment
         :param run_number: identify the run in an experiment (sample/buffer localization)
         """
         self.authentication = HttpAuthenticated(username=login, password=passwd)
@@ -54,8 +53,7 @@ class IspybConnector:
         else:
             logger.error("No `pyarch` destination provided ... things will go wrong")
 
-        self.collection_id = collection_id  # Deprecated
-        self.measurement_id = measurement_id
+        self.experiment_id = experiment_id
         self.run_number = run_number
 
     def send_averaged(self, data):
@@ -82,7 +80,7 @@ class IspybConnector:
                     frames.append(fn)
                 else:
                     discarded.append(fn)
-        self.client.service.addAveraged(str(self.measurement_id),
+        self.client.service.addAveraged(str(self.experiment_id),
                                         str(self.run_number),
                                         str_list(frames),
                                         str_list(discarded),
@@ -180,7 +178,7 @@ class IspybConnector:
         else:
             densityPlot = None
 
-        self.client.service.addSubtraction(str(self.measurement_id),
+        self.client.service.addSubtraction(str(self.experiment_id),
                                            str(run_number),
                                            str(guinier.Rg),
                                            str(guinier.sigma_Rg),

@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "23/10/2020"
+__date__ = "26/10/2020"
 __status__ = "development"
 version = "0.0.2"
 
@@ -116,8 +116,9 @@ class Ispyb(NamedTuple):
     login: str = _default_passwd.get("username")
     passwd: str = _default_passwd.get("password")
     pyarch: str = ""
-    collection_id: int = -1 # This is now deprecated
-    measurement_id: int = -1
+#     collection_id: int = -1 # This is now deprecated
+#     measurement_id: int = -1  # This is now deprecated
+    experiment_id: int = None  # This could be a integer (single run) or a list of integers.
     run_number: object = None  # This could be a integer (single run) or a list of integers.
 
     _fromdict = classmethod(_fromdict)
