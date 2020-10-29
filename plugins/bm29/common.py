@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "13/10/2020"
+__date__ = "26/10/2020"
 __status__ = "development"
 version = "0.0.2"
 
@@ -106,18 +106,20 @@ class Sample(NamedTuple):
     temperature: float=None
 
     _fromdict = classmethod(_fromdict)
-    
+
     def __repr__(self):
         return f"{self.name}, {self.concentration} mg/mL in {self.buffer}"
-    
-        
-class Ispyb(NamedTuple):        
-    url: str=None
-    login: str=_default_passwd.get("username")
-    passwd: str=_default_passwd.get("password")
-    pyarch: str=""
-    collection_id: int=-1
-    measurement_id: int=-1
+
+
+class Ispyb(NamedTuple):
+    url: str = None
+    login: str = _default_passwd.get("username")
+    passwd: str = _default_passwd.get("password")
+    pyarch: str = ""
+#     collection_id: int = -1 # This is now deprecated
+#     measurement_id: int = -1  # This is now deprecated
+    experiment_id: int = None  # This could be a integer (single run) or a list of integers.
+    run_number: object = None  # This could be a integer (single run) or a list of integers.
 
     _fromdict = classmethod(_fromdict)
 
@@ -131,7 +133,7 @@ def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
     """This function return the start and end index of a set of equivalent data:
 
     Note: the end-index is excluded, as usual in Python
-    
+
     :param proba: 2D array with the probablility that 2 dataset are array_equivalent
     :param absolute: minimum probablity of 2 dataset to be considered equivalent
     :param absolute: minimum probablity of 2 adjacents dataset to be considered equivalent
@@ -140,14 +142,14 @@ def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
     res = []
     sizes = []
     size = len(proba)
-    ext_diag = numpy.zeros(size+1, dtype=numpy.int16)
-    delta = numpy.zeros(size+1, dtype=numpy.int16)
+    ext_diag = numpy.zeros(size + 1, dtype=numpy.int16)
+    delta = numpy.zeros(size + 1, dtype=numpy.int16)
     ext_diag[0] = 1
     ext_diag[1:-1] = numpy.diagonal(proba, 1) >= relative
     delta[0] = ext_diag[1]
     delta[1:] = ext_diag[1:] - ext_diag[:-1]
-    start = numpy.where(delta>0)[0]
-    end = numpy.where(delta<0)[0]
+    start = numpy.where(delta > 0)[0]
+    end = numpy.where(delta < 0)[0]
     for start_i, end_i in zip(start, end):
         for start_j in range(start_i, end_i):
             # searching for the end-point which is the first invalid

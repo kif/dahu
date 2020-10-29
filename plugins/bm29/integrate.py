@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "08/10/2020"
+__date__ = "26/10/2020"
 __status__ = "development"
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 import os
 import json
@@ -35,9 +35,10 @@ import fabio
 import pyFAI, pyFAI.azimuthalIntegrator
 import freesas, freesas.cormap
 
-#from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
+# from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, get_integrator, KeyCache,\
-                    method, polarization_factor,Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, create_nexus_sample
+                    method, polarization_factor, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
+                    create_nexus_sample
 from .ispyb import IspybConnector
 
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
@@ -48,11 +49,11 @@ AverageResult = namedtuple("AverageResult", "average deviation")
 @register
 class IntegrateMultiframe(Plugin):
     """perform the integration of many frames contained in a HDF5 file and average them
-    
+
     Input parameters:
     :param poni_file: configuration of the geometry
     :param input_file: path for the HDF5 file
-    
+
     Typical JSON file:
     {
       "input_file": "/tmp/file1.h5",
@@ -77,7 +78,7 @@ class IntegrateMultiframe(Plugin):
         "concentration": 0,
         "hplc": "column name and chromatography conditions",
         "temperature": 20,
-        "temperature_env": 20},  
+        "temperature_env": 20},
       "ispyb": {
         "url": "http://ispyb.esrf.fr:1234",
         "login": "mx1234",
@@ -85,12 +86,12 @@ class IntegrateMultiframe(Plugin):
         "pyarch": "/data/pyarch/mx1234/sample", 
         "measurement_id": -1,
         "collection_id": -1
-       } 
+       }
     }
     """
-    
-    COPY_IMAGES=False
-    
+
+    COPY_IMAGES = False
+
     def __init__(self):
         Plugin.__init__(self)
         self.sample = None
@@ -98,23 +99,23 @@ class IntegrateMultiframe(Plugin):
         self.input_file = None
         self._input_frames = None
         self.output_file = None
-        self.nxs = None 
+        self.nxs = None
         self.nb_frames = None
         self.ai = None
         self.npt = 1000
-        self.unit = pyFAI.units.to_unit("q_nm^-1") 
+        self.unit = pyFAI.units.to_unit("q_nm^-1")
         # self.polarization_factor = 0.9 --> constant
         self.poni = self.mask = None
-        self.energy = None 
-        #self.method = IntegrationMethod.select_method(1, "no", "csr", "opencl")[0] -> constant
+        self.energy = None
+        # self.method = IntegrationMethod.select_method(1, "no", "csr", "opencl")[0] -> constant
         self.monitor_values = None
         self.normalization_factor = None
-        self.to_pyarch = {} #contains all the stuff to be sent to Ispyb and pyarch
+        self.to_pyarch = {} # contains all the stuff to be sent to Ispyb and pyarch
 
     def setup(self, kwargs=None):
         logger.debug("IntegrateMultiframe.setup")
         Plugin.setup(self, kwargs)
-        
+
         self.ispyb = Ispyb._fromdict(self.input.get("ispyb", {}))
         self.sample = Sample._fromdict(self.input.get("sample", {}))
         if not self.sample.name:
