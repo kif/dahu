@@ -130,7 +130,7 @@ class SubtractBuffer(Plugin):
             self.create_nexus()
         except Exception as err:
             #try to register in test-mode
-            if self.input.get("test_mode"):
+            if self.input.get("test_mode", True):
                 try:
                     self.send_to_ispyb()
                 except Exception as err2:
