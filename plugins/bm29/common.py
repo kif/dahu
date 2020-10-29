@@ -160,7 +160,7 @@ def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
             sizes.append(end_j - start_j)
             res.append((start_j, end_j))
 
-    if len(size):
+    if len(sizes):
         return res[numpy.argmax(sizes)]
     else:
         return (0,1)
