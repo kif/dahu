@@ -143,7 +143,7 @@ class IspybConnector:
         return filename
 
     def density_plot(self, ift, basename="frame"):
-        filename = self._mk_filename("Density", basename, ext=".svg")
+        filename = self._mk_filename("Density", "plot", basename, ext=".svg")
         density_plot(ift, filename=filename, format="svg", unit="nm",
                      ax=None, labelsize=None, fontsize=None)
         return filename
