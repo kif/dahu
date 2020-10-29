@@ -72,11 +72,11 @@ class IspybConnector:
 
         aver_data = data.pop("avg")
         averaged = self.save_curve("avg", aver_data, basename)
-
+        list_merged = list(range(*merged))
         for k, v in data.items():
             if isinstance(k, int):
                 fn = self.save_curve(k, v, basename)
-                if k in merged:
+                if k in list_merged:
                     frames.append(fn)
                 else:
                     discarded.append(fn)
