@@ -120,31 +120,31 @@ class IspybConnector:
         return filename
 
     def kratky_plot(self, sasm, guinier, basename="frame"):
-        filename = self._mk_filename("Kratky", "plot", basename, ext=".svg")
+        filename = self._mk_filename("Kratky", "plot", basename, ext=".png")
         kratky_plot(sasm, guinier,
-                    filename=filename, format="svg", unit="nm",
+                    filename=filename, format="png", unit="nm",
                     title="Dimensionless Kratky plot",
                     ax=None, labelsize=None, fontsize=None)
         return filename
 
     def guinier_plot(self, sasm, guinier, basename="frame"):
-        filename = self._mk_filename("Guinier", "plot", basename, ext=".svg")
+        filename = self._mk_filename("Guinier", "plot", basename, ext=".png")
         guinier_plot(sasm, guinier, filename=filename,
-                     format="svg", unit="nm",
+                     format="png", unit="nm",
                      ax=None, labelsize=None, fontsize=None)
         return filename
 
     def scatter_plot(self, sasm, guinier, ift, basename="frame"):
-        filename = self._mk_filename("Scattering", "plot", basename, ext=".svg")
+        filename = self._mk_filename("Scattering", "plot", basename, ext=".png")
         scatter_plot(sasm, guinier, ift,
-                     filename=filename, format="svg", unit="nm",
+                     filename=filename, format="png", unit="nm",
                      title="Scattering curve ",
                      ax=None, labelsize=None, fontsize=None)
         return filename
 
     def density_plot(self, ift, basename="frame"):
-        filename = self._mk_filename("Density", "plot", basename, ext=".svg")
-        density_plot(ift, filename=filename, format="svg", unit="nm",
+        filename = self._mk_filename("Density", "plot", basename, ext=".png")
+        density_plot(ift, filename=filename, format="png", unit="nm",
                      ax=None, labelsize=None, fontsize=None)
         return filename
 
