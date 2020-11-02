@@ -229,9 +229,6 @@ Minimalistic example:
             result_file = a + "_xpcs" + b
             self.log_warning("No destination file provided, saving in %s" % result_file)
 
-        if os.path.exists(result_file):
-            os.unlink(result_file)
-
         try:
             nxs = Nexus(result_file, mode="a", creator="dahu")
         except IOError as error:
