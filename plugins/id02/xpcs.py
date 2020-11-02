@@ -321,7 +321,6 @@ Minimalistic example:
             xpcs_data.attrs["signal"] = "g2"
             xpcs_data.attrs["axes"] = ["q", "t"]
             xpcs_data["title"] = "g₂(q, t)"
-        nxs.close()
         self.result_filename = result_file
 
     def teardown(self):
