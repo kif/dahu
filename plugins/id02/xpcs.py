@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "25/06/2020"
+__date__ = "02/11/2020"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -232,7 +232,14 @@ Minimalistic example:
         if os.path.exists(result_file):
             os.unlink(result_file)
 
-        with Nexus(result_file, mode="w", creator="dahu") as nxs:
+        try:
+            nxs = Nexus(result_file, mode="a", creator="dahu")
+        except IOError as error:
+            self.log_warning("invalid HDF5 file %s: remove and re-create!\n%s" % (result_file, error))
+            os.unlink(result_file)
+            nxs = Nexus(result_file, mode="w", creator="dahu")
+
+        with nxs:
             entry_grp = nxs.new_entry(entry="entry",
                                       program_name=self.input.get("plugin_name", "dahu"),
                                       title="XPCS experiment",
@@ -314,6 +321,7 @@ Minimalistic example:
             xpcs_data.attrs["signal"] = "g2"
             xpcs_data.attrs["axes"] = ["q", "t"]
             xpcs_data["title"] = "g₂(q, t)"
+        nxs.close()
         self.result_filename = result_file
 
     def teardown(self):
