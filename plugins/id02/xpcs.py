@@ -101,7 +101,7 @@ Minimalistic example:
         self.qmask = self.make_qmask()
         Correlator = self.get_correlator()
         correlator = Correlator(self.shape, self.nframes, qmask=self.qmask)
-        results = correlator.correlate(self.dataset[...])
+        results = correlator.correlate(self.dataset[...], calc_std=True)
         self.save_results(results)
 
     def read_data(self):
@@ -301,9 +301,10 @@ Minimalistic example:
             qmask_ds.attrs["long_name"] = "mask with bins averaged (0=masked-out)"
 
             entry_grp.attrs["default"] = xpcs_grp.attrs["default"] = xpcs_data.name
-            result_ds = xpcs_data.create_dataset("g2", result.shape, chunks=result.shape, **COMPRESSION)
-            result_ds[...] = result
+            result_ds = xpcs_data.create_dataset("g2", data=result.res, chunks=True, **COMPRESSION)
             result_ds.attrs["interpretation"] = "spectrum"
+            errors_ds = xpcs_data.create_dataset("errors", data=result.dev, chunks=True, **COMPRESSION)
+            errors_ds.attrs["interpretation"] = "spectrum"
             qrange_ds = xpcs_data.create_dataset("q", data=self.qrange)
             qrange_ds.attrs["interpretation"] = "scalar"
             qrange_ds.attrs["unit"] = self.unit
