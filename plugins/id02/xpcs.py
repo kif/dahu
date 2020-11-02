@@ -310,7 +310,7 @@ Minimalistic example:
             qrange_ds.attrs["unit"] = self.unit
             qrange_ds.attrs["long_name"] = "Scattering vector q (%s)" % self.unit
 
-            trange = numpy.arange(result.shape[-1]) * self.timestep
+            trange = numpy.arange(result_ds.shape[-1]) * self.timestep
             trange_ds = xpcs_data.create_dataset("t", data=trange)
             trange_ds.attrs["interpretation"] = "scalar"
             trange_ds.attrs["unit"] = "s"
