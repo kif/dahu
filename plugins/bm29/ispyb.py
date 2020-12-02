@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "29/10/2020"
+__date__ = "02/12/2020"
 __status__ = "development"
-version = "0.1.0"
+version = "0.1.1"
 
 import logging
 logger = logging.getLogger("bm29.ispyb")
@@ -23,6 +23,8 @@ import json
 import numpy
 from suds.client import Client
 from suds.transport.https import HttpAuthenticated
+import matplotlib.pyplot
+matplotlib.use("Agg")
 from freesas.collections import RG_RESULT, RT_RESULT, StatsResult
 from freesas.plot import kratky_plot, guinier_plot, scatter_plot, density_plot
 
@@ -121,31 +123,35 @@ class IspybConnector:
 
     def kratky_plot(self, sasm, guinier, basename="frame"):
         filename = self._mk_filename("Kratky", "plot", basename, ext=".png")
-        kratky_plot(sasm, guinier,
-                    filename=filename, format="png", unit="nm",
-                    title="Dimensionless Kratky plot",
-                    ax=None, labelsize=None, fontsize=None)
+        fig = kratky_plot(sasm, guinier,
+                           filename=filename, format="png", unit="nm",
+                           title="Dimensionless Kratky plot",
+                           ax=None, labelsize=None, fontsize=None)
+        matplotlib.pyplot.close(fig)
         return filename
 
     def guinier_plot(self, sasm, guinier, basename="frame"):
         filename = self._mk_filename("Guinier", "plot", basename, ext=".png")
-        guinier_plot(sasm, guinier, filename=filename,
-                     format="png", unit="nm",
-                     ax=None, labelsize=None, fontsize=None)
+        fig = guinier_plot(sasm, guinier, filename=filename,
+                            format="png", unit="nm",
+                            ax=None, labelsize=None, fontsize=None)
+        matplotlib.pyplot.close(fig)
         return filename
 
     def scatter_plot(self, sasm, guinier, ift, basename="frame"):
         filename = self._mk_filename("Scattering", "plot", basename, ext=".png")
-        scatter_plot(sasm, guinier, ift,
-                     filename=filename, format="png", unit="nm",
-                     title="Scattering curve ",
-                     ax=None, labelsize=None, fontsize=None)
+        fig = scatter_plot(sasm, guinier, ift,
+                           filename=filename, format="png", unit="nm",
+                           title="Scattering curve ",
+                           ax=None, labelsize=None, fontsize=None)
+        matplotlib.pyplot.close(fig)
         return filename
 
     def density_plot(self, ift, basename="frame"):
         filename = self._mk_filename("Density", "plot", basename, ext=".png")
-        density_plot(ift, filename=filename, format="png", unit="nm",
+        fig = density_plot(ift, filename=filename, format="png", unit="nm",
                      ax=None, labelsize=None, fontsize=None)
+        matplotlib.pyplot.close(fig)
         return filename
 
     def send_subtracted(self, data):
