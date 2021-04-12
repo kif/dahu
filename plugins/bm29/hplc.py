@@ -10,9 +10,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "07/10/2020"
+__date__ = "12/04/2021"
 __status__ = "development"
-__version__ = "0.0.1"
+__version__ = "0.0.2"
 
 import os
 import json
@@ -31,6 +31,7 @@ import freesas, freesas.cormap, freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier
 from freesas.bift import BIFT
 from scipy.optimize import minimize
+from sklearn.decomposition import NMF
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     Sample, create_nexus_sample
@@ -52,10 +53,13 @@ class HPLC(Plugin):
         "measurement_id": -1,
         "collection_id": -1
        },
+       "nmf_components = 5, 
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.hplc"
     } 
     """
+    NMF_COMP = 5
+    "Default number of Non-negative matrix factorisation components. Correspond to the number of spieces"
 
     def __init__(self):
         Plugin.__init__(self)
@@ -64,6 +68,8 @@ class HPLC(Plugin):
         self.nxs = None
         self.output_file = None
         self.juices = []
+        self.nmf_components = self.NMF_COMP
+        self.to_pyarch = {}
 
     def setup(self):
         Plugin.setup(self)
@@ -77,10 +83,13 @@ class HPLC(Plugin):
         if not self.output_file:
             self.output_file = os.path.commonprefix(self.input_files) + "_hplc.h5"
             self.log_warning("No output file provided, using " + self.output_file)
-
+        self.nmf_components = int(self.input.get("nmf_components", self.NMF_COMP))
+                                  
     def process(self):
         self.some_juice = [self.read_nexus(i) for i in self.input_files]
         self.create_nexus()
+        if not self.input.get("no_ispyb"):
+            self.send_to_ispyb()
 
     def teardown(self):
         Plugin.teardown(self)
@@ -187,6 +196,29 @@ class HPLC(Plugin):
 
         svd_grp.create_dataset("eigenvalues", data=S[:r], dtype=numpy.float32)
 
+    # Process 3: NMF matrix decomposition
+        nmf_grp = nxs.new_class(entry_grp, "3_NMF", "NXprocess")
+        nmf_grp["sequence_index"] = 3
+        nmf = NMF(n_components=self.nmf_components, init='nndsvd',
+                  max_iter=1000)
+        W = nmf.fit_transform(I.T)
+        eigen_data = nxs.new_class(nmf_grp, "eigenvectors", "NXdata")
+        eigen_ds = eigen_data.create_dataset("W", data=numpy.ascontiguousarray(W.T, dtype=numpy.float32))
+        eigen_ds.attrs["interpretation"] = "spectrum"
+        eigen_data.attrs["signal"] = "W"
+        eigen_data.attrs["SILX_style"] = SAXS_STYLE
+
+        eigen_ds.attrs["units"] = "arbitrary"
+        eigen_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
+
+        H = nmf.components_
+        chroma_data = nxs.new_class(nmf_grp, "chromatogram", "NXdata")
+        chroma_ds = chroma_data.create_dataset("H", data=numpy.ascontiguousarray(H, dtype=numpy.float32))
+        chroma_ds.attrs["interpretation"] = "spectrum"
+        chroma_data.attrs["signal"] = "H"
+
+    # Process 4: Export to Ispyb
+
     @staticmethod
     def read_nexus(filename):
         "return some NexusJuice from a HDF5 file "
@@ -237,3 +269,29 @@ class HPLC(Plugin):
 
         return NexusJuice(filename, h5path, npt, unit, idx, Isum, q, I, sigma, poni, mask, energy, polarization, method, sample)
         "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample"
+
+    def send_to_ispyb(self):
+        """Data sent to ISPyB are:
+            * hdf5File
+            * jsonFile built from HDF5
+            * hplcPlot various plots generated
+        """
+        if self.ispyb.url and parse_url(self.ispyb.url).host:
+            ispyb = IspybConnector(*self.ispyb)
+
+            # Composition of to_pyarch:
+            # X self.to_pyarch["id"] = self.id
+            # self.to_pyarch["buffer"] = self.buffer
+            # self.to_pyarch["first_curve"] = self.first_curve
+            # self.to_pyarch["frames"] = {}
+            # self.to_pyarch["curves"] = self.curves
+            # self.to_pyarch["for_buffer"] = self.for_buffer
+            # X self.to_pyarch["hdf5_filename"] = self.hdf5_filename
+            # X self.to_pyarch["chunk_size"] = self.chunk_size
+
+            self.to_pyarch["hdf5_filename"] = self.output_file
+            self.to_pyarch["chunk_size"] = min(j.Isum.size for j in self.some_juice)
+            self.to_pyarch["id"] = os.path.commonprefix(self.input_files)
+            ispyb.send_hplc(self.to_pyarch)
+        else:
+            self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)

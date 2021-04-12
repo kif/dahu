@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/12/2020"
+__date__ = "12/04/2021"
 __status__ = "development"
 version = "0.1.1"
 
@@ -212,3 +212,19 @@ class IspybConnector:
                                            kratkyPlot,
                                            gnomFile if gnom else "")
 
+    def send_hplc(self, data):
+        """send the result of the subtraction to Ispyb
+
+        :param data: a dict with all information to be saved in Ispyb
+        """
+        hdf5_file = data.get("hdf5_filename")
+        filename = self._mk_filename("BIFT", "plot", "basename", ext=".h5")
+        pyarch = ""
+        experiment_id = ""
+        json_file = os.path.splitext(hdf5_file)[0]+".json"
+        with open(json_file,format="w") as w:
+            w.write(json.dumps(indent=2))
+                    
+        self.client.service.storeHPLC(str(experiment_id),
+                                      hdf5_file,
+                                      json_file)
