@@ -98,6 +98,33 @@ def search_peaks(signal, wmin=10, scale=0.9):
     return scipy.ndimage.label(res)
 
 
+def build_background(I, std=None, keep=0.3):
+    """
+    Build a background from a SVD and search for the frames looking most like the background.
+    
+    1. build a coarse approximation based on the SVD.
+    2. measure the distance (cormap) of every single frame to the fundamental of the SVD
+    3. average frames that looks most like the coarse approximation (with deviation)
+    
+    :param I: 2D array of shape (nframes, nbins)
+    :param std: same as I but with the standard deviation.
+    :param keep: fraction of frames to consider for background (<1!), 30% looks like a good guess 
+    :return: (bg_avg, bg_std), each 1d of size nbins.
+    """
+    U, S, V = numpy.linalg.svd(I.T, full_matrices=False)
+    bg1 = numpy.median(V[0]) * S[0] * U[:, 0]
+    Pscore = [freesas.cormap.gof(bg1, i).P for i in I]
+    orderd = numpy.argsort(Pscore)
+    nkeep = int((1.0 - keep) * I.shape[0])
+    to_keep = orderd[nkeep:]
+    bg_avg = I[to_keep].mean(axis=0)
+    if std is not None:
+        bg_std = numpy.sqrt(((std[to_keep]) ** 2).sum(axis=0)) / len(to_keep)
+    else:
+        bg_std = None
+    return bg_avg, bg_std
+
+
 class HPLC(Plugin):
     """ Rebuild the complete chromatogram and perform basic analysis on it.
     
@@ -158,6 +185,7 @@ class HPLC(Plugin):
         entry_grp = nxs.new_entry("entry", self.input.get("plugin_name", "dahu"),
                               title='BioSaxs HPLC experiment',
                               force_time=get_isotime())
+        entry_grp["version"] = __version__
         nxs.h5.attrs["default"] = entry_grp.name
 
 
@@ -210,9 +238,11 @@ class HPLC(Plugin):
         frame_ds.attrs["long_name"] = "frame index"
         hplc_data.attrs["signal"] = "sum"
         hplc_data.attrs["axes"] = "frame_ids"
-        entry_grp.attrs["default"] = hplc_data.name
+        chroma_grp.attrs["default"] = entry_grp.attrs["default"] = hplc_data.name
+
         integration_data = nxs.new_class(chroma_grp, "results", "NXdata")
         chroma_grp.attrs["title"] = str(self.juices[0].sample)
+        
 
         int_ds = integration_data.create_dataset("I", data=numpy.ascontiguousarray(I, dtype=numpy.float32))
         std_ds = integration_data.create_dataset("errors", data=numpy.ascontiguousarray(sigma, dtype=numpy.float32))
@@ -252,13 +282,16 @@ class HPLC(Plugin):
         eigen_ds = eigen_data.create_dataset("U", data=numpy.ascontiguousarray(U.T[:r], dtype=numpy.float32))
         eigen_ds.attrs["interpretation"] = "spectrum"
         eigen_data.attrs["signal"] = "U"
+        eigen_data.attrs["SILX_style"] = SAXS_STYLE
 
         chroma_data = nxs.new_class(svd_grp, "chromatogram", "NXdata")
         chroma_ds = chroma_data.create_dataset("V", data=numpy.ascontiguousarray(V[:r], dtype=numpy.float32))
         chroma_ds.attrs["interpretation"] = "spectrum"
         chroma_data.attrs["signal"] = "V"
+        chroma_data.attrs["SILX_style"] = NORMAL_STYLE
 
         svd_grp.create_dataset("eigenvalues", data=S[:r], dtype=numpy.float32)
+        svd_grp.attrs["default"] = chroma_data.name
 
     # Process 3: NMF matrix decomposition
         nmf_grp = nxs.new_class(entry_grp, "3_NMF", "NXprocess")
@@ -280,32 +313,56 @@ class HPLC(Plugin):
         chroma_ds = chroma_data.create_dataset("H", data=numpy.ascontiguousarray(H, dtype=numpy.float32))
         chroma_ds.attrs["interpretation"] = "spectrum"
         chroma_data.attrs["signal"] = "H"
+        chroma_data.attrs["SILX_style"] = NORMAL_STYLE
+        nmf_grp.attrs["default"] = chroma_data.name
+        # Background obtained from NMF is not as good as the one obtained from SVD ...
+        # quantiles = (0.1, 0.6)  # assume weakest diffracting are background keep 10-40%
+        # background = W[:, 0] * (numpy.sort(H[0])[int(nframes * quantiles[0]): int(nframes * quantiles[-1])]).mean()
+        # bg_data = nxs.new_class(nmf_grp, "background", "NXdata")
+        # bg_data.attrs["signal"] = "I"
+        # bg_data.attrs["SILX_style"] = SAXS_STYLE
+        # bg_data.attrs["axes"] = radial_unit
+        # bg_ds = bg_data.create_dataset("I", data=numpy.ascontiguousarray(background, dtype=numpy.float32))
+        # bg_ds.attrs["interpretation"] = "spectrum"
+        # bg_data.attrs["quantiles"] = quantiles
+        # bg_q_ds = bg_data.create_dataset(radial_unit,
+        #                                  data=numpy.ascontiguousarray(q, dtype=numpy.float32))
+        # bg_q_ds.attrs["units"] = unit_name
+        # radius_unit = "nm" if "nm" in unit_name else "Å"
+        # bg_q_ds.attrs["long_name"] = f"Scattering vector q ({radius_unit}⁻¹)"
 
-        quantiles = (0.1, 0.6)  # assume weakest diffracting are background keep 10-40%
-        background = W[:, 0] * (numpy.sort(H[0])[int(nframes * quantiles[0]): int(nframes * quantiles[-1])]).mean()
-        bg_data = nxs.new_class(nmf_grp, "background", "NXdata")
+    # Process 5: Background estimation
+        bg_grp = nxs.new_class(entry_grp, "4_background", "NXprocess")
+        bg_grp["sequence_index"] = 4
+        bg_grp["keep"] = keep = 0.3
+        bg_grp["keep"].attrs["info"] = "Fraction of curves to be considered as background"
+        bg_avg, bg_std = build_background(I, sigma, keep=keep)
+        bg_data = nxs.new_class(bg_grp, "results", "NXdata")
         bg_data.attrs["signal"] = "I"
         bg_data.attrs["SILX_style"] = SAXS_STYLE
         bg_data.attrs["axes"] = radial_unit
-        bg_ds = bg_data.create_dataset("I", data=numpy.ascontiguousarray(background, dtype=numpy.float32))
+        bg_ds = bg_data.create_dataset("I", data=numpy.ascontiguousarray(bg_avg, dtype=numpy.float32))
         bg_ds.attrs["interpretation"] = "spectrum"
-        bg_data.attrs["quantiles"] = quantiles
         bg_q_ds = bg_data.create_dataset(radial_unit,
                                          data=numpy.ascontiguousarray(q, dtype=numpy.float32))
         bg_q_ds.attrs["units"] = unit_name
         radius_unit = "nm" if "nm" in unit_name else "Å"
         bg_q_ds.attrs["long_name"] = f"Scattering vector q ({radius_unit}⁻¹)"
+        bg_std_ds = bg_data.create_dataset("errors", data=numpy.ascontiguousarray(bg_std, dtype=numpy.float32))
+        bg_std_ds.attrs["interpretation"] = "spectrum"
+        bg_grp.attrs["default"] = bg_data.name
+        I_sub = I - bg_avg
+        Istd_sub = numpy.sqrt(sigma ** 2 + bg_std ** 2)
 
     # Process 4: fraction of chromatogram analysis
-        fraction_grp = nxs.new_class(entry_grp, "4_fractions", "NXprocess")
-        fraction_grp["sequence_index"] = 4
-        fraction_grp["width"] = window = 10
+        fraction_grp = nxs.new_class(entry_grp, "5_SEC_fractions", "NXprocess")
+        fraction_grp["sequence_index"] = 5
+        fraction_grp["minimum_size"] = window = 10
 
-        I_sub = I - background
         fractions, nfractions = search_peaks(Isum, window)
         if nfractions:
             for fraction in scipy.ndimage.find_objects(fractions, nfractions):
-                self.one_fraction(fraction[0], nxs, fraction_grp, I_sub, sigma)
+                self.one_fraction(fraction[0], nxs, fraction_grp, I_sub, Istd_sub)
 
     def one_fraction(self, fraction, nxs, top_grp, I_sub, sigma):
         """
@@ -319,12 +376,15 @@ class HPLC(Plugin):
         radial_unit, unit_name = str(unit).split("_", 1)
 
         f_grp = nxs.new_class(top_grp, f"{fraction.start}-{fraction.stop}", "NXprocess")
-        f_grp["sequence_index"] = 5
-        f_grp["program"] = "dahu.plugins.bm29.hplc"
-        f_grp["version"] = __version__
+        f_grp["sequence_index"] = 6
+        f_grp["first_frame"] = fraction.start
+        f_grp["last_frame"] = fraction.start
+        # f_grp["program"] = "dahu.plugins.bm29.hplc"
+        # f_grp["version"] = __version__
         f_grp["date"] = get_isotime()
         
         avg_data = nxs.new_class(f_grp, "1_average", "NXdata")
+        avg_data["sequence_index"] = 7
         avg_data.attrs["SILX_style"] = SAXS_STYLE
         avg_data.attrs["title"] = f"{sample.name}, frames {fraction.start}-{fraction.stop} averaged, buffer subtracted"
         avg_data.attrs["signal"] = "I"
@@ -337,7 +397,7 @@ class HPLC(Plugin):
         avg_q_ds.attrs["long_name"] = f"Scattering vector q ({radius_unit}⁻¹)"
         I_frc = I_sub[fraction].mean(axis=0)
         fsig2 = sigma[fraction] ** 2
-        sigma_frc = numpy.sqrt(fsig2.sum(axis=0) / fsig2.shape[0])
+        sigma_frc = numpy.sqrt(fsig2.sum(axis=0)) / fsig2.shape[0]
         ai2_int_ds = avg_data.create_dataset("I", data=numpy.ascontiguousarray(I_frc, dtype=numpy.float32))
         ai2_std_ds = avg_data.create_dataset("errors",
                                              data=numpy.ascontiguousarray(sigma_frc, dtype=numpy.float32))
@@ -351,8 +411,8 @@ class HPLC(Plugin):
 
 
     # Process 4: Guinier analysis
-        guinier_grp = nxs.new_class(f_grp, "6_Guinier_analysis", "NXprocess")
-        guinier_grp["sequence_index"] = 6
+        guinier_grp = nxs.new_class(f_grp, "2_Guinier_analysis", "NXprocess")
+        guinier_grp["sequence_index"] = 8
         guinier_grp["program"] = "freesas.autorg"
         guinier_grp["version"] = freesas.version
         guinier_grp["date"] = get_isotime()
@@ -482,8 +542,8 @@ class HPLC(Plugin):
             return
 
     # Process 5: Kratky plot
-        kratky_grp = nxs.new_class(f_grp, "7_dimensionless_Kratky_plot", "NXprocess")
-        kratky_grp["sequence_index"] = 7
+        kratky_grp = nxs.new_class(f_grp, "3_dimensionless_Kratky_plot", "NXprocess")
+        kratky_grp["sequence_index"] = 9
         kratky_grp["program"] = "freesas.autorg"
         kratky_grp["version"] = freesas.version
         kratky_grp["date"] = get_isotime()
@@ -511,8 +571,8 @@ class HPLC(Plugin):
         kratky_data_attrs["axes"] = "qRg"
 
     # stage 6: Rambo-Tainer invariant
-        rti_grp = nxs.new_class(f_grp, "8_invariants", "NXprocess")
-        rti_grp["sequence_index"] = 8
+        rti_grp = nxs.new_class(f_grp, "4_invariants", "NXprocess")
+        rti_grp["sequence_index"] = 10
         rti_grp["program"] = "freesas.invariants"
         rti_grp["version"] = freesas.version
         rti_data = nxs.new_class(rti_grp, "results", "NXdata")
@@ -548,8 +608,8 @@ class HPLC(Plugin):
         self.to_pyarch["rti"] = rti
 
     # stage 7: Pair distribution function, what is the equivalent of datgnom
-        bift_grp = nxs.new_class(f_grp, "9_indirect_Fourier_transformation", "NXprocess")
-        bift_grp["sequence_index"] = 9
+        bift_grp = nxs.new_class(f_grp, "5_indirect_Fourier_transformation", "NXprocess")
+        bift_grp["sequence_index"] = 11
         bift_grp["program"] = "freesas.bift"
         bift_grp["version"] = freesas.version
         bift_grp["date"] = get_isotime()
