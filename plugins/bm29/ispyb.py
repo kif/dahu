@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "12/04/2021"
+__date__ = "14/04/2021"
 __status__ = "development"
 version = "0.1.1"
 
@@ -48,6 +48,7 @@ class IspybConnector:
         :param experiment_id: identifies the experiment
         :param run_number: identify the run in an experiment (sample/buffer localization)
         """
+        self._url = url
         self.authentication = HttpAuthenticated(username=login, password=passwd)
         self.client = Client(url, transport=self.authentication, cache=None)
         if pyarch:
@@ -57,6 +58,9 @@ class IspybConnector:
 
         self.experiment_id = experiment_id
         self.run_number = run_number
+
+    def __repr__(self):
+        return f"Ispyb connector to {self._url}"
 
     def send_averaged(self, data):
         """Send this to ISPyB and backup to PyArch

@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/12/2020"
+__date__ = "14/04/2021"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -335,7 +335,7 @@ class SubtractBuffer(Plugin):
                                            data=numpy.ascontiguousarray(res3.radial, dtype=numpy.float32))
         ai2_q_ds.attrs["units"] = unit_name
         radius_unit = "nm" if "nm" in unit_name else "Å"
-        ai2_q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
+        ai2_q_ds.attrs["long_name"] = f"Scattering vector q ({radius_unit}⁻¹)"
 
         ai2_int_ds = ai2_data.create_dataset("I", data=numpy.ascontiguousarray(res3.intensity, dtype=numpy.float32))
         ai2_std_ds = ai2_data.create_dataset("errors", 
