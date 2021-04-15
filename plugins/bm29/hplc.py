@@ -731,9 +731,28 @@ class HPLC(Plugin):
         :param top_grp: top level group where to start working
         :return: runtime
         """
-        keys = ["buffer_frames", "buffer_I", "buffer_stdev", "Dmax", "gnom", "I0", "I0_std", "mass", "mass_Stdev", "merge_frames", "merge_I", "merge_stdev"
+        keys = ["buffer_frames", "buffer_I", "buffer_Stdev", "Dmax", "gnom", "I0", "I0_std", "mass", "mass_Stdev", "merge_frames", "merge_I", "merge_Stdev",
                 "q", "Qr", "Qr_Stdev", "quality", "Rg", "Rg_Stdev", "scattering_I", "scattering_Stdev", "subtracted_I", "subtracted_Stdev", "sum_I",
                 "time", "total", "Vc", "Vc_Stdev", "volume"]
+        keys_extra = {"Dmax": "Maximum diameter from IFT, skipped",
+                      "gnom": "Radius of gyration from IFT, skipped",
+                      "I0": "Forward scattering from GPA",
+                      "I0_std": "Uncertainty on forward scattering",
+                      "mass": "Estimated protein weight from RT analysis",
+                      "mass_Stdev": "Uncertainty on the mass",
+                      "Qr": "RT invariant",
+                      "Qr_Stdev":"Uncertainty on RT invariant",
+                      "quality": "Quality estimated from GPA",
+                      "Rg": "radius of gyration obtained from GPA",
+                      "Rg_Stdev": "uncertainty on Rg",
+                      "total": "skipped",
+                      "Vc": "Volume of correlation obtained from RT",
+                      "Vc_Stdev": "Uncertainty on volume",
+                      "volume": "Molecular volume obtained from Porrod analysis",
+                      "sum_I": "Total scattering of the frame",
+                      "time": "Time stamp: TODO",
+   
+                      }
         start_time = time.perf_counter()
         ispyb_grp = nxs.new_class(top_grp, "6_ISPyB ", "NXcollection")
         ispyb_grp["sequence_index"] = self.sequence_index()
@@ -752,10 +771,25 @@ class HPLC(Plugin):
         ds.attrs["info"] = "Averaged background scattering signal (buffer)"
         ds = ispyb_grp.create_dataset("buffer_Stdev", data=numpy.ascontiguousarray(self.to_pyarch["buffer_Stdev"], dtype=numpy.float32))
         ds.attrs["info"] = "Standard deviation of background scattering signal (buffer)"
+        ds = ispyb_grp.create_dataset("merge_frames", data=numpy.ascontiguousarray(self.to_pyarch["merge_frames"], dtype=numpy.int32))
+        ds.attrs["info"] = "Frames merged for each fraction"
+        ds = ispyb_grp.create_dataset("merge_I", data=numpy.ascontiguousarray(self.to_pyarch["merge_I"], dtype=numpy.float32))
+        ds.attrs["info"] = "Scattering from merged frames in each fraction"
+        ds = ispyb_grp.create_dataset("merge_Stdev", data=numpy.ascontiguousarray(self.to_pyarch["merge_Stdev"], dtype=numpy.float32))
+        ds.attrs["info"] = "Uncertainties on scattering from merged frames in each fraction"
+        "", "", "", ""
+        ds = ispyb_grp.create_dataset("scattering_I", data=numpy.ascontiguousarray(self.to_pyarch["scattering_I"], dtype=numpy.float32))
+        ds.attrs["info"] = "Scattering of each individual frame"
+        ds = ispyb_grp.create_dataset("scattering_Stdev", data=numpy.ascontiguousarray(self.to_pyarch["scattering_Stdev"], dtype=numpy.float32))
+        ds.attrs["info"] = "Uncertainties on the scattering of each individual frame"
+        ds = ispyb_grp.create_dataset("subtracted_I", data=numpy.ascontiguousarray(self.to_pyarch["subtracted_I"], dtype=numpy.float32))
+        ds.attrs["info"] = "Background subtracted scattering of each individual frame"
+        ds = ispyb_grp.create_dataset("subtracted_Stdev", data=numpy.ascontiguousarray(self.to_pyarch["subtracted_Stdev"], dtype=numpy.float32))
+        ds.attrs["info"] = "Uncertainties on background subtracted scattering of each individual frame"
 
-        for k1 in ["Dmax", "gnom", "I0", "I0_std", "mass", "mass_Stdev", "Qr", "Qr_Stdev", "quality", "Rg", "Rg_Stdev",
-                   "total", "Vc", "Vc_Stdev", "volume"]:
-            self.to_pyarch[k1] = numpy.zeros(nframes, dtype=numpy.float32)
+        for k1 in keys_extra:
+            if k1 not in self.to_pyarch:
+                self.to_pyarch[k1] = numpy.zeros(nframes, dtype=numpy.float32)
         I_sub = self.to_pyarch["subtracted_I"].astype(numpy.float64)
         Istd_sub = self.to_pyarch["subtracted_Stdev"].astype(numpy.float64)
         for i in range(nframes):
@@ -782,6 +816,10 @@ class HPLC(Plugin):
                     self.to_pyarch[k][i] = rti.__getattribute__(v)
             if porod is not None:
                 self.to_pyarch["volume"][i] = porod
+        for k, v in keys_extra.items():
+            ds = ispyb_grp.create_dataset(k, data=numpy.ascontiguousarray(self.to_pyarch[k], dtype=numpy.float32))
+            ds.attrs["info"] = v
+
         # create all symbolic links at the top level for Ispyb compatibility
         for k in keys:
             nxs.h5[k] = ispyb_grp[k]
