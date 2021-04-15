@@ -10,10 +10,11 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "14/04/2021"
+__date__ = "15/04/2021"
 __status__ = "development"
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
+import time
 import os
 import json
 from math import log, pi
@@ -109,7 +110,7 @@ def build_background(I, std=None, keep=0.3):
     :param I: 2D array of shape (nframes, nbins)
     :param std: same as I but with the standard deviation.
     :param keep: fraction of frames to consider for background (<1!), 30% looks like a good guess 
-    :return: (bg_avg, bg_std), each 1d of size nbins.
+    :return: (bg_avg, bg_std, indexes), each 1d of size nbins. + the index of the frames to keep
     """
     U, S, V = numpy.linalg.svd(I.T, full_matrices=False)
     bg1 = numpy.median(V[0]) * S[0] * U[:, 0]
@@ -122,7 +123,7 @@ def build_background(I, std=None, keep=0.3):
         bg_std = numpy.sqrt(((std[to_keep]) ** 2).sum(axis=0)) / len(to_keep)
     else:
         bg_std = None
-    return bg_avg, bg_std
+    return bg_avg, bg_std, to_keep
 
 
 class HPLC(Plugin):
@@ -156,6 +157,12 @@ class HPLC(Plugin):
         self.nmf_components = self.NMF_COMP
         self.to_pyarch = {}
         self.ispyb = None
+        self._pid = 0
+
+    def sequence_index(self):
+        value = self._pid
+        self._pid += 1
+        return value
 
     def setup(self):
         Plugin.setup(self)
@@ -196,7 +203,7 @@ class HPLC(Plugin):
 
     # Process 0: Measurement group
         input_grp = nxs.new_class(entry_grp, "0_measurement", "NXcollection")
-        input_grp["sequence_index"] = 0
+        input_grp["sequence_index"] = self.sequence_index()
 
         for idx, filename in enumerate(self.input_files):
             juice = self.read_nexus(filename)
@@ -214,7 +221,7 @@ class HPLC(Plugin):
 
     # Process 1: Chromatogram
         chroma_grp = nxs.new_class(entry_grp, "1_chromatogram", "NXprocess")
-        chroma_grp["sequence_index"] = 1
+        chroma_grp["sequence_index"] = self.sequence_index()
         nframes = max(i.idx.max() for i in self.juices) + 1
         nbin = self.juices[0].q.size
 
@@ -261,7 +268,7 @@ class HPLC(Plugin):
 
     # Process 2: SVD decomposition
         svd_grp = nxs.new_class(entry_grp, "2_SVD", "NXprocess")
-        svd_grp["sequence_index"] = 2
+        svd_grp["sequence_index"] = self.sequence_index()
         logi = numpy.arcsinh(I.T)
         U, S, V = numpy.linalg.svd(logi, full_matrices=False)
 
@@ -295,7 +302,7 @@ class HPLC(Plugin):
 
     # Process 3: NMF matrix decomposition
         nmf_grp = nxs.new_class(entry_grp, "3_NMF", "NXprocess")
-        nmf_grp["sequence_index"] = 3
+        nmf_grp["sequence_index"] = self.sequence_index()
         nmf = NMF(n_components=self.nmf_components, init='nndsvd',
                   max_iter=1000)
         W = nmf.fit_transform(I.T)
@@ -333,10 +340,13 @@ class HPLC(Plugin):
 
     # Process 5: Background estimation
         bg_grp = nxs.new_class(entry_grp, "4_background", "NXprocess")
-        bg_grp["sequence_index"] = 4
+        bg_grp["sequence_index"] = self.sequence_index()
         bg_grp["keep"] = keep = 0.3
         bg_grp["keep"].attrs["info"] = "Fraction of curves to be considered as background"
-        bg_avg, bg_std = build_background(I, sigma, keep=keep)
+        bg_avg, bg_std, to_keep = build_background(I, sigma, keep=keep)
+        self.to_pyarch["buffer_frames"] = to_keep
+        self.to_pyarch["buffer_I"] = bg_avg
+        self.to_pyarch["buffer_Stdev"] = bg_std
         bg_data = nxs.new_class(bg_grp, "results", "NXdata")
         bg_data.attrs["signal"] = "I"
         bg_data.attrs["SILX_style"] = SAXS_STYLE
@@ -354,20 +364,39 @@ class HPLC(Plugin):
         I_sub = I - bg_avg
         Istd_sub = numpy.sqrt(sigma ** 2 + bg_std ** 2)
 
-    # Process 4: fraction of chromatogram analysis
+        self.to_pyarch["scattering_I"] = I
+        self.to_pyarch["scattering_Stdev"] = sigma
+        self.to_pyarch["subtracted_I"] = I_sub
+        self.to_pyarch["subtracted_Stdev"] = Istd_sub
+        self.to_pyarch["sum_I"] = Isum
+
+    # Process 5: fraction of chromatogram analysis
         fraction_grp = nxs.new_class(entry_grp, "5_SEC_fractions", "NXprocess")
-        fraction_grp["sequence_index"] = 5
+        fraction_grp["sequence_index"] = self.sequence_index()
         fraction_grp["minimum_size"] = window = 10
 
         fractions, nfractions = search_peaks(Isum, window)
-        if nfractions:
-            for fraction in scipy.ndimage.find_objects(fractions, nfractions):
-                self.one_fraction(fraction[0], nxs, fraction_grp, I_sub, Istd_sub)
+        self.to_pyarch["merge_frames"] = numpy.zeros((nfractions, 2), dtype=numpy.int32)
+        self.to_pyarch["merge_I"] = numpy.zeros((nfractions, nbin), dtype=numpy.float32)
+        self.to_pyarch["merge_Stdev"] = numpy.zeros((nfractions, nbin), dtype=numpy.float32)
 
-    def one_fraction(self, fraction, nxs, top_grp, I_sub, sigma):
+        if nfractions:
+            for i, fraction in enumerate(scipy.ndimage.find_objects(fractions, nfractions)):
+                self.one_fraction(fraction[0], i, nxs, fraction_grp)
+
+    # Process 6: All other calculation for ISPyB:
+        t = self.build_ispyb_group(nxs, entry_grp)
+        self.log_warning(f"Ispyb structure creation took {t:.3f}s")
+
+        # Mind to close the file
+        nxs.close()
+
+    def one_fraction(self, fraction, index, nxs, top_grp):
         """
         :param fraction: slice with start and end
+        :param index: index of the fraction
         :param nxs: opened Nexus file object
+        :param top_grp: top level nexus group to start building into.
         
         """
         q = self.juices[0].q
@@ -375,8 +404,11 @@ class HPLC(Plugin):
         sample = self.juices[0].sample
         radial_unit, unit_name = str(unit).split("_", 1)
 
+        I_sub = self.to_pyarch["subtracted_I"]
+        sigma = self.to_pyarch["subtracted_Stdev"]
+
         f_grp = nxs.new_class(top_grp, f"{fraction.start}-{fraction.stop}", "NXprocess")
-        f_grp["sequence_index"] = 6
+        f_grp["sequence_index"] = self.sequence_index()
         f_grp["first_frame"] = fraction.start
         f_grp["last_frame"] = fraction.start
         # f_grp["program"] = "dahu.plugins.bm29.hplc"
@@ -384,7 +416,7 @@ class HPLC(Plugin):
         f_grp["date"] = get_isotime()
         
         avg_data = nxs.new_class(f_grp, "1_average", "NXdata")
-        avg_data["sequence_index"] = 7
+        avg_data["sequence_index"] = self.sequence_index()
         avg_data.attrs["SILX_style"] = SAXS_STYLE
         avg_data.attrs["title"] = f"{sample.name}, frames {fraction.start}-{fraction.stop} averaged, buffer subtracted"
         avg_data.attrs["signal"] = "I"
@@ -409,10 +441,14 @@ class HPLC(Plugin):
         ai2_std_ds.attrs["interpretation"] = "spectrum"
         ai2_int_ds.attrs["units"] = "arbitrary"
 
+        self.to_pyarch["merge_frames"][index, 0] = fraction.start
+        self.to_pyarch["merge_frames"][index, 1] = fraction.stop
+        self.to_pyarch["merge_I"][index] = I_frc
+        self.to_pyarch["merge_Stdev"][index] = sigma_frc
 
     # Process 4: Guinier analysis
         guinier_grp = nxs.new_class(f_grp, "2_Guinier_analysis", "NXprocess")
-        guinier_grp["sequence_index"] = 8
+        guinier_grp["sequence_index"] = self.sequence_index()
         guinier_grp["program"] = "freesas.autorg"
         guinier_grp["version"] = freesas.version
         guinier_grp["date"] = get_isotime()
@@ -543,7 +579,7 @@ class HPLC(Plugin):
 
     # Process 5: Kratky plot
         kratky_grp = nxs.new_class(f_grp, "3_dimensionless_Kratky_plot", "NXprocess")
-        kratky_grp["sequence_index"] = 9
+        kratky_grp["sequence_index"] = self.sequence_index()
         kratky_grp["program"] = "freesas.autorg"
         kratky_grp["version"] = freesas.version
         kratky_grp["date"] = get_isotime()
@@ -572,7 +608,7 @@ class HPLC(Plugin):
 
     # stage 6: Rambo-Tainer invariant
         rti_grp = nxs.new_class(f_grp, "4_invariants", "NXprocess")
-        rti_grp["sequence_index"] = 10
+        rti_grp["sequence_index"] = self.sequence_index()
         rti_grp["program"] = "freesas.invariants"
         rti_grp["version"] = freesas.version
         rti_data = nxs.new_class(rti_grp, "results", "NXdata")
@@ -601,15 +637,14 @@ class HPLC(Plugin):
         self.Vc = rti.Vc
         self.mass = rti.mass
 
-        volume = self.to_pyarch["volume"] = freesas.invariants.calc_Porod(sasm, guinier)
+        volume = freesas.invariants.calc_Porod(sasm, guinier)
         volume_ds = rti_data.create_dataset("volume", data=volume)
         volume_ds.attrs["unit"] = "nm³"
         volume_ds.attrs["formula"] = "Porod: V = 2*π²I₀²/(sum_q I(q)q² dq)"
-        self.to_pyarch["rti"] = rti
 
     # stage 7: Pair distribution function, what is the equivalent of datgnom
         bift_grp = nxs.new_class(f_grp, "5_indirect_Fourier_transformation", "NXprocess")
-        bift_grp["sequence_index"] = 11
+        bift_grp["sequence_index"] = self.sequence_index()
         bift_grp["program"] = "freesas.bift"
         bift_grp["version"] = freesas.version
         bift_grp["date"] = get_isotime()
@@ -689,6 +724,69 @@ class HPLC(Plugin):
             bift_ds.attrs["interpretation"] = "spectrum"
             avg_data.attrs["auxiliary_signals"] = "BIFT"
             bift_grp.attrs["default"] = bift_data.name
+
+    def build_ispyb_group(self, nxs, top_grp):
+        """Build the ispyb group inside the HDF5/Nexus file and all associated calculation
+        :param nsx: opened nexus file
+        :param top_grp: top level group where to start working
+        :return: runtime
+        """
+        keys = ["buffer_frames", "buffer_I", "buffer_stdev", "Dmax", "gnom", "I0", "I0_std", "mass", "mass_Stdev", "merge_frames", "merge_I", "merge_stdev"
+                "q", "Qr", "Qr_Stdev", "quality", "Rg", "Rg_Stdev", "scattering_I", "scattering_Stdev", "subtracted_I", "subtracted_Stdev", "sum_I",
+                "time", "total", "Vc", "Vc_Stdev", "volume"]
+        start_time = time.perf_counter()
+        ispyb_grp = nxs.new_class(top_grp, "6_ISPyB ", "NXcollection")
+        ispyb_grp["sequence_index"] = self.sequence_index()
+        ispyb_grp["start_time"] = get_isotime()
+
+        scattering_I = self.to_pyarch["scattering_I"]
+        nframes, nbin = scattering_I.shape
+
+        q = self.juices[0].q.astype(numpy.float64)
+        ds = ispyb_grp.create_dataset("q", data=numpy.ascontiguousarray(q, dtype=numpy.float32))
+        ds.attrs["info"] = "Scattering vector length, common for all scattering intensities"
+
+        ds = ispyb_grp.create_dataset("buffer_frames", data=numpy.ascontiguousarray(self.to_pyarch["buffer_frames"], dtype=numpy.int32))
+        ds.attrs["info"] = "Index of frames used to calculate the background scattring (buffer frames)"
+        ds = ispyb_grp.create_dataset("buffer_I", data=numpy.ascontiguousarray(self.to_pyarch["buffer_I"], dtype=numpy.float32))
+        ds.attrs["info"] = "Averaged background scattering signal (buffer)"
+        ds = ispyb_grp.create_dataset("buffer_Stdev", data=numpy.ascontiguousarray(self.to_pyarch["buffer_Stdev"], dtype=numpy.float32))
+        ds.attrs["info"] = "Standard deviation of background scattering signal (buffer)"
+
+        for k1 in ["Dmax", "gnom", "I0", "I0_std", "mass", "mass_Stdev", "Qr", "Qr_Stdev", "quality", "Rg", "Rg_Stdev",
+                   "total", "Vc", "Vc_Stdev", "volume"]:
+            self.to_pyarch[k1] = numpy.zeros(nframes, dtype=numpy.float32)
+        I_sub = self.to_pyarch["subtracted_I"].astype(numpy.float64)
+        Istd_sub = self.to_pyarch["subtracted_Stdev"].astype(numpy.float64)
+        for i in range(nframes):
+            sasm = numpy.vstack((q, I_sub[i], Istd_sub[i])).T
+            try:
+                guinier = freesas.autorg.auto_gpa(sasm)
+                try:
+                    rti = freesas.invariants.calc_Rambo_Tainer(sasm, guinier)
+                except:
+                    rti=None
+                try:
+                    porod = freesas.invariants.calc_Porod(sasm, guinier)
+                except:
+                    porod = None
+            except:
+                guinier = rti = porod = None
+            if guinier is not None:
+                for k,v in zip(["Rg", "Rg_Stdev","I0", "I0_std","quality"],
+                               ['Rg', 'sigma_Rg', 'I0', 'sigma_I0', 'quality']):
+                    self.to_pyarch[k][i] = guinier.__getattribute__(v)
+            if rti is not None:
+                for k, v in zip(["Vc", "Vc_Stdev", "Qr", "Qr_Stdev", "mass", "mass_Stdev"],
+                                ['Vc', 'sigma_Vc', 'Qr', 'sigma_Qr', 'mass', 'sigma_mass']):
+                    self.to_pyarch[k][i] = rti.__getattribute__(v)
+            if porod is not None:
+                self.to_pyarch["volume"][i] = porod
+        # create all symbolic links at the top level for Ispyb compatibility
+        for k in keys:
+            nxs.h5[k] = ispyb_grp[k]
+        ispyb_grp["end_time"] = get_isotime()
+        return time.perf_counter() - start_time
 
     @staticmethod
     def read_nexus(filename):
