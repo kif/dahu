@@ -150,7 +150,6 @@ class HPLC(Plugin):
     def __init__(self):
         Plugin.__init__(self)
         self.input_files = []
-        self.sample_file = None
         self.nxs = None
         self.output_file = None
         self.juices = []
@@ -181,6 +180,10 @@ class HPLC(Plugin):
 
     def process(self):
         self.create_nexus()
+        self.to_pyarch["hdf5_filename"] = self.output_file
+        self.to_pyarch["chunk_size"] = self.juices[0].Isum.size
+        self.to_pyarch["id"] = os.path.commonprefix(self.input_files)
+        self.to_pyarch["sample_name"] = self.juices[0].sample.name
         if not self.input.get("no_ispyb"):
             self.send_to_ispyb()
 
@@ -188,7 +191,7 @@ class HPLC(Plugin):
         Plugin.teardown(self)
 
     def create_nexus(self):
-        nxs = self.nxs = Nexus(self.output_file, mode="w")
+        nxs = Nexus(self.output_file, mode="w")
         entry_grp = nxs.new_entry("entry", self.input.get("plugin_name", "dahu"),
                               title='BioSaxs HPLC experiment',
                               force_time=get_isotime())
@@ -348,7 +351,8 @@ class HPLC(Plugin):
         bg_grp["keep"] = keep = 0.3
         bg_grp["keep"].attrs["info"] = "Fraction of curves to be considered as background"
         bg_avg, bg_std, to_keep = build_background(I, sigma, keep=keep)
-        kept_ds = bg_grp.crete_dataset("kept", data=numpy.ascontiguousarray(to_keep, dtype=numpy.int32))
+        to_keep = numpy.ascontiguousarray(to_keep, dtype=numpy.int32)
+        kept_ds = bg_grp.create_dataset("kept", data=to_keep)
         kept_ds.attrs["info"] = "Index of curves used to calculate the background scattering"
         self.to_pyarch["buffer_frames"] = to_keep
         self.to_pyarch["buffer_I"] = bg_avg
@@ -771,7 +775,7 @@ class HPLC(Plugin):
         ds = ispyb_grp.create_dataset("q", data=numpy.ascontiguousarray(q, dtype=numpy.float32))
         ds.attrs["info"] = "Scattering vector length, common for all scattering intensities"
 
-        ds = ispyb_grp.create_dataset("buffer_frames", data=numpy.ascontiguousarray(self.to_pyarch["buffer_frames"], dtype=numpy.int32))
+        ds = ispyb_grp.create_dataset("buffer_frames", data=self.to_pyarch["buffer_frames"])
         ds.attrs["info"] = "Index of frames used to calculate the background scattring (buffer frames)"
         ds = ispyb_grp.create_dataset("buffer_I", data=numpy.ascontiguousarray(self.to_pyarch["buffer_I"], dtype=numpy.float32))
         ds.attrs["info"] = "Averaged background scattering signal (buffer)"
@@ -896,20 +900,6 @@ class HPLC(Plugin):
         """
         if self.ispyb and self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
-
-            # Composition of to_pyarch:
-            # X self.to_pyarch["id"] = self.id
-            # self.to_pyarch["buffer"] = self.buffer
-            # self.to_pyarch["first_curve"] = self.first_curve
-            # self.to_pyarch["frames"] = {}
-            # self.to_pyarch["curves"] = self.curves
-            # self.to_pyarch["for_buffer"] = self.for_buffer
-            # X self.to_pyarch["hdf5_filename"] = self.hdf5_filename
-            # X self.to_pyarch["chunk_size"] = self.chunk_size
-
-            self.to_pyarch["hdf5_filename"] = self.output_file
-            self.to_pyarch["chunk_size"] = min(j.Isum.size for j in self.some_juice)
-            self.to_pyarch["id"] = os.path.commonprefix(self.input_files)
             ispyb.send_hplc(self.to_pyarch)
         else:
             self.log_warning(f"Not sending to ISPyB: no valid URL in {self.ispyb}")

@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "14/04/2021"
+__date__ = "16/04/2021"
 __status__ = "development"
 version = "0.1.1"
 
@@ -222,13 +222,12 @@ class IspybConnector:
         :param data: a dict with all information to be saved in Ispyb
         """
         hdf5_file = data.get("hdf5_filename")
-        filename = self._mk_filename("BIFT", "plot", "basename", ext=".h5")
-        pyarch = ""
-        experiment_id = ""
-        json_file = os.path.splitext(hdf5_file)[0]+".json"
+        self.juices[0].sample
+        filename = self._mk_filename("HPLC", "hplc", data.get("sample_name", "sample"), ext=".h5")
+        json_file = os.path.splitext(filename)[0] + ".json"
         with open(json_file,format="w") as w:
-            w.write(json.dumps(indent=2))
+            w.write(json.dumps(data, indent=2))
                     
-        self.client.service.storeHPLC(str(experiment_id),
+        self.client.service.storeHPLC(str(self.experiment_id),
                                       hdf5_file,
                                       json_file)
