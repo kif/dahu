@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "15/04/2021"
+__date__ = "16/04/2021"
 __status__ = "development"
 __version__ = "0.1.1"
 
@@ -117,7 +117,7 @@ def build_background(I, std=None, keep=0.3):
     Pscore = [freesas.cormap.gof(bg1, i).P for i in I]
     orderd = numpy.argsort(Pscore)
     nkeep = int((1.0 - keep) * I.shape[0])
-    to_keep = orderd[nkeep:]
+    to_keep = numpy.sort(orderd[nkeep:])
     bg_avg = I[to_keep].mean(axis=0)
     if std is not None:
         bg_std = numpy.sqrt(((std[to_keep]) ** 2).sum(axis=0)) / len(to_keep)
