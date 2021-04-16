@@ -40,7 +40,7 @@ from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integra
                     Sample, create_nexus_sample
 from .ispyb import IspybConnector
 
-NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample")
+NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps")
 
 
 def smooth_chromatogram(signal, window):
@@ -223,7 +223,7 @@ class HPLC(Plugin):
         chroma_grp = nxs.new_class(entry_grp, "1_chromatogram", "NXprocess")
         chroma_grp["sequence_index"] = self.sequence_index()
         nframes = max(i.idx.max() for i in self.juices) + 1
-        nbin = self.juices[0].q.size
+        nbin = q.size
 
         I = numpy.zeros((nframes, nbin), dtype=numpy.float32)
         sigma = numpy.zeros((nframes, nbin), dtype=numpy.float32)
@@ -231,6 +231,7 @@ class HPLC(Plugin):
 
         ids = numpy.arange(nframes)
         idx = numpy.concatenate([i.idx for i in self.juices])
+        timestamps = self.to_pyarch["time"] = numpy.concatenate([i.timestamps for i in self.juices])
         I[idx] = numpy.vstack([i.I for i in self.juices])
         Isum[idx] = numpy.concatenate([i.Isum for i in self.juices])
         sigma[idx] = numpy.vstack([i.sigma for i in self.juices])
@@ -246,6 +247,9 @@ class HPLC(Plugin):
         hplc_data.attrs["signal"] = "sum"
         hplc_data.attrs["axes"] = "frame_ids"
         chroma_grp.attrs["default"] = entry_grp.attrs["default"] = hplc_data.name
+        time_ds = hplc_data.create_dataset("timestamps", data=timestamps, dtype=numpy.uint32)
+        time_ds.attrs["interpretation"] = "spectrum"
+        time_ds.attrs["long_name"] = "Time stamps (s)"
 
         integration_data = nxs.new_class(chroma_grp, "results", "NXdata")
         chroma_grp.attrs["title"] = str(self.juices[0].sample)
@@ -344,6 +348,8 @@ class HPLC(Plugin):
         bg_grp["keep"] = keep = 0.3
         bg_grp["keep"].attrs["info"] = "Fraction of curves to be considered as background"
         bg_avg, bg_std, to_keep = build_background(I, sigma, keep=keep)
+        kept_ds = bg_grp.crete_dataset("kept", data=numpy.ascontiguousarray(to_keep, dtype=numpy.int32))
+        kept_ds.attrs["info"] = "Index of curves used to calculate the background scattering"
         self.to_pyarch["buffer_frames"] = to_keep
         self.to_pyarch["buffer_I"] = bg_avg
         self.to_pyarch["buffer_Stdev"] = bg_std
@@ -750,7 +756,7 @@ class HPLC(Plugin):
                       "Vc_Stdev": "Uncertainty on volume",
                       "volume": "Molecular volume obtained from Porrod analysis",
                       "sum_I": "Total scattering of the frame",
-                      "time": "Time stamp: TODO",
+                      "time": "Timestamps",
    
                       }
         start_time = time.perf_counter()
@@ -873,9 +879,14 @@ class HPLC(Plugin):
             temperature = sample_grp["temperature"][()] if "temperature" in sample_grp else ""
             temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
             sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
-
-        return NexusJuice(filename, h5path, npt, unit, idx, Isum, q, I, sigma, poni, mask, energy, polarization, method, sample)
-        "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample"
+            meas_grp = nxsr.get_class(entry_grp, class_type="NXdata")[0]
+            timestamps = []
+            for ts_name in ("timestamps", "time-stamps"):
+                if ts_name in meas_grp:
+                    timestamps = meas_grp[ts_name][()]
+                    break
+        return NexusJuice(filename, h5path, npt, unit, idx, Isum, q, I, sigma, poni, mask, energy, polarization, method, sample, timestamps)
+        "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps"
 
     def send_to_ispyb(self):
         """Data sent to ISPyB are:
