@@ -19,6 +19,7 @@ import os
 import json
 import math
 from math import log, pi
+import posixpath
 from collections import namedtuple
 from urllib3.util import parse_url
 from dahu.plugin import Plugin
@@ -875,7 +876,7 @@ class HPLC(Plugin):
 #             error2d = img_grp["intensity_std"][()]
             # Read the sample description:
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
-            sample_name = sample_grp.name
+            sample_name = posixpath.split(sample_grp.name)[-1]
 
             buffer = sample_grp["buffer"][()] if "buffer" in sample_grp else ""
             concentration = sample_grp["concentration"][()] if "concentration" in sample_grp else ""

@@ -29,6 +29,12 @@ from freesas.collections import RG_RESULT, RT_RESULT, StatsResult
 from freesas.plot import kratky_plot, guinier_plot, scatter_plot, density_plot
 
 
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, numpy.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
+
 def str_list(lst):
     "Helper function to convert list of path to smth compatible with ispyb"
     return json.dumps([{"filePath": i} for i in lst])
@@ -222,12 +228,12 @@ class IspybConnector:
         :param data: a dict with all information to be saved in Ispyb
         """
         hdf5_file = data.get("hdf5_filename")
-        self.juices[0].sample
-        filename = self._mk_filename("HPLC", "hplc", data.get("sample_name", "sample"), ext=".h5")
+        filename = self._mk_filename("hplc", ".", data.get("sample_name", "sample"), ext=".h5")
         json_file = os.path.splitext(filename)[0] + ".json"
-        with open(json_file,format="w") as w:
-            w.write(json.dumps(data, indent=2))
-                    
+        with open(json_file, mode="w") as w:
+            w.write(json.dumps(data, indent=2, cls=NumpyEncoder))
+        shutil.copyfile(hdf5_file, filename)
+        print(self.experiment_id, filename, json_file)
         self.client.service.storeHPLC(str(self.experiment_id),
-                                      hdf5_file,
+                                      filename,
                                       json_file)
