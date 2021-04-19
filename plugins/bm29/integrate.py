@@ -115,6 +115,38 @@ class IntegrateMultiframe(Plugin):
         self.normalization_factor = None
         self.to_pyarch = {} # contains all the stuff to be sent to Ispyb and pyarch
 
+    def wait_file(self, filename, timeout=10):
+        """Wait for a file to appear on a filesystem
+
+ 	:param filename: name of the file
+        :param timeout: time-out in seconds
+        
+        Raises an exception and ends the processing in case of missing file!
+	"""
+        end_time = time.time() + timeout
+        dirname = os.path.dirname(filename)
+        while not os.path.isdir(dirname):
+            if time.time() > end_time:
+                self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
+            time.sleep(0.1) 
+            os.stat(os.path.dirname(dirname))
+     
+        while not os.path.exists(filename):
+            if time.time() > end_time:
+                self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
+            time.sleep(0.1) 
+            os.stat(dirname)
+
+        while not os.stat(filename).st_size:
+            if time.time() > end_time:
+                self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
+            time.sleep(0.1)
+            os.stat(dirname)
+        appear_time = time.time() - end_time +  timeout
+        if appear_time > 1.0:
+            self.log_warning(f"Filename {filename} took {appear_time:.3f}s to appear on filesystem!")
+
+
     def setup(self, kwargs=None):
         logger.debug("IntegrateMultiframe.setup")
         Plugin.setup(self, kwargs)
@@ -125,6 +157,11 @@ class IntegrateMultiframe(Plugin):
             self.sample = Sample("Unknown sample", *self.sample[1:])
 
         self.input_file = self.input.get("input_file")
+        if self.input_file is not None:
+            self.wait_file(self.input_file)
+        else:
+            self.log_error(f"No valid input file provided {self.input_file}") 
+
         self.to_pyarch["basename"] = os.path.splitext(os.path.basename(self.input_file))[0]
         if self.input_file is None:
             self.log_error("No input file provided", do_raise=True)
