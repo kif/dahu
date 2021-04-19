@@ -17,6 +17,7 @@ __version__ = "0.1.1"
 import time
 import os
 import json
+import math
 from math import log, pi
 from collections import namedtuple
 from urllib3.util import parse_url
@@ -114,10 +115,10 @@ def build_background(I, std=None, keep=0.3):
     """
     U, S, V = numpy.linalg.svd(I.T, full_matrices=False)
     bg1 = numpy.median(V[0]) * S[0] * U[:, 0]
-    Pscore = [freesas.cormap.gof(bg1, i).P for i in I]
+    Pscore = [freesas.cormap.measure_longest(numpy.ascontiguousarray(bg1-i, dtype=numpy.float)) for i in I]
     orderd = numpy.argsort(Pscore)
-    nkeep = int((1.0 - keep) * I.shape[0])
-    to_keep = numpy.sort(orderd[nkeep:])
+    nkeep = int(math.ceil(keep * I.shape[0]))
+    to_keep = numpy.sort(orderd[:nkeep])
     bg_avg = I[to_keep].mean(axis=0)
     if std is not None:
         bg_std = numpy.sqrt(((std[to_keep]) ** 2).sum(axis=0)) / len(to_keep)
