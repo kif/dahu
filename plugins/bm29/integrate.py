@@ -35,12 +35,13 @@ import h5py
 import fabio
 import pyFAI, pyFAI.azimuthalIntegrator
 import freesas, freesas.cormap
+import memcache
 
 # from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, get_integrator, KeyCache,\
                     method, polarization_factor, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     create_nexus_sample
-from .ispyb import IspybConnector
+from .ispyb import IspybConnector, NumpyEncoder
 
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
 CormapResult = namedtuple("CormapResult", "probability count tomerge")
@@ -114,37 +115,7 @@ class IntegrateMultiframe(Plugin):
         self.monitor_values = None
         self.normalization_factor = None
         self.to_pyarch = {} # contains all the stuff to be sent to Ispyb and pyarch
-
-    def wait_file(self, filename, timeout=10):
-        """Wait for a file to appear on a filesystem
-
- 	:param filename: name of the file
-        :param timeout: time-out in seconds
-        
-        Raises an exception and ends the processing in case of missing file!
-	"""
-        end_time = time.time() + timeout
-        dirname = os.path.dirname(filename)
-        while not os.path.isdir(dirname):
-            if time.time() > end_time:
-                self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
-            time.sleep(0.1) 
-            os.stat(os.path.dirname(dirname))
-     
-        while not os.path.exists(filename):
-            if time.time() > end_time:
-                self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
-            time.sleep(0.1) 
-            os.stat(dirname)
-
-        while not os.stat(filename).st_size:
-            if time.time() > end_time:
-                self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
-            time.sleep(0.1)
-            os.stat(dirname)
-        appear_time = time.time() - end_time +  timeout
-        if appear_time > 1.0:
-            self.log_warning(f"Filename {filename} took {appear_time:.3f}s to appear on filesystem!")
+        self.to_memcached = {} #data to be shared via memcached
 
 
     def setup(self, kwargs=None):
@@ -229,10 +200,44 @@ class IntegrateMultiframe(Plugin):
         logger.debug("IntegrateMultiframe.process")
         self.ai = get_integrator(KeyCache(self.npt, self.unit, self.poni, self.mask, self.energy))
         self.create_nexus()
+        self.output["memcached"] = self.send_to_memcached()
         if not self.input.get("hplc_mode"):
             self.send_to_ispyb()
 
+    def wait_file(self, filename, timeout=10):
+        """Wait for a file to appear on a filesystem
+
+ 	:param filename: name of the file
+        :param timeout: time-out in seconds
+        
+        Raises an exception and ends the processing in case of missing file!
+	"""
+        end_time = time.time() + timeout
+        dirname = os.path.dirname(filename)
+        while not os.path.isdir(dirname):
+            if time.time() > end_time:
+                self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
+            time.sleep(0.1) 
+            os.stat(os.path.dirname(dirname))
+     
+        while not os.path.exists(filename):
+            if time.time() > end_time:
+                self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
+            time.sleep(0.1) 
+            os.stat(dirname)
+
+        while not os.stat(filename).st_size:
+            if time.time() > end_time:
+                self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
+            time.sleep(0.1)
+            os.stat(dirname)
+        appear_time = time.time() - end_time +  timeout
+        if appear_time > 1.0:
+            self.log_warning(f"Filename {filename} took {appear_time:.3f}s to appear on filesystem!")
+
     def create_nexus(self):
+        if not os.path.isdir(os.path.dirname(self.output_file)):
+            os.makedirs(s.path.dirname(self.output_file))
         creation_time = os.stat(self.input_file).st_ctime
         nxs = self.nxs = Nexus(self.output_file, mode="w", creator="dahu")
         
@@ -359,14 +364,22 @@ class IntegrateMultiframe(Plugin):
         
     # Stage 1 processing: Integration frame per frame
         integrate1_results = self.process1_integration(self.input_frames)
-        
         radial_unit, unit_name = str(self.unit).split("_", 1)
-        q_ds = integration_data.create_dataset(radial_unit, data=numpy.ascontiguousarray(integrate1_results.radial, numpy.float32))
+        q = numpy.ascontiguousarray(integrate1_results.radial, numpy.float32)
+        I = numpy.ascontiguousarray(integrate1_results.intensity, dtype=numpy.float32)
+        sigma = numpy.ascontiguousarray(integrate1_results.sigma, dtype=numpy.float32)
+
+        self.to_memcached[radial_unit] = q
+        self.to_memcached["I"] = I
+        self.to_memcached["sigma"] = sigma
+
+        
+        q_ds = integration_data.create_dataset(radial_unit, data=q)
         q_ds.attrs["units"] = unit_name
         q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"        
 
-        int_ds = integration_data.create_dataset("I", data=numpy.ascontiguousarray(integrate1_results.intensity, dtype=numpy.float32))
-        std_ds = integration_data.create_dataset("errors", data=numpy.ascontiguousarray(integrate1_results.sigma, dtype=numpy.float32))
+        int_ds = integration_data.create_dataset("I", data=I)
+        std_ds = integration_data.create_dataset("errors", data=sigma)
         integration_data.attrs["signal"] = "I"
         integration_data.attrs["axes"] = [".", radial_unit]
         integration_data.attrs["SILX_style"] = SAXS_STYLE            
@@ -439,13 +452,17 @@ class IntegrateMultiframe(Plugin):
         
     # Stage 3 processing
         res3 = self.process3_average(cormap_results.tomerge)    
+
+        self.to_memcached["I_avg"] = Iavg = numpy.ascontiguousarray(res3.average, dtype=numpy.float32)
+        self.to_memcached["sigma_avg"] = sigma_avg = numpy.ascontiguousarray(res3.deviation, dtype=numpy.float32)
+
         int_avg_ds =  average_data.create_dataset("intensity_normed", 
-                                                  data=numpy.ascontiguousarray(res3.average, dtype=numpy.float32),
+                                                  data=Iavg,
                                                   **cmp_float)
         int_avg_ds.attrs["interpretation"] = "image"
         int_avg_ds.attrs["formula"] = "sum_i(signal_i))/sum_i(normalization_i)"
         int_std_ds =  average_data.create_dataset("intensity_std", 
-                                                   data=numpy.ascontiguousarray(res3.deviation, dtype=numpy.float32),
+                                                   data=sigma_avg,
                                                    **cmp_float)
         int_std_ds.attrs["interpretation"] = "image"    
         int_std_ds.attrs["formula"] = "sqrt(sum_i(variance_i))/sum(normalization_i)"
@@ -570,3 +587,15 @@ class IntegrateMultiframe(Plugin):
             ispyb.send_averaged(self.to_pyarch)
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s"%self.ispyb.url)
+
+    def send_to_memcached(self):
+        mc = memcache.Client([('stanza', 11211)])
+        key_base = self.output_file
+        keys = {}
+        for k, v in self.to_memcached.items():
+            key = key_base + "_" + k
+            keys[k] = key
+            value = json.dumps(v, indent=2, cls=NumpyEncoder)
+            mc.set(key, value)
+        return keys
+        

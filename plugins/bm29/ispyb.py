@@ -35,6 +35,7 @@ class NumpyEncoder(json.JSONEncoder):
             return obj.tolist()
         return json.JSONEncoder.default(self, obj)
 
+
 def str_list(lst):
     "Helper function to convert list of path to smth compatible with ispyb"
     return json.dumps([{"filePath": i} for i in lst])
@@ -229,6 +230,7 @@ class IspybConnector:
         """
         hdf5_file = data.get("hdf5_filename")
         filename = self._mk_filename("hplc", ".", data.get("sample_name", "sample"), ext=".h5")
+        filename = os.path.abspath(filename)
         json_file = os.path.splitext(filename)[0] + ".json"
         with open(json_file, mode="w") as w:
             w.write(json.dumps(data, indent=2, cls=NumpyEncoder))

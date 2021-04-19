@@ -743,13 +743,13 @@ class HPLC(Plugin):
         :param top_grp: top level group where to start working
         :return: runtime
         """
-        keys = ["buffer_frames", "buffer_I", "buffer_Stdev", "Dmax", "gnom", "I0", "I0_std", "mass", "mass_Stdev", "merge_frames", "merge_I", "merge_Stdev",
+        keys = ["buffer_frames", "buffer_I", "buffer_Stdev", "Dmax", "gnom", "I0", "I0_Stdev", "mass", "mass_Stdev", "merge_frames", "merge_I", "merge_Stdev",
                 "q", "Qr", "Qr_Stdev", "quality", "Rg", "Rg_Stdev", "scattering_I", "scattering_Stdev", "subtracted_I", "subtracted_Stdev", "sum_I",
                 "time", "total", "Vc", "Vc_Stdev", "volume"]
         keys_extra = {"Dmax": "Maximum diameter from IFT, skipped",
                       "gnom": "Radius of gyration from IFT, skipped",
                       "I0": "Forward scattering from GPA",
-                      "I0_std": "Uncertainty on forward scattering",
+                      "I0_Stdev": "Uncertainty on forward scattering",
                       "mass": "Estimated protein weight from RT analysis",
                       "mass_Stdev": "Uncertainty on the mass",
                       "Qr": "RT invariant",
@@ -819,7 +819,7 @@ class HPLC(Plugin):
             except:
                 guinier = rti = porod = None
             if guinier is not None:
-                for k,v in zip(["Rg", "Rg_Stdev","I0", "I0_std","quality"],
+                for k,v in zip(["Rg", "Rg_Stdev","I0", "I0_Stdev","quality"],
                                ['Rg', 'sigma_Rg', 'I0', 'sigma_I0', 'quality']):
                     self.to_pyarch[k][i] = guinier.__getattribute__(v)
             if rti is not None:
