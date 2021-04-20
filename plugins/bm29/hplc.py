@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/04/2021"
+__date__ = "20/04/2021"
 __status__ = "development"
 __version__ = "0.1.1"
 
@@ -116,7 +116,7 @@ def build_background(I, std=None, keep=0.3):
     """
     U, S, V = numpy.linalg.svd(I.T, full_matrices=False)
     bg1 = numpy.median(V[0]) * S[0] * U[:, 0]
-    Pscore = [freesas.cormap.measure_longest(numpy.ascontiguousarray(bg1-i, dtype=numpy.float)) for i in I]
+    Pscore = [freesas.cormap.measure_longest(numpy.ascontiguousarray(bg1 - i, dtype=numpy.float)) for i in I]
     orderd = numpy.argsort(Pscore)
     nkeep = int(math.ceil(keep * I.shape[0]))
     to_keep = numpy.sort(orderd[:nkeep])
@@ -200,7 +200,6 @@ class HPLC(Plugin):
         entry_grp["version"] = __version__
         nxs.h5.attrs["default"] = entry_grp.name
 
-
     # Configuration
         cfg_grp = nxs.new_class(entry_grp, "configuration", "NXnote")
         cfg_grp.create_dataset("data", data=json.dumps(self.input, indent=2, separators=(",\r\n", ":\t")))
@@ -258,7 +257,6 @@ class HPLC(Plugin):
 
         integration_data = nxs.new_class(chroma_grp, "results", "NXdata")
         chroma_grp.attrs["title"] = str(self.juices[0].sample)
-        
 
         int_ds = integration_data.create_dataset("I", data=numpy.ascontiguousarray(I, dtype=numpy.float32))
         std_ds = integration_data.create_dataset("errors", data=numpy.ascontiguousarray(sigma, dtype=numpy.float32))
@@ -426,7 +424,7 @@ class HPLC(Plugin):
         # f_grp["program"] = "dahu.plugins.bm29.hplc"
         # f_grp["version"] = __version__
         f_grp["date"] = get_isotime()
-        
+
         avg_data = nxs.new_class(f_grp, "1_average", "NXdata")
         avg_data["sequence_index"] = self.sequence_index()
         avg_data.attrs["SILX_style"] = SAXS_STYLE
@@ -763,7 +761,7 @@ class HPLC(Plugin):
                       "volume": "Molecular volume obtained from Porrod analysis",
                       "sum_I": "Total scattering of the frame",
                       "time": "Timestamps",
-   
+
                       }
         start_time = time.perf_counter()
         ispyb_grp = nxs.new_class(top_grp, "6_ISPyB ", "NXcollection")
@@ -811,7 +809,7 @@ class HPLC(Plugin):
                 try:
                     rti = freesas.invariants.calc_Rambo_Tainer(sasm, guinier)
                 except:
-                    rti=None
+                    rti = None
                 try:
                     porod = freesas.invariants.calc_Porod(sasm, guinier)
                 except:
@@ -819,7 +817,7 @@ class HPLC(Plugin):
             except:
                 guinier = rti = porod = None
             if guinier is not None:
-                for k,v in zip(["Rg", "Rg_Stdev","I0", "I0_Stdev","quality"],
+                for k, v in zip(["Rg", "Rg_Stdev", "I0", "I0_Stdev", "quality"],
                                ['Rg', 'sigma_Rg', 'I0', 'sigma_I0', 'quality']):
                     self.to_pyarch[k][i] = guinier.__getattribute__(v)
             if rti is not None:
