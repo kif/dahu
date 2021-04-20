@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/04/2021"
+__date__ = "20/04/2021"
 __status__ = "development"
 version = "0.1.1"
 
@@ -30,6 +30,7 @@ from freesas.plot import kratky_plot, guinier_plot, scatter_plot, density_plot
 
 
 class NumpyEncoder(json.JSONEncoder):
+
     def default(self, obj):
         if isinstance(obj, numpy.ndarray):
             return obj.tolist()
@@ -235,7 +236,6 @@ class IspybConnector:
         with open(json_file, mode="w") as w:
             w.write(json.dumps(data, indent=2, cls=NumpyEncoder))
         shutil.copyfile(hdf5_file, filename)
-        print(self.experiment_id, filename, json_file)
         self.client.service.storeHPLC(str(self.experiment_id),
                                       filename,
                                       json_file)
