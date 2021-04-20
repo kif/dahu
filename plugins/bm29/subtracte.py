@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "14/04/2021"
+__date__ = "20/04/2021"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -67,6 +67,7 @@ class SubtractBuffer(Plugin):
       "plugin_name": "bm29.subtractbuffer"
     }
     """
+
     def __init__(self):
         Plugin.__init__(self)
         self.buffer_files = []
@@ -86,9 +87,10 @@ class SubtractBuffer(Plugin):
     def setup(self, kwargs=None):
         logger.debug("SubtractBuffer.setup")
         Plugin.setup(self, kwargs)
-
-        for job_id in self.input.get("wait_for", []):
-            self.wait_for(job_id)
+        wait_for = self.input.get("wait_for")
+        if wait_for:
+            for job_id in wait_for:
+                self.wait_for(job_id)
 
         self.sample_file = self.input.get("sample_file")
         if self.sample_file is None:
@@ -106,7 +108,7 @@ class SubtractBuffer(Plugin):
     def teardown(self):
         Plugin.teardown(self)
         logger.debug("SubtractBuffer.teardown")
-                
+
         # export the output file location
         self.output["output_file"] = self.output_file
         self.output["Rg"] = self.Rg
@@ -129,18 +131,17 @@ class SubtractBuffer(Plugin):
         try:
             self.create_nexus()
         except Exception as err:
-            #try to register in test-mode
+            # try to register in test-mode
             if self.input.get("test_mode", True):
                 try:
                     self.send_to_ispyb()
                 except Exception as err2:
                     import traceback
-                    self.log_warning("Processing failed and unable to send remaining data to ISPyB: %s %s\n%s" % 
+                    self.log_warning("Processing failed and unable to send remaining data to ISPyB: %s %s\n%s" %
                                      (type(err2), err2, "\n".join(traceback.format_exc(limit=10))))
                 raise(err)
         else:
-            self.send_to_ispyb()  
-        
+            self.send_to_ispyb()
 
     def validate_buffer(self, buffer_file):
         "Validate if a buffer is consitent with the sample, return some buffer_juice or None when unconsistent"
@@ -175,7 +176,7 @@ class SubtractBuffer(Plugin):
 
     def create_nexus(self):
         nxs = self.nxs = Nexus(self.output_file, mode="w")
-        entry_grp = nxs.new_entry("entry", self.input.get("plugin_name", "dahu"), 
+        entry_grp = nxs.new_entry("entry", self.input.get("plugin_name", "dahu"),
                                   title='BioSaxs buffer subtraction',
                                   force_time=get_isotime())
         nxs.h5.attrs["default"] = entry_grp.name
@@ -195,7 +196,7 @@ class SubtractBuffer(Plugin):
             buffer_juice = self.validate_buffer(buffer_file)
             if buffer_juice is not None:
                 rel_path = os.path.relpath(os.path.abspath(buffer_file), os.path.dirname(os.path.abspath(self.output_file)))
-                input_grp["buffer_%i"%idx] = h5py.ExternalLink(rel_path, buffer_juice.h5path)     
+                input_grp["buffer_%i" % idx] = h5py.ExternalLink(rel_path, buffer_juice.h5path)
                 self.buffer_juices.append(buffer_juice)
 
         # Sample: outsourced !
@@ -237,7 +238,7 @@ class SubtractBuffer(Plugin):
         count_ds.attrs["long_name"] = "Longest sequence where curves do not cross each other"
 
         to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*tomerge, dtype=numpy.uint16))
-        to_merge_ds.attrs["long_name"] = "Index of equivalent frames" 
+        to_merge_ds.attrs["long_name"] = "Index of equivalent frames"
         cormap_grp.attrs["default"] = cormap_data.name
 
     # Process 2: Image processing: subtraction with standard deviation
@@ -246,7 +247,7 @@ class SubtractBuffer(Plugin):
         average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
         average_data = nxs.new_class(average_grp, "results", "NXdata")
-        average_data.attrs["SILX_style"] = SAXS_STYLE 
+        average_data.attrs["SILX_style"] = SAXS_STYLE
         average_data.attrs["signal"] = "intensity_normed"
     # Stage 2 processing
 
@@ -259,9 +260,9 @@ class SubtractBuffer(Plugin):
         # The propagate the error based on the number of frames in each buffer with quadratic summation
 
         buffer_average = numpy.mean([self.buffer_juices[i].signal2d for i in range(*tomerge)], axis=0)
-        buffer_variance = numpy.sum([(self.buffer_juices[i].error2d)**2 for i in range(*tomerge)], axis=0) / (tomerge[1] - tomerge[0])**2
+        buffer_variance = numpy.sum([(self.buffer_juices[i].error2d) ** 2 for i in range(*tomerge)], axis=0) / (tomerge[1] - tomerge[0]) ** 2
         sample_average = self.sample_juice.signal2d
-        sample_variance = self.sample_juice.error2d**2
+        sample_variance = self.sample_juice.error2d ** 2
         sub_average = self.sample_juice.signal2d - buffer_average
         sub_variance = sample_variance + buffer_variance
         sub_std = numpy.sqrt(sub_variance)
@@ -285,7 +286,7 @@ class SubtractBuffer(Plugin):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             # we need to provide the sample record and the best_buffer so let's generate it
             # This is a waist of time & resources ...
-            res1 = ai._integrate1d_ng(sample_average, key_cache.npt, 
+            res1 = ai._integrate1d_ng(sample_average, key_cache.npt,
                                       variance=sample_variance,
                                       polarization_factor=self.sample_juice.polarization,
                                       unit=key_cache.unit,
@@ -293,7 +294,7 @@ class SubtractBuffer(Plugin):
                                       method=self.sample_juice.method)
             self.to_pyarch["sample"] = res1
             # Integrate also the buffer
-            res2 = ai._integrate1d_ng(buffer_average, key_cache.npt, 
+            res2 = ai._integrate1d_ng(buffer_average, key_cache.npt,
                                       variance=buffer_variance,
                                       polarization_factor=self.sample_juice.polarization,
                                       unit=key_cache.unit,
@@ -324,7 +325,7 @@ class SubtractBuffer(Plugin):
         cfg_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
 
     # Stage 3 processing: azimuthal integration
-        res3 = ai._integrate1d_ng(sub_average, key_cache.npt, 
+        res3 = ai._integrate1d_ng(sub_average, key_cache.npt,
                                   variance=sub_variance,
                                   polarization_factor=self.sample_juice.polarization,
                                   unit=key_cache.unit,
@@ -338,19 +339,19 @@ class SubtractBuffer(Plugin):
         ai2_q_ds.attrs["long_name"] = f"Scattering vector q ({radius_unit}⁻¹)"
 
         ai2_int_ds = ai2_data.create_dataset("I", data=numpy.ascontiguousarray(res3.intensity, dtype=numpy.float32))
-        ai2_std_ds = ai2_data.create_dataset("errors", 
+        ai2_std_ds = ai2_data.create_dataset("errors",
                                              data=numpy.ascontiguousarray(res3.sigma, dtype=numpy.float32))
 
         ai2_int_ds.attrs["interpretation"] = "spectrum"
         ai2_int_ds.attrs["units"] = "arbitrary"
         ai2_int_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
         #  ai2_int_ds.attrs["uncertainties"] = "errors" #this does not work
-        ai2_std_ds.attrs["interpretation"] ="spectrum"
+        ai2_std_ds.attrs["interpretation"] = "spectrum"
         ai2_int_ds.attrs["units"] = "arbitrary"
 
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             self.to_pyarch["subtracted"] = res3
-        #Export this to the output JSON        
+        # Export this to the output JSON
         self.output["q"] = res3.radial
         self.output["I"] = res3.intensity
         self.output["std"] = res3.sigma
@@ -395,7 +396,7 @@ class SubtractBuffer(Plugin):
         try:
             guinier = auto_guinier(sasm)
         except Exception as error:
-            guinier_guinier["Failed"] = "%s: %s"%(error.__class__.__name__, error)
+            guinier_guinier["Failed"] = "%s: %s" % (error.__class__.__name__, error)
             guinier = None
         else:
             #  "Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
@@ -415,7 +416,7 @@ class SubtractBuffer(Plugin):
         try:
             autorg = autoRg(sasm)
         except Exception as err:
-            guinier_autorg["Failed"] = "%s: %s"%(err.__class__.__name__, err)
+            guinier_autorg["Failed"] = "%s: %s" % (err.__class__.__name__, err)
             autorg = None
         else:
             if autorg.Rg < 0:
@@ -516,7 +517,7 @@ class SubtractBuffer(Plugin):
         qRg_ds = kratky_data.create_dataset("qRg", data=xdata.astype(numpy.float32))
         qRg_ds.attrs["interpretation"] = "spectrum"
         qRg_ds.attrs["long_name"] = "q·Rg (unit-less)"
-        k_ds = kratky_data.create_dataset("q2Rg2I/I0", data = ydata.astype(numpy.float32))
+        k_ds = kratky_data.create_dataset("q2Rg2I/I0", data=ydata.astype(numpy.float32))
         k_ds.attrs["interpretation"] = "spectrum"
         k_ds.attrs["long_name"] = "q²Rg²I(q)/I₀"
         ke_ds = kratky_data.create_dataset("errors", data=dy.astype(numpy.float32))
@@ -575,7 +576,7 @@ class SubtractBuffer(Plugin):
         cfg_grp = nxs.new_class(bift_grp, "configuration", "NXcollection")
     # Process stage7, i.e. perform the IFT
         try:
-            bo = BIFT(q, I, err) 
+            bo = BIFT(q, I, err)
             cfg_grp["Rg"] = guinier.Rg
             # Pretty limited quality as we have real time constrains
             cfg_grp["npt"] = npt = 64
@@ -585,7 +586,7 @@ class SubtractBuffer(Plugin):
 
             # First scan on alpha:
             cfg_grp["alpha_sup"] = alpha_max = bo.guess_alpha_max(npt)
-            cfg_grp["alpha_inf"] = 1/alpha_max
+            cfg_grp["alpha_inf"] = 1 / alpha_max
             cfg_grp["alpha_scan_steps"] = 11
 
             key = bo.grid_scan(Dmax, Dmax, 1,
