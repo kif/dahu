@@ -556,8 +556,10 @@ class HPLC(Plugin):
         if guinier:
             intercept = numpy.log(guinier.I0)
             slope = -guinier.Rg ** 2 / 3.0
-            end = numpy.where(q > 1.5 / guinier.Rg)[0][0]
-            mask[end:] = False
+            invalid = numpy.where(q > 1.5 / guinier.Rg)[0]
+            if invalid.size:
+                end = invalid[0]
+                mask[end:] = False
 
         q2 = q[mask] ** 2
         logI = numpy.log(I[mask])

@@ -87,6 +87,7 @@ class SubtractBuffer(Plugin):
     def setup(self, kwargs=None):
         logger.debug("SubtractBuffer.setup")
         Plugin.setup(self, kwargs)
+
         wait_for = self.input.get("wait_for")
         if wait_for:
             for job_id in wait_for:
