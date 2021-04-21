@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/04/2021"
+__date__ = "21/04/2021"
 __status__ = "development"
 __version__ = "0.1.1"
 
@@ -743,6 +743,15 @@ class HPLC(Plugin):
         :param top_grp: top level group where to start working
         :return: runtime
         """
+
+        def normalize(dataset, dtype=numpy.float32):
+            if numpy.dtype(dtype).kindd == "f":
+                "Deal with Nans"
+                mask = numpy.logical_not(numpy.isfinite(dataset))
+                dataset = dataset.copy()
+                dataset[mask] = 0.0
+            return numpy.ascontiguousarray(dataset, dtype=dtype)
+
         keys = ["buffer_frames", "buffer_I", "buffer_Stdev", "Dmax", "gnom", "I0", "I0_Stdev", "mass", "mass_Stdev", "merge_frames", "merge_I", "merge_Stdev",
                 "q", "Qr", "Qr_Stdev", "quality", "Rg", "Rg_Stdev", "scattering_I", "scattering_Stdev", "subtracted_I", "subtracted_Stdev", "sum_I",
                 "time", "total", "Vc", "Vc_Stdev", "volume"]
@@ -774,29 +783,29 @@ class HPLC(Plugin):
         nframes, nbin = scattering_I.shape
 
         q = self.juices[0].q.astype(numpy.float64)
-        ds = ispyb_grp.create_dataset("q", data=numpy.ascontiguousarray(q, dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset("q", data=normalize(q, dtype=numpy.float32))
         ds.attrs["info"] = "Scattering vector length, common for all scattering intensities"
 
         ds = ispyb_grp.create_dataset("buffer_frames", data=self.to_pyarch["buffer_frames"])
         ds.attrs["info"] = "Index of frames used to calculate the background scattring (buffer frames)"
-        ds = ispyb_grp.create_dataset("buffer_I", data=numpy.ascontiguousarray(self.to_pyarch["buffer_I"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset("buffer_I", data=normalize(self.to_pyarch["buffer_I"], dtype=numpy.float32))
         ds.attrs["info"] = "Averaged background scattering signal (buffer)"
-        ds = ispyb_grp.create_dataset("buffer_Stdev", data=numpy.ascontiguousarray(self.to_pyarch["buffer_Stdev"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset("buffer_Stdev", data=normalize(self.to_pyarch["buffer_Stdev"], dtype=numpy.float32))
         ds.attrs["info"] = "Standard deviation of background scattering signal (buffer)"
-        ds = ispyb_grp.create_dataset("merge_frames", data=numpy.ascontiguousarray(self.to_pyarch["merge_frames"], dtype=numpy.int32))
+        ds = ispyb_grp.create_dataset("merge_frames", data=normalize(self.to_pyarch["merge_frames"], dtype=numpy.int32))
         ds.attrs["info"] = "Frames merged for each fraction"
-        ds = ispyb_grp.create_dataset("merge_I", data=numpy.ascontiguousarray(self.to_pyarch["merge_I"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset("merge_I", data=normalize(self.to_pyarch["merge_I"], dtype=numpy.float32))
         ds.attrs["info"] = "Scattering from merged frames in each fraction"
-        ds = ispyb_grp.create_dataset("merge_Stdev", data=numpy.ascontiguousarray(self.to_pyarch["merge_Stdev"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset("merge_Stdev", data=normalize(self.to_pyarch["merge_Stdev"], dtype=numpy.float32))
         ds.attrs["info"] = "Uncertainties on scattering from merged frames in each fraction"
         "", "", "", ""
-        ds = ispyb_grp.create_dataset("scattering_I", data=numpy.ascontiguousarray(self.to_pyarch["scattering_I"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset("scattering_I", data=normalize(self.to_pyarch["scattering_I"], dtype=numpy.float32))
         ds.attrs["info"] = "Scattering of each individual frame"
-        ds = ispyb_grp.create_dataset("scattering_Stdev", data=numpy.ascontiguousarray(self.to_pyarch["scattering_Stdev"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset("scattering_Stdev", data=normalize(self.to_pyarch["scattering_Stdev"], dtype=numpy.float32))
         ds.attrs["info"] = "Uncertainties on the scattering of each individual frame"
-        ds = ispyb_grp.create_dataset("subtracted_I", data=numpy.ascontiguousarray(self.to_pyarch["subtracted_I"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset("subtracted_I", data=normalize(self.to_pyarch["subtracted_I"], dtype=numpy.float32))
         ds.attrs["info"] = "Background subtracted scattering of each individual frame"
-        ds = ispyb_grp.create_dataset("subtracted_Stdev", data=numpy.ascontiguousarray(self.to_pyarch["subtracted_Stdev"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset("subtracted_Stdev", data=normalize(self.to_pyarch["subtracted_Stdev"], dtype=numpy.float32))
         ds.attrs["info"] = "Uncertainties on background subtracted scattering of each individual frame"
 
         for k1 in keys_extra:
@@ -829,7 +838,7 @@ class HPLC(Plugin):
             if porod is not None:
                 self.to_pyarch["volume"][i] = porod
         for k, v in keys_extra.items():
-            ds = ispyb_grp.create_dataset(k, data=numpy.ascontiguousarray(self.to_pyarch[k], dtype=numpy.float32))
+            ds = ispyb_grp.create_dataset(k, data=normalize(self.to_pyarch[k], dtype=numpy.float32))
             ds.attrs["info"] = v
 
         # create all symbolic links at the top level for Ispyb compatibility
