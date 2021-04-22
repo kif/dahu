@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/04/2021"
+__date__ = "22/04/2021"
 __status__ = "development"
 __version__ = "0.1.1"
 
@@ -745,7 +745,7 @@ class HPLC(Plugin):
         """
 
         def normalize(dataset, dtype=numpy.float32):
-            if numpy.dtype(dtype).kindd == "f":
+            if numpy.dtype(dtype).kind == "f":
                 "Deal with Nans"
                 mask = numpy.logical_not(numpy.isfinite(dataset))
                 dataset = dataset.copy()
