@@ -1,7 +1,10 @@
 Dahu Package
 ============
 
+You can have a look at the man pages of the CLi tool: `dahu-reprocess` and `dahu_server` which is the Tang-device server.  
+
 This is the public API of `dahu`. 
+
 
 dahu.job
 -----------
