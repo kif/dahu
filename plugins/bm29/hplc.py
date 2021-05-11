@@ -10,9 +10,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22/04/2021"
+__date__ = "11/05/2021"
 __status__ = "development"
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 import time
 import os
@@ -386,7 +386,7 @@ class HPLC(Plugin):
         fraction_grp["minimum_size"] = window = 10
 
         fractions, nfractions = search_peaks(Isum, window)
-        self.to_pyarch["merge_frames"] = numpy.zeros((nfractions, 2), dtype=numpy.int32)
+        self.to_pyarch["merge_frames"] = numpy.zeros((nfractions, 2), dtype=numpy.float32)
         self.to_pyarch["merge_I"] = numpy.zeros((nfractions, nbin), dtype=numpy.float32)
         self.to_pyarch["merge_Stdev"] = numpy.zeros((nfractions, nbin), dtype=numpy.float32)
 
@@ -792,7 +792,7 @@ class HPLC(Plugin):
         ds.attrs["info"] = "Averaged background scattering signal (buffer)"
         ds = ispyb_grp.create_dataset("buffer_Stdev", data=normalize(self.to_pyarch["buffer_Stdev"], dtype=numpy.float32))
         ds.attrs["info"] = "Standard deviation of background scattering signal (buffer)"
-        ds = ispyb_grp.create_dataset("merge_frames", data=normalize(self.to_pyarch["merge_frames"], dtype=numpy.int32))
+        ds = ispyb_grp.create_dataset("merge_frames", data=normalize(self.to_pyarch["merge_frames"], dtype=numpy.float32))
         ds.attrs["info"] = "Frames merged for each fraction"
         ds = ispyb_grp.create_dataset("merge_I", data=normalize(self.to_pyarch["merge_I"], dtype=numpy.float32))
         ds.attrs["info"] = "Scattering from merged frames in each fraction"
