@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/04/2021"
+__date__ = "03/06/2021"
 __status__ = "development"
 version = "0.1.1"
 
@@ -136,7 +136,7 @@ class IspybConnector:
     def kratky_plot(self, sasm, guinier, basename="frame"):
         filename = self._mk_filename("Kratky", "plot", basename, ext=".png")
         fig = kratky_plot(sasm, guinier,
-                           filename=filename, format="png", unit="nm",
+                           filename=filename, img_format="png", unit="nm",
                            title="Dimensionless Kratky plot",
                            ax=None, labelsize=None, fontsize=None)
         matplotlib.pyplot.close(fig)
@@ -145,7 +145,7 @@ class IspybConnector:
     def guinier_plot(self, sasm, guinier, basename="frame"):
         filename = self._mk_filename("Guinier", "plot", basename, ext=".png")
         fig = guinier_plot(sasm, guinier, filename=filename,
-                            format="png", unit="nm",
+                            img_format="png", unit="nm",
                             ax=None, labelsize=None, fontsize=None)
         matplotlib.pyplot.close(fig)
         return filename
@@ -153,7 +153,7 @@ class IspybConnector:
     def scatter_plot(self, sasm, guinier, ift, basename="frame"):
         filename = self._mk_filename("Scattering", "plot", basename, ext=".png")
         fig = scatter_plot(sasm, guinier, ift,
-                           filename=filename, format="png", unit="nm",
+                           filename=filename, img_format="png", unit="nm",
                            title="Scattering curve ",
                            ax=None, labelsize=None, fontsize=None)
         matplotlib.pyplot.close(fig)
@@ -161,7 +161,7 @@ class IspybConnector:
 
     def density_plot(self, ift, basename="frame"):
         filename = self._mk_filename("Density", "plot", basename, ext=".png")
-        fig = density_plot(ift, filename=filename, format="png", unit="nm",
+        fig = density_plot(ift, filename=filename, img_format="png", unit="nm",
                      ax=None, labelsize=None, fontsize=None)
         matplotlib.pyplot.close(fig)
         return filename
