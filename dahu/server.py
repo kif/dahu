@@ -11,7 +11,7 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "11/09/2020"
+__date__ = "09/07/2021"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
@@ -325,7 +325,6 @@ class DahuDSClass(PyTango.DeviceClass):
         'getJobInput': [[PyTango.DevLong, "job id"], [PyTango.DevString, "<JSON serialized dict>"]],
         'getJobError': [[PyTango.DevLong, "job id"], [PyTango.DevString, "Error message"]],
         'listPlugins': [[PyTango.DevVoid, "nothing needed"], [PyTango.DevString, "prints the list of all plugin classes currently loaded"]],
-        'waitJob': [[PyTango.DevLong, "job id"], [PyTango.DevString, "job state"]],
         'waitJob': [[PyTango.DevLong, "job id"], [PyTango.DevString, "job state"]],
         }
 
