@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "11/05/2021"
+__date__ = "09/07/2021"
 __status__ = "development"
 __version__ = "0.1.2"
 
@@ -191,6 +191,13 @@ class HPLC(Plugin):
 
     def teardown(self):
         Plugin.teardown(self)
+        logger.debug("HPLC.teardown")
+        # export the output file location
+        self.output["output_file"] = self.output_file
+        if self.nxs is not None:
+            self.nxs.close()
+        self.to_pyarch = None
+        self.ispyb = None
 
     def create_nexus(self):
         nxs = Nexus(self.output_file, mode="w")
