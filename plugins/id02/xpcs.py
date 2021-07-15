@@ -7,9 +7,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/11/2020"
+__date__ = "13/07/2021"
 __status__ = "development"
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 import os
 import json
@@ -74,6 +74,7 @@ Minimalistic example:
     },
     "correlator":{
         "name": "MatMulCorrelator",
+        "dtype": "uint8"
     }
              
 }
@@ -92,6 +93,7 @@ Minimalistic example:
         self.correlator_name = None
         self.result_filename = None
         self.timestep = None
+        self.dtype = None
 
     def process(self):
         Plugin.process(self)
@@ -100,8 +102,8 @@ Minimalistic example:
         self.shape = self.dataset.shape[1:]
         self.qmask = self.make_qmask()
         Correlator = self.get_correlator()
-        correlator = Correlator(self.shape, self.nframes, qmask=self.qmask)
-        results = correlator.correlate(self.dataset[...], calc_std=True)
+        correlator = Correlator(self.shape, self.nframes, qmask=self.qmask, dtype=self.dtype)
+        results = correlator.correlate(numpy.ascontiguousarray(self.dataset[()], dtype=self.dtype), calc_std=True)
         self.save_results(results)
 
     def read_data(self):
@@ -218,6 +220,11 @@ Minimalistic example:
         if correlator_name not in CORRELATORS:
             self.log_error("Correlator requested %s is not part of the available ones: %s" % (correlator_name, ", ".join(CORRELATORS.keys())))
         self.correlator_name = correlator_name
+        dtype = correlator_section.get("dtype")
+        if dtype is not None:
+            self.dtype = dtype
+        else:
+            self.dtype = self.dataset.dtype
         return CORRELATORS[correlator_name]
 
     def save_results(self, result):
