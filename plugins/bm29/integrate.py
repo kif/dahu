@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/04/2021"
+__date__ = "15/07/2021"
 __status__ = "development"
 __version__ = "0.2.2"
 
@@ -117,6 +117,7 @@ class IntegrateMultiframe(Plugin):
         # self.method = IntegrationMethod.select_method(1, "no", "csr", "opencl")[0] -> constant
         self.monitor_values = None
         self.normalization_factor = None
+        self.scale_factor = None
         self.to_pyarch = {}  # contains all the stuff to be sent to Ispyb and pyarch
         self.to_memcached = {}  # data to be shared via memcached
 
@@ -158,6 +159,7 @@ class IntegrateMultiframe(Plugin):
             self.energy = numpy.float32(self.energy)  # It is important to fix the datatype of the energy
         self.monitor_values = numpy.array(self.input.get("monitor_values", 1), dtype=numpy.float64)
         self.normalization_factor = float(self.input.get("normalization_factor", 1))
+        self.scale_factor = float(self.input.get("exposure_time", 1)) / self.normalization_factor
 
     def teardown(self):
         Plugin.teardown(self)
@@ -529,7 +531,7 @@ class IntegrateMultiframe(Plugin):
         idx = 0
         for i1, frame in zip(self.monitor_values, data):
             res = self.ai._integrate1d_ng(frame, self.npt,
-                                          normalization_factor=i1 / self.normalization_factor,
+                                          normalization_factor=i1 * self.scale_factor,
                                           error_model="poisson",
                                           polarization_factor=polarization_factor,
                                           unit=self.unit,
@@ -563,7 +565,7 @@ class IntegrateMultiframe(Plugin):
         valid_slice = slice(*tomerge)
         mask = self.ai.detector.mask
         sum_data = (self.input_frames[valid_slice]).sum(axis=0)
-        sum_norm = (numpy.array(self.monitor_values)[valid_slice]).sum() / self.normalization_factor
+        sum_norm = (numpy.array(self.monitor_values)[valid_slice]).sum() * self.scale_factor
         if numexpr is not None:
             # Numexpr is many-times faster than numpy when it comes to element-wise operations
             intensity_avg = numexpr.evaluate("where(mask==0, sum_data/sum_norm, 0.0)")
