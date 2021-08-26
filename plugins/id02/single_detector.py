@@ -667,8 +667,6 @@ Possible values for to_save:
             metadata_grp = nxprocess.require_group("parameters")
 
             for key, val in self.metadata.items():
-                if key == "Title":
-                    self.log_warning(f"key {key} has value {val} of type {type(val)}")
                 if isinstance(val, StringTypes):
                     metadata_grp[key] = ensure_str(val)
                 else:
