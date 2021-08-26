@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "11/09/2020"
+__date__ = "26/08/2021"
 __status__ = "development"
 __version__ = "0.9.1"
 
@@ -608,7 +608,7 @@ Possible values for to_save:
         parameters_grp = headers[0]
         for key, value in parameters_grp.items():
             base = key.split("_")[0]
-            conv = self.KEY_CONV.get(base, str)
+            conv = self.KEY_CONV.get(base, ensure_str)
             metadata[key] = conv(value[()])
         return metadata
 
@@ -667,7 +667,9 @@ Possible values for to_save:
             metadata_grp = nxprocess.require_group("parameters")
 
             for key, val in self.metadata.items():
-                if type(val) in StringTypes:
+                if key == "Title":
+                    self.log_warning(f"key {key} has value {val} of type {type(val)}")
+                if isinstance(val, StringTypes):
                     metadata_grp[key] = ensure_str(val)
                 else:
                     metadata_grp[key] = val
