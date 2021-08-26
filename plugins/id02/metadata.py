@@ -9,7 +9,7 @@ __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "26/08/2021"
 __status__ = "development"
-__version__ = "0.9.1"
+__version__ = "0.9.2"
 
 import os
 import posixpath
