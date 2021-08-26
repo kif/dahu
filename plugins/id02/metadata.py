@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "04/06/2020"
+__date__ = "26/08/2021"
 __status__ = "development"
 __version__ = "0.9.1"
 
@@ -21,7 +21,7 @@ from dahu.utils import get_isotime, fully_qualified_name
 import PyTango
 import logging
 logger = logging.getLogger("id02.metadata")
-from .common import StringTypes, Nexus
+from .common import StringTypes, Nexus, ensure_str
 
 
 def preproc(**d):
@@ -325,7 +325,7 @@ input = {
             self.mcs_grp["HS32V"] = values.astype(numpy.float32)
             self.mcs_grp["HS32V"].attrs["interpretation"] = "scalar"
             for i, name in enumerate(self.mcs_grp["HS32N"]):
-                fullname = "interpreted/%s" % name
+                fullname = "interpreted/" + ensure_str(name)
                 self.mcs_grp[fullname] = values[:, i]
                 self.mcs_grp[fullname].attrs["interpretation"] = "scalar"
 
