@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/07/2021"
+__date__ = "03/09/2021"
 __status__ = "development"
 __version__ = "0.1.2"
 
@@ -427,7 +427,7 @@ class HPLC(Plugin):
         f_grp = nxs.new_class(top_grp, f"{fraction.start}-{fraction.stop}", "NXprocess")
         f_grp["sequence_index"] = self.sequence_index()
         f_grp["first_frame"] = fraction.start
-        f_grp["last_frame"] = fraction.start
+        f_grp["last_frame"] = fraction.stop
         # f_grp["program"] = "dahu.plugins.bm29.hplc"
         # f_grp["version"] = __version__
         f_grp["date"] = get_isotime()
