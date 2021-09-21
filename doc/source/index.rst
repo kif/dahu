@@ -13,6 +13,7 @@ Contents:
 
    dahu
    installation
+   coverage
    api/modules
 
 Indices and tables
