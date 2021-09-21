@@ -12,9 +12,8 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "01/09/2020"
+__date__ = "08/10/2020"
 __status__ = "production"
-
 
 from threading import Thread, Semaphore
 import time
@@ -26,9 +25,10 @@ import json
 import logging
 import traceback
 logger = logging.getLogger("dahu.job")
-#logger.setLevel(logging.DEBUG)
+# logger.setLevel(logging.DEBUG)
 from . import utils
 from .factory import plugin_factory
+from .utils import NumpyEncoder
 
 # Python 2to3 compatibility
 StringTypes = (six.binary_type, six.text_type)
@@ -289,9 +289,9 @@ class Job(Thread):
                             os.mkdir(dirname)
                     base_path = os.path.join(dirname, "%05d_%s" % (self._jobId, self._name))
                     with open(base_path + ".inp", "w") as infile:
-                        json.dump(self._input_data, infile, indent=4)
+                        json.dump(self._input_data, infile, indent=4, cls=NumpyEncoder)
                     with open(base_path + ".out", "w") as infile:
-                        json.dump(self._output_data, infile, indent=4)
+                        json.dump(self._output_data, infile, indent=4, cls=NumpyEncoder)
                     self._plugin = None
                     self.data_on_disk = base_path
                     self._output_data = None
@@ -365,8 +365,8 @@ class Job(Thread):
             self._name = name
         else:
             logger.error("Job.setName: One cannot rename a Job !!!")
-    name = property(getName, setName, "Job.name: nickname of the job")
 
+    name = property(getName, setName, "Job.name: nickname of the job")
 
 ################################################################################
 # Class methods
@@ -422,6 +422,7 @@ class Job(Thread):
             strRet = "Unable to retrieve such job: %s" % jobId
             logger.warning(strRet)
         return strRet
+
     getStatusFromId = getStatusFromID
 
     @classmethod
@@ -439,6 +440,7 @@ class Job(Thread):
             return cls._dictJobs[jobId]
         else:
             logger.warning("Unable to retrieve such Job: %s" % jobId)
+
     getJobFromId = getJobFromID
 
     @classmethod
@@ -461,6 +463,7 @@ class Job(Thread):
             strRet = "Unable to retrieve such Job: %s" % jobId
             logger.warning(strRet)
         return strRet
+
     cleanJobfromID = cleanJobfromId
 
     @classmethod
@@ -487,12 +490,15 @@ class Job(Thread):
                             output = json.loads(data)
                     else:
                         if as_JSON:
-                            output = json.dumps(job._output_data, skipkeys=True, allow_nan=True, indent=4, encoding="UTF-8")
+                            output = json.dumps(job._output_data, skipkeys=True, allow_nan=True,
+                                                indent=None, separators=(',', ':'),
+                                                encoding="UTF-8", cls=NumpyEncoder)
                         else:
                             output = job._output_data
         else:
             output = "No such job: %s" % jobId
         return output or none
+
     getDataOutputFromID = getDataOutputFromId
 
     @classmethod
@@ -519,12 +525,15 @@ class Job(Thread):
                             output = json.loads(data)
                     else:
                         if as_JSON:
-                            output = json.dumps(job._input_data, skipkeys=True, allow_nan=True, indent=4, encoding="UTF-8")
+                            output = json.dumps(job._input_data, skipkeys=True, allow_nan=True,
+                                                indent=None, separators=(',', ':'),
+                                                 encoding="UTF-8", cls=NumpyEncoder)
                         else:
                             output = job._input_data
         else:
             output = "No such job: %s" % jobId
         return output or none
+
     getDataInputFromID = getDataInputFromId
 
     @classmethod
