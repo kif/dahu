@@ -7,12 +7,11 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22/06/2020"
+__date__ = "26/08/2021"
 __status__ = "development"
-__version__ = "0.9.0"
+__version__ = "0.9.2"
 
 import os
-import time
 import threading
 import shutil
 import posixpath
@@ -26,14 +25,12 @@ import h5py
 from dahu import version as dahu_version
 from dahu.plugin import Plugin
 from dahu.utils import get_isotime, fully_qualified_name
-from dahu.job import Job
 from dahu.cache import DataCache
 import fabio
-import pyFAI
-import pyFAI.utils
+import pyFAI, pyFAI.utils
 from pyFAI.worker import Worker, DistortionWorker, PixelwiseWorker
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
-from .common import StringTypes, Nexus
+from .common import StringTypes, Nexus, ensure_str
 try:
     import hdf5plugin
 except ImportError:
@@ -43,7 +40,7 @@ else:
 
 numexpr.set_num_threads(8)
 
-CacheKey = namedtuple("CacheKey", ["ai", "mask", "shape"])
+CacheKey = namedtuple("CacheKey", ["ai", "shape"])
 
 
 class SingleDetector(Plugin):
@@ -95,8 +92,8 @@ Optional parameters:
 "distortion_filename" Spline file with the distortion correction
 "flat_filename" flat field for intensity response correction
 "metadata_job": number of the metadata job to wait for (unused)
-"scaling_factor": float (default=1) by which all intensity will be multiplied 
-"correct_solid_angle": True by default, set to 0/False to disable such correction 
+"scaling_factor": float (default=1) by which all intensity will be multiplied
+"correct_solid_angle": True by default, set to 0/False to disable such correction
 "correct_I1": True by default, set to false to deactivate scaling by Exposure time / transmitted intensity
 "unit": "q_nm^-1" can be changed to "log(q)_m" for log(q) units
 "variance_formula": calculate the variance from a formula like '0.1*(data-dark)+1.0' "
@@ -129,7 +126,7 @@ Possible values for to_save:
                 "Dummy": float,
                 "PSize": float,
                 "SampleDistance": float,
-                "Wavelength": float, #both are possible ?
+                "Wavelength": float, # both are possible ?
                 "WaveLength": float,
                 "Rot": float
                 }
@@ -140,7 +137,8 @@ Possible values for to_save:
             "RasterOrientation", "SampleDistance", "SaxsDataVersion", "Title", "WaveLength")
     TIMEOUT = 10
     cache = DataCache(5)
-
+    REPROCESS_IGNORE = ["metadata_job"]
+    
     def __init__(self):
         Plugin.__init__(self)
         self.ai = None
@@ -165,6 +163,8 @@ Possible values for to_save:
         self.flat_filename = None
         self.flat = None
         self.mask_filename = None
+        self.distortion_mask = None
+        self.regrouping_mask = None
         self.distortion_filename = None
         self.output_hdf5 = {}
         self.dist = 1.0
@@ -195,20 +195,9 @@ Possible values for to_save:
             self.unit = self.input.get("unit")
 
         if "metadata_job" in self.input:
-            job_id = int(self.input.get("metadata_job"))
-            status = Job.synchronize_job(job_id, self.TIMEOUT)
-            abort_time = time.time() + self.TIMEOUT
-            while status == Job.STATE_UNINITIALIZED:
-                # Wait for job to start
-                time.sleep(1)
-                status = Job.synchronize_job(job_id, self.TIMEOUT)
-                if time.time() > abort_time:
-                    self.log_error("Timeout while waiting metadata plugin to finish")
-                    break
-            if status == Job.STATE_SUCCESS:
-                self.metadata_plugin = Job.getJobFromId(job_id)
-            else:
-                self.log_error("Metadata plugin ended in %s: aborting myself" % status)
+            job_id = int(self.input.get("metadata_job", 0))
+            self.wait_for(job_id)
+
         if not os.path.isdir(self.dest):
             os.makedirs(self.dest)
         c216_filename = os.path.abspath(self.input.get("c216_filename", ""))
@@ -263,9 +252,11 @@ Possible values for to_save:
                                                           ("dark", numpy.float64)])
 
     def process(self):
-        self.metadata = self.parse_image_file()
-        self.mask_filename = self.input.get("regrouping_mask_filename")
+        dummy=None
+        self.metadata = self.parse_image_file()        
         shape = self.in_shape[-2:]
+        
+        
         if self.I1 is None:
             self.I1 = numpy.ones(shape, dtype=float)
         elif self.I1.size < self.in_shape[0]:
@@ -285,20 +276,16 @@ Possible values for to_save:
         self.dist = self.metadata.get("SampleDistance")
 
         # Some safety checks, use-input are sometimes False !
-        if self.dist<0: 
-            #which is impossible
+        if self.dist < 0:
+            # which is impossible
             self.log_warning(f"Found negative distance: {self.dist}, considering its absolute value")
             self.dist = forai["SampleDistance"] = abs(self.metadata.get("SampleDistance"))
-             
-        if forai["WaveLength"] <0:
+
+        if forai["WaveLength"] < 0:
             self.log_warning(f"Found negative wavelength: {forai['WaveLength']}, considering its absolute value")
             forai["WaveLength"] = abs(self.metadata.get("WaveLength"))
         self.dummy = self.metadata.get("Dummy", self.dummy)
         self.delta_dummy = self.metadata.get("DDummy", self.delta_dummy)
-        # read detector distortion distortion_filename
-
-        # self.log_warning("Metadata: " + str(self.metadata))
-        # self.log_warning("forai: " + str(forai))
 
         self.ai = AzimuthalIntegrator()
         self.ai.setSPD(**forai)
@@ -315,7 +302,7 @@ Possible values for to_save:
 
         self.log_warning("AI:%s" % self.ai)
 
-        self.cache_ai = CacheKey(str(self.ai), self.mask_filename, shape)
+        self.cache_ai = CacheKey(str(self.ai), shape)
 
         if self.cache_ai in self.cache:
             self.ai._cached_array.update(self.cache.get(self.cache_ai))
@@ -331,9 +318,14 @@ Possible values for to_save:
         if self.input.get("do_polarization"):
             self.polarization = self.ai.polarization(factor=self.input.get("polarization_factor"),
                                                      axis_offset=self.input.get("polarization_axis_offset", 0))
-
+        
+        #Static mask is used for distortion correction
+        static_mask = self.ai.detector.mask
+        if static_mask is None:
+            static_mask = numpy.zeros(shape, dtype=bool)
+        
         # Read and Process dark
-        if type(self.dark_filename) in StringTypes and os.path.exists(self.dark_filename):
+        if isinstance(self.dark_filename, StringTypes) and os.path.exists(self.dark_filename):
             dark = self.read_data(self.dark_filename)
             if dark.ndim == 3:
                 method = self.input.get("dark_filter")
@@ -367,6 +359,12 @@ Possible values for to_save:
                 except:
                     self.log_error("Dummy value in mask is unconsistent %s" % dummy)
                     dummy = None
+                ddummy = flat_fabio.header.get("DDummy")
+                try:
+                    ddummy = float(ddummy)
+                except:
+                    self.log_error("DDummy value in mask is unconsitent %s" % ddummy)
+                    ddummy = 0
 
             if flat.ndim == 3:
                 self.flat = pyFAI.average.average_dark(flat, center_method="median")
@@ -383,15 +381,24 @@ Possible values for to_save:
                         binning = [i // j for i, j in zip(shape, self.flat.shape)]
                         self.flat = pyFAI.utils.unBinning(self.flat, binsize=binning, norm=False)
             if numpy.isscalar(self.flat):
-                self.flat = numpy.ones(self.ai.detector.shape) * self.flat
+                self.flat = numpy.ones(shape) * self.flat
             self.ai.detector.set_flatfield(self.flat)
+            #extend the static mask with dummy pixels from the flat-field image
+            if dummy:
+                if ddummy:
+                    numpy.logical_or(static_mask, abs(self.flat - dummy) <= ddummy, out=static_mask)
+                else:
+                    numpy.logical_or(static_mask, self.flat == dummy, out=static_mask)
+            self.distortion_mask = static_mask
+        self.ai.detector.mask = self.distortion_mask
 
-        # Read and Process mask
-        if type(self.mask_filename) in StringTypes and os.path.exists(self.mask_filename):
+        # Read and Process mask for integration
+        self.mask_filename = self.input.get("regrouping_mask_filename")
+        if isinstance(self.mask_filename, StringTypes) and os.path.exists(self.mask_filename):
             try:
                 mask_fabio = fabio.open(self.mask_filename)
             except:
-                mask = self.read_data(self.mask_filename) != 0
+                local_mask = self.read_data(self.mask_filename) != 0
             else:  # this is very ID02 specific !!!!
                 dummy = mask_fabio.header.get("Dummy")
                 try:
@@ -406,27 +413,26 @@ Possible values for to_save:
                     self.log_error("DDummy value in mask is unconsitent %s" % ddummy)
                     ddummy = 0
                 if ddummy:
-                    mask = abs(mask_fabio.data - dummy) <= ddummy
+                    local_mask = abs(mask_fabio.data - dummy) <= ddummy
                 else:
-                    mask = (mask_fabio.data == dummy)
-                self.log_warning("found %s pixel masked out" % (mask.sum()))
+                    local_mask = mask_fabio.data == dummy
                 self.dummy = dummy
                 self.delta_dummy = ddummy
-            if mask.ndim == 3:
-                mask = pyFAI.average.average_dark(mask, center_method="median")
-            if (mask is not None) and (mask.shape != shape):
-                binning = [j / i for i, j in zip(shape, mask.shape)]
+            if local_mask.ndim == 3:
+                local_mask = pyFAI.average.average_dark(local_mask, center_method="median")
+            if (local_mask is not None) and (local_mask.shape != shape):
+                binning = [j / i for i, j in zip(shape, local_mask.shape)]
                 if tuple(binning) != (1, 1):
                     self.log_warning("Binning for mask is %s" % binning)
                     if max(binning) > 1:
                         binning = [int(i) for i in binning]
-                        mask = pyFAI.utils.binning(mask, binsize=binning, norm=True) > 0
+                        local_mask = pyFAI.utils.binning(local_mask, binsize=binning, norm=True) > 0
                     else:
-                        binning = [i // j for i, j in zip(shape, mask.shape)]
-                        mask = pyFAI.utils.unBinning(mask, binsize=binning, norm=False) > 0
-            # nota: this is assigned to the detector !
-            self.ai.mask = mask
-
+                        binning = [i // j for i, j in zip(shape, local_mask.shape)]
+                        local_mask = pyFAI.utils.unBinning(local_mask, binsize=binning, norm=False) > 0
+            self.regrouping_mask = numpy.logical_or(self.distortion_mask, local_mask)
+            self.log_warning("found %s pixel masked out" % (local_mask.sum()))
+        self.ai.detector.mask = self.regrouping_mask
         # bug specific to ID02, dummy=0 means no dummy !
         if self.dummy == 0:
             self.dummy = None
@@ -484,12 +490,14 @@ Possible values for to_save:
             return self.parse_image_file_old()
         elif creator.startswith("LIMA-"):
             version = creator.split("-")[1]
-            # maybe in the future, test on version of lima
+            #test on version of lima
+            if version<"1.":
+                self.log_warning("Suspicious version of LIMA: %s"%creator)
             return self.parse_image_file_lima()
 
     def parse_image_file_old(self):
         """Historical version, works with former LIMA version
-        
+
         @return: dict with interpreted metadata
         """
         metadata = {}
@@ -514,14 +522,14 @@ Possible values for to_save:
                            (len(detector_grp), self.input_nxs, self.image_file, instrument))
         self.images_ds = detector_grp.get("data")
         if isinstance(self.images_ds, h5py.Group):
-            if self.images_ds.attrs.get("NX_class") == "NXdata":
+            if self.images_ds.attrs.get("NX_class") in ("NXdata", b"NXdata"):
                 # this is an NXdata not a dataset: use the @signal
                 self.images_ds = self.images_ds.get(self.images_ds.attrs.get("signal"))
         self.in_shape = self.images_ds.shape
         if "detector_information" in detector_grp:
             detector_information = detector_grp["detector_information"]
             if "name" in detector_information:
-                metadata["DetectorName"] = str(detector_information["name"])
+                metadata["DetectorName"] = ensure_str(detector_information["name"])
         # now read an interpret all static metadata.
         # metadata are on the collection side not instrument
 
@@ -558,7 +566,7 @@ Possible values for to_save:
 
     def parse_image_file_lima(self):
         """LIMA version working with LIMA-1.9.3
-        
+
         @return: dict with interpreted metadata
         """
         metadata = {}
@@ -590,7 +598,7 @@ Possible values for to_save:
         if "detector_information" in detector_grp:
             detector_information = detector_grp["detector_information"]
             if "model" in detector_information:
-                metadata["DetectorName"] = str(detector_information["model"])
+                metadata["DetectorName"] = ensure_str(detector_information["model"][()])
         # now read an interpret all static metadata.
         # metadata are on the entry/instrument/detector/collection
         collections = self.input_nxs.get_class(detector_grp, class_type="NXcollection")
@@ -600,7 +608,7 @@ Possible values for to_save:
         parameters_grp = headers[0]
         for key, value in parameters_grp.items():
             base = key.split("_")[0]
-            conv = self.KEY_CONV.get(base, str)
+            conv = self.KEY_CONV.get(base, ensure_str)
             metadata[key] = conv(value[()])
         return metadata
 
@@ -612,7 +620,7 @@ Possible values for to_save:
         basename = os.path.splitext(os.path.basename(self.image_file))[0]
         if basename.endswith("_raw"):
             basename = basename[:-4]
-        isotime = str(get_isotime())
+        isotime = get_isotime()
         detector_grp = self.input_nxs.find_detector(all=True)
         detector_name = "undefined"
         for grp in detector_grp:
@@ -637,30 +645,30 @@ Possible values for to_save:
                 self.log_warning("invalid HDF5 file %s: remove and re-create!\n%s" % (outfile, error))
                 os.unlink(outfile)
                 nxs = Nexus(outfile, mode="w", creator="dahu")
-            entry = nxs.new_entry("entry", 
+            entry = nxs.new_entry("entry",
                                   program_name=self.input.get("plugin_name", fully_qualified_name(self.__class__)),
                                   title=self.image_file + ":" + self.images_ds.name)
             entry["program_name"].attrs["version"] = __version__
 
-            #configuration
+            # Configuration
             config_grp = nxs.new_class(entry, "configuration", "NXnote")
             config_grp["type"] = "text/json"
             config_grp["data"] = json.dumps(self.input, indent=2, separators=(",\r\n", ": "))
 
-            entry["detector_name"] = str(detector_name)
+            entry["detector_name"] = ensure_str(detector_name)
 
             nxprocess = nxs.new_class(entry, "PyFAI", class_type="NXprocess")
-            nxprocess["program"] = str("PyFAI")
-            nxprocess["version"] = str(pyFAI.version)
+            nxprocess["program"] = "PyFAI"
+            nxprocess["version"] = ensure_str(pyFAI.version)
             nxprocess["date"] = isotime
-            nxprocess["processing_type"] = str(ext)
+            nxprocess["processing_type"] = ensure_str(ext)
             nxdata = nxs.new_class(nxprocess, "result_" + ext, class_type="NXdata")
             entry.attrs["default"] = nxdata.name
             metadata_grp = nxprocess.require_group("parameters")
 
             for key, val in self.metadata.items():
-                if type(val) in StringTypes:
-                    metadata_grp[key] = str(val)
+                if isinstance(val, StringTypes):
+                    metadata_grp[key] = ensure_str(val)
                 else:
                     metadata_grp[key] = val
 
@@ -802,6 +810,9 @@ Possible values for to_save:
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
                                           detector=self.ai.detector,
+                                          mask=self.distortion_mask, 
+                                          device="gpu",
+                                          method="csr"
                                           )
                 self.workers[ext] = worker
                 if self.distortion is None and worker.distortion is not None:
@@ -818,7 +829,7 @@ Possible values for to_save:
                 self.log_warning("unknown treatment %s" % ext)
 
             if (len(shape) >= 3):
-                compression = { k:v for k, v in COMPRESSION.items()}
+                compression = {k: v for k, v in COMPRESSION.items()}
             else:
                 compression = {}
             output_ds = nxdata.create_dataset("data",
@@ -872,7 +883,7 @@ Possible values for to_save:
         for i, I1 in enumerate(I1s):
             data = self.images_ds[i]
             if self.variance_formula:
-                variance = self.variance_function(data, self.dark)
+                variance = self.variance_function(data, 0 if self.dark is None else self.dark)
             else:
                 variance = None
             I1_corrected = I1 / self.scaling_factor
@@ -893,7 +904,7 @@ Possible values for to_save:
                     res = self.workers[meth].process(data, variance=variance,
                                                      normalization_factor=I1_corrected)
                     if variance is not None:
-                        res, err = res
+                        res, err = res[0], res[1]
 
                 elif meth == "azim":
                     res = self.workers[meth].process(data, variance=variance,
@@ -964,7 +975,7 @@ Possible values for to_save:
                     for detector in nxs.get_class(instrument, "NXdetector"):
                         data = detector.get("data")
                         if isinstance(data, h5py.Group):
-                            if data.attrs.get("NX_class") == "NXdata":
+                            if data.attrs.get("NX_class") in ("NXdata", b"NXdata"):
                                 # this is an NXdata not a dataset: use the @signal
                                 data = data.get(data.attrs.get("signal"))
                         return numpy.array(data)
@@ -981,30 +992,30 @@ Possible values for to_save:
         """
         # Finally update the cache:
         to_cache = {}
-        for meth, worker in self.workers.items():
+        for worker in self.workers.values():
             if "ai" in dir(worker):
                 to_cache.update(worker.ai._cached_array)
 
         self.cache.get(self.cache_ai, {}).update(to_cache)
 
         to_close = {}
-        #close also the source
+        # close also the source
         self.output_ds["source"] = self.images_ds
         for key, ds in self.output_ds.items():
             if not bool(ds):
-                #the dataset is None when the file has been closed
-                continue 
+                # the dataset is None when the file has been closed
+                continue
             try:
                 hdf5_file = ds.file
                 filename = hdf5_file.filename
             except (RuntimeError, ValueError) as err:
                 self.log_warning(f"Unable to retrieve filename of dataset {key}: {err}")
             else:
-                to_close[filename] =  hdf5_file
+                to_close[filename] = hdf5_file
         for filename, hdf5_file in to_close.items():
             try:
                 hdf5_file.close()
-            except (RuntimeError,ValueError) as err:
+            except (RuntimeError, ValueError) as err:
                 self.log_warning(f"Issue in closing file {filename} {type(err)}: {err}")
 
         self.ai = None

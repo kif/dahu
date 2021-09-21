@@ -7,9 +7,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "24/06/2020"
+__date__ = "13/07/2021"
 __status__ = "development"
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 import os
 import json
@@ -74,6 +74,7 @@ Minimalistic example:
     },
     "correlator":{
         "name": "MatMulCorrelator",
+        "dtype": "uint8"
     }
              
 }
@@ -92,6 +93,7 @@ Minimalistic example:
         self.correlator_name = None
         self.result_filename = None
         self.timestep = None
+        self.dtype = None
 
     def process(self):
         Plugin.process(self)
@@ -100,8 +102,8 @@ Minimalistic example:
         self.shape = self.dataset.shape[1:]
         self.qmask = self.make_qmask()
         Correlator = self.get_correlator()
-        correlator = Correlator(self.shape, self.nframes, qmask=self.qmask)
-        results = correlator.correlate(self.dataset[...])
+        correlator = Correlator(self.shape, self.nframes, qmask=self.qmask, dtype=self.dtype)
+        results = correlator.correlate(numpy.ascontiguousarray(self.dataset[()], dtype=self.dtype), calc_std=True)
         self.save_results(results)
 
     def read_data(self):
@@ -176,15 +178,15 @@ Minimalistic example:
         else:
             q_array = geometry.center_array(self.shape, unit=self.unit)
 
-            detector_maskfile = detector_section.get("mask", '')
-            if os.path.exists(detector_maskfile):
+            detector_maskfile = detector_section.get("mask")
+            if detector_maskfile and os.path.exists(detector_maskfile):
                 detector_mask = fabio.open(detector_maskfile).data
             else:
                 detector_mask = detector.mask
                 if detector_mask is None:
                     detector_mask = numpy.zeros(self.shape, dtype=numpy.int8)
-            beamstop_maskfile = experiment_setup.get("beamstop_mask", "")
-            if os.path.exists(beamstop_maskfile, ""):
+            beamstop_maskfile = experiment_setup.get("beamstop_mask")
+            if beamstop_maskfile and os.path.exists(beamstop_maskfile):
                 beamstop_mask = fabio.open(beamstop_maskfile).data
             else:
                 beamstop_mask = numpy.zeros(self.shape, dtype=numpy.int8)
@@ -218,6 +220,11 @@ Minimalistic example:
         if correlator_name not in CORRELATORS:
             self.log_error("Correlator requested %s is not part of the available ones: %s" % (correlator_name, ", ".join(CORRELATORS.keys())))
         self.correlator_name = correlator_name
+        dtype = correlator_section.get("dtype")
+        if dtype is not None:
+            self.dtype = dtype
+        else:
+            self.dtype = self.dataset.dtype
         return CORRELATORS[correlator_name]
 
     def save_results(self, result):
@@ -229,10 +236,14 @@ Minimalistic example:
             result_file = a + "_xpcs" + b
             self.log_warning("No destination file provided, saving in %s" % result_file)
 
-        if os.path.exists(result_file):
+        try:
+            nxs = Nexus(result_file, mode="a", creator="dahu")
+        except IOError as error:
+            self.log_warning("invalid HDF5 file %s: remove and re-create!\n%s" % (result_file, error))
             os.unlink(result_file)
+            nxs = Nexus(result_file, mode="w", creator="dahu")
 
-        with Nexus(result_file, mode="w", creator="dahu") as nxs:
+        with nxs:
             entry_grp = nxs.new_entry(entry="entry",
                                       program_name=self.input.get("plugin_name", "dahu"),
                                       title="XPCS experiment",
@@ -297,15 +308,16 @@ Minimalistic example:
             qmask_ds.attrs["long_name"] = "mask with bins averaged (0=masked-out)"
 
             entry_grp.attrs["default"] = xpcs_grp.attrs["default"] = xpcs_data.name
-            result_ds = xpcs_data.create_dataset("g2", result.shape, chunks=result.shape, **COMPRESSION)
-            result_ds[...] = result
+            result_ds = xpcs_data.create_dataset("g2", data=result.res, chunks=True, **COMPRESSION)
             result_ds.attrs["interpretation"] = "spectrum"
+            errors_ds = xpcs_data.create_dataset("errors", data=result.dev, chunks=True, **COMPRESSION)
+            errors_ds.attrs["interpretation"] = "spectrum"
             qrange_ds = xpcs_data.create_dataset("q", data=self.qrange)
             qrange_ds.attrs["interpretation"] = "scalar"
             qrange_ds.attrs["unit"] = self.unit
             qrange_ds.attrs["long_name"] = "Scattering vector q (%s)" % self.unit
 
-            trange = numpy.arange(result.shape[-1]) * self.timestep
+            trange = numpy.arange(result_ds.shape[-1]) * self.timestep
             trange_ds = xpcs_data.create_dataset("t", data=trange)
             trange_ds.attrs["interpretation"] = "scalar"
             trange_ds.attrs["unit"] = "s"
