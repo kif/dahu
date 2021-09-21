@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "15/07/2021"
+__date__ = "20/09/2021"
 __status__ = "development"
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 
 import os
 import time
@@ -453,8 +453,8 @@ class IntegrateMultiframe(Plugin):
     # Stage 3 processing
         res3 = self.process3_average(cormap_results.tomerge)
 
-        self.to_memcached["I_avg"] = Iavg = numpy.ascontiguousarray(res3.average, dtype=numpy.float32)
-        self.to_memcached["sigma_avg"] = sigma_avg = numpy.ascontiguousarray(res3.deviation, dtype=numpy.float32)
+        Iavg = numpy.ascontiguousarray(res3.average, dtype=numpy.float32)
+        sigma_avg = numpy.ascontiguousarray(res3.deviation, dtype=numpy.float32)
 
         int_avg_ds = average_data.create_dataset("intensity_normed",
                                                   data=Iavg,
@@ -500,6 +500,8 @@ class IntegrateMultiframe(Plugin):
                                        method=method)
         if self.ispyb.url:
             self.to_pyarch["avg"] = res2
+
+        _, self.to_memcached["I_avg"], self.to_memcached["sigma_avg"] = res2
         ai2_q_ds = ai2_data.create_dataset(radial_unit,
                                            data=numpy.ascontiguousarray(res2.radial, dtype=numpy.float32))
         ai2_q_ds.attrs["units"] = unit_name
@@ -588,13 +590,16 @@ class IntegrateMultiframe(Plugin):
     def send_to_memcached(self):
         "Send the content of self.to_memcached to the storage"
         keys = {}
+        rc = {}
         if memcache is not None:
             mc = memcache.Client([('stanza', 11211)])
             key_base = self.output_file
-            for k, v in self.to_memcached.items():
+            for k in sorted(self.to_memcached.keys(), key=lambda i:self.to_memcached[i].nbytes):
                 key = key_base + "_" + k
                 keys[k] = key
-                value = json.dumps(v, indent=2, cls=NumpyEncoder)
-                mc.set(key, value)
+                value = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
+                rc[k] = mc.set(key, value)
+                # self.log_warning(f"key {k} dtype {self.to_memcached[k].dtype}, shape {self.to_memcached[k].shape}, nbytes {self.to_memcached[k].nbytes}") 
+        self.log_warning(f"Return codes for memcached {rc}")
         return keys
 
