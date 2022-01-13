@@ -266,6 +266,9 @@ setup_kwargs = config.todict()
 script_files = glob.glob("scripts/*")
 install_requires = ["numpy"]
 setup_requires = ["numpy"]
+extras_require = {"tango": ["pytango"]}
+entry_points = {"console_scripts": ["dahu-server = dahu.app.server:main",
+                                    "dahu-register = dahu.app.register:main"]}
 
 plugins = ["dahu.plugins"]
 plugin_dir = {"dahu": "dahu",
@@ -290,13 +293,15 @@ setup_kwargs.update(name=PROJECT,
                     long_description=get_readme(),
                     install_requires=install_requires,
                     setup_requires=setup_requires,
+                    extras_require=extras_require,
+                    entry_points=entry_points,
                     cmdclass=cmdclass,
                     package_data={'silx.resources': [
                         # Add here all resources files
                         'gui/icons/*.png',
                         ]},
                     zip_safe=False,
-                    packages=["dahu", "dahu.test"] + plugins,
+                    packages=["dahu", "dahu.app", "dahu.test"] + plugins,
                     package_dir=plugin_dir,
                     test_suite="test",
                     scripts=script_files,

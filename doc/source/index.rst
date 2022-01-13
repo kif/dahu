@@ -13,6 +13,7 @@ Contents:
 
    dahu
    installation
+   getting_started
    coverage
    api/modules
 
