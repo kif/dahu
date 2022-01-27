@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "26/08/2021"
+__date__ = "27/01/2022"
 __status__ = "development"
 __version__ = "0.9.2"
 
@@ -41,6 +41,20 @@ else:
 numexpr.set_num_threads(8)
 
 CacheKey = namedtuple("CacheKey", ["ai", "shape"])
+
+
+class CacheValues:
+    __slots__ = 'array', 'engine'
+
+    def __init__(self, array):
+        self.array = array
+        self.engine = {}
+
+    def update(self, array=None, engine=None):
+        if array:
+            self.array.update(array)
+        if engine:
+            self.engine.update(engine)
 
 
 class SingleDetector(Plugin):
@@ -126,7 +140,7 @@ Possible values for to_save:
                 "Dummy": float,
                 "PSize": float,
                 "SampleDistance": float,
-                "Wavelength": float, # both are possible ?
+                "Wavelength": float,  # both are possible ?
                 "WaveLength": float,
                 "Rot": float
                 }
@@ -138,7 +152,7 @@ Possible values for to_save:
     TIMEOUT = 10
     cache = DataCache(5)
     REPROCESS_IGNORE = ["metadata_job"]
-    
+
     def __init__(self):
         Plugin.__init__(self)
         self.ai = None
@@ -252,11 +266,10 @@ Possible values for to_save:
                                                           ("dark", numpy.float64)])
 
     def process(self):
-        dummy=None
-        self.metadata = self.parse_image_file()        
+        dummy = None
+        self.metadata = self.parse_image_file()
         shape = self.in_shape[-2:]
-        
-        
+
         if self.I1 is None:
             self.I1 = numpy.ones(shape, dtype=float)
         elif self.I1.size < self.in_shape[0]:
@@ -305,7 +318,9 @@ Possible values for to_save:
         self.cache_ai = CacheKey(str(self.ai), shape)
 
         if self.cache_ai in self.cache:
-            self.ai._cached_array.update(self.cache.get(self.cache_ai))
+            cached_ai = self.get(self.cache_ai)
+            self.ai._cached_array.update(cached_ai.array)
+            self.ai.engines.update(cached_ai.engine)
         else:
             # Initialize geometry:
             self.ai.qArray(shape)
@@ -313,17 +328,18 @@ Possible values for to_save:
             self.ai.deltaQ(shape)
             self.ai.deltaChi(shape)
             self.ai.solidAngleArray(shape)
-            self.cache.get(self.cache_ai, {}).update(self.ai._cached_array)
+            # Store cached array in cache
+            self.cache.get(self.cache_ai, CacheValues({})).update(array=self.ai._cached_array)
 
         if self.input.get("do_polarization"):
             self.polarization = self.ai.polarization(factor=self.input.get("polarization_factor"),
                                                      axis_offset=self.input.get("polarization_axis_offset", 0))
-        
-        #Static mask is used for distortion correction
+
+        # Static mask is used for distortion correction
         static_mask = self.ai.detector.mask
         if static_mask is None:
             static_mask = numpy.zeros(shape, dtype=bool)
-        
+
         # Read and Process dark
         if isinstance(self.dark_filename, StringTypes) and os.path.exists(self.dark_filename):
             dark = self.read_data(self.dark_filename)
@@ -383,7 +399,7 @@ Possible values for to_save:
             if numpy.isscalar(self.flat):
                 self.flat = numpy.ones(shape) * self.flat
             self.ai.detector.set_flatfield(self.flat)
-            #extend the static mask with dummy pixels from the flat-field image
+            # extend the static mask with dummy pixels from the flat-field image
             if dummy:
                 if ddummy:
                     numpy.logical_or(static_mask, abs(self.flat - dummy) <= ddummy, out=static_mask)
@@ -431,7 +447,7 @@ Possible values for to_save:
                         binning = [i // j for i, j in zip(shape, local_mask.shape)]
                         local_mask = pyFAI.utils.unBinning(local_mask, binsize=binning, norm=False) > 0
             self.regrouping_mask = numpy.logical_or(self.distortion_mask, local_mask)
-            self.log_warning("found %s pixel masked out" % (local_mask.sum()))
+            # self.log_warning("found %s pixel masked out" % (local_mask.sum()))
         self.ai.detector.mask = self.regrouping_mask
         # bug specific to ID02, dummy=0 means no dummy !
         if self.dummy == 0:
@@ -490,9 +506,9 @@ Possible values for to_save:
             return self.parse_image_file_old()
         elif creator.startswith("LIMA-"):
             version = creator.split("-")[1]
-            #test on version of lima
-            if version<"1.":
-                self.log_warning("Suspicious version of LIMA: %s"%creator)
+            # test on version of lima
+            if version < "1.":
+                self.log_warning("Suspicious version of LIMA: %s" % creator)
             return self.parse_image_file_lima()
 
     def parse_image_file_old(self):
@@ -711,6 +727,8 @@ Possible values for to_save:
                 shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
 
                 ai = self.ai.__copy__()
+                ai.engines.update(ai.engines)  # copy engines as well
+
                 worker = Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), self.unit)
                 if self.flat is not None:
                     worker.ai.set_flatfield(self.flat)
@@ -718,15 +736,15 @@ Possible values for to_save:
                     worker.ai.set_darkcurrent(self.dark)
                 worker.output = "numpy"
                 if self.in_shape[0] < 5:
-                    worker.method = "splitbbox"
+                    worker.method = ("full", "histogram", "cython")  # "splitbbox"
                 else:
-                    worker.method = "ocl_csr_gpu"
+                    worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
                 if self.correct_solid_angle:
                     worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
                 else:
                     worker.set_normalization_factor(1.0)
                     worker.correct_solid_angle = self.correct_solid_angle
-                self.log_warning("Normalization factor: %s" % worker.normalization_factor)
+                # self.log_warning("Normalization factor: %s" % worker.normalization_factor)
 
                 worker.dummy = self.dummy
                 worker.delta_dummy = self.delta_dummy
@@ -747,9 +765,9 @@ Possible values for to_save:
                 worker = Worker(ai, self.in_shape[-2:], (1, npt1_rad), unit=unit)
                 worker.output = "numpy"
                 if self.in_shape[0] < 5:
-                    worker.method = "splitbbox"
+                    worker.method = ("full", "histogram", "cython")  # "splitbbox"
                 else:
-                    worker.method = "ocl_csr_gpu"
+                    worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
                 if self.correct_solid_angle:
                     worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
                 else:
@@ -810,7 +828,7 @@ Possible values for to_save:
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
                                           detector=self.ai.detector,
-                                          mask=self.distortion_mask, 
+                                          mask=self.distortion_mask,
                                           device="gpu",
                                           method="csr"
                                           )
@@ -911,7 +929,6 @@ Possible values for to_save:
                                                      normalization_factor=I1_corrected)
                     if (variance is not None):
                         if len(res) == 2:
-                            # TODO, disabled for now, fix in pyFAI.AzimuthalIntegrator.integrat2d where variance is not yet used
                             res, err = res
                         else:
                             err = numpy.zeros_like(res)
@@ -930,7 +947,6 @@ Possible values for to_save:
                 elif meth.startswith("ave"):
                     res = self.workers[meth].process(data, variance=variance,
                                                      normalization_factor=I1_corrected)
-
                     # TODO: add other units
                     if i == 0 and "q" not in ds.parent:
                         if "log(1+q.nm)" in meth:
@@ -991,15 +1007,19 @@ Possible values for to_save:
         """Method for cleaning up stuff
         """
         # Finally update the cache:
-        to_cache = {}
+        to_cache_array = {}
+        to_cache_engine = {}
         for worker in self.workers.values():
             if "ai" in dir(worker):
-                to_cache.update(worker.ai._cached_array)
+                to_cache_array.update(worker.ai._cached_array)
+                to_cache_engine.update(worker.ai.engines)
 
-        self.cache.get(self.cache_ai, {}).update(to_cache)
+        cache_value = self.cache.get(self.cache_ai, CacheValues({}))
+        cache_value.update(array=to_cache_array)
+        cache_value.update(engine=to_cache_engine)
 
-        to_close = {}
         # close also the source
+        to_close = {}
         self.output_ds["source"] = self.images_ds
         for key, ds in self.output_ds.items():
             if not bool(ds):
