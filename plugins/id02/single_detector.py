@@ -150,7 +150,7 @@ Possible values for to_save:
             "Rot_1", "Rot_2", "Rot_3",
             "RasterOrientation", "SampleDistance", "SaxsDataVersion", "Title", "WaveLength")
     TIMEOUT = 10
-    cache = DataCache(5)
+    cache = DataCache(6)
     REPROCESS_IGNORE = ["metadata_job"]
 
     def __init__(self):
@@ -727,7 +727,7 @@ Possible values for to_save:
                 shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
 
                 ai = self.ai.__copy__()
-                ai.engines.update(ai.engines)  # copy engines as well
+                ai.engines.update(self.ai.engines)  # copy engines as well
 
                 worker = Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), self.unit)
                 if self.flat is not None:
@@ -735,10 +735,10 @@ Possible values for to_save:
                 if self.dark is not None:
                     worker.ai.set_darkcurrent(self.dark)
                 worker.output = "numpy"
-                # if self.in_shape[0] < 5:
-                #     worker.method = ("full", "histogram", "cython")  # "splitbbox"
-                # else:
-                worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
+                if ai.engines or self.in_shape[0] > 3:
+                    worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
+                else:
+                    worker.method = ("full", "histogram", "cython")  # "splitbbox"
 
                 if self.correct_solid_angle:
                     worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
@@ -758,6 +758,7 @@ Possible values for to_save:
                     unit = ext.split("_", 1)[1]
                     npt1_rad = self.input.get("npt1_rad_" + unit, self.npt1_rad)
                     ai = self.ai.__copy__()
+                    ai.engines.update(self.ai.engines)  # copy engines as well
                 else:
                     unit = self.unit
                     npt1_rad = self.npt1_rad
@@ -765,10 +766,10 @@ Possible values for to_save:
                 shape = (self.in_shape[0], npt1_rad)
                 worker = Worker(ai, self.in_shape[-2:], (1, npt1_rad), unit=unit)
                 worker.output = "numpy"
-                # if self.in_shape[0] < 5:
-                #     worker.method = ("full", "histogram", "cython")  # "splitbbox"
-                # else:
-                worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
+                if ai.engines or self.in_shape[0] > 3:
+                    worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
+                else:
+                    worker.method = ("full", "histogram", "cython")  # "splitbbox"
                 if self.correct_solid_angle:
                     worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
                 else:
