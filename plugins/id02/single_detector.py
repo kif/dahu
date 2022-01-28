@@ -739,6 +739,7 @@ Possible values for to_save:
                     worker.method = ("full", "histogram", "cython")  # "splitbbox"
                 else:
                     worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
+
                 if self.correct_solid_angle:
                     worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
                 else:
@@ -750,7 +751,7 @@ Possible values for to_save:
                 worker.delta_dummy = self.delta_dummy
                 if self.input.get("do_polarization"):
                     worker.polarization_factor = self.input.get("polarization_factor")
-
+                worker.update_processor()
                 self.workers[ext] = worker
             elif ext.startswith("ave"):
                 if "_" in ext:
@@ -777,6 +778,7 @@ Possible values for to_save:
                 worker.delta_dummy = self.delta_dummy
                 if self.input.get("do_polarization"):
                     worker.polarization_factor = True
+                worker.update_processor()
                 self.workers[ext] = worker
             elif ext == "sub":
                 worker = PixelwiseWorker(dark=self.dark,
