@@ -111,6 +111,7 @@ Optional parameters:
 "correct_I1": True by default, set to false to deactivate scaling by Exposure time / transmitted intensity
 "unit": "q_nm^-1" can be changed to "log(q)_m" for log(q) units
 "variance_formula": calculate the variance from a formula like '0.1*(data-dark)+1.0' "
+"force__gpu": set to enforce the usage of the GPU
 
 Unused and automatically generated:
 "plugin_name':"id02.singledetector',
@@ -735,7 +736,7 @@ Possible values for to_save:
                 if self.dark is not None:
                     worker.ai.set_darkcurrent(self.dark)
                 worker.output = "numpy"
-                if ai.engines or self.in_shape[0] > 3:
+                if ai.engines or self.in_shape[0] > 3 or self.input.get("force_gpu"):
                     worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
                 else:
                     worker.method = ("full", "histogram", "cython")  # "splitbbox"
@@ -766,7 +767,7 @@ Possible values for to_save:
                 shape = (self.in_shape[0], npt1_rad)
                 worker = Worker(ai, self.in_shape[-2:], (1, npt1_rad), unit=unit)
                 worker.output = "numpy"
-                if ai.engines or self.in_shape[0] > 3:
+                if ai.engines or self.in_shape[0] > 3 or self.input.get("force_gpu"):
                     worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
                 else:
                     worker.method = ("full", "histogram", "cython")  # "splitbbox"
