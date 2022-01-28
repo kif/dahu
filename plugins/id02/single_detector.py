@@ -735,10 +735,10 @@ Possible values for to_save:
                 if self.dark is not None:
                     worker.ai.set_darkcurrent(self.dark)
                 worker.output = "numpy"
-                if self.in_shape[0] < 5:
-                    worker.method = ("full", "histogram", "cython")  # "splitbbox"
-                else:
-                    worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
+                # if self.in_shape[0] < 5:
+                #     worker.method = ("full", "histogram", "cython")  # "splitbbox"
+                # else:
+                worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
 
                 if self.correct_solid_angle:
                     worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
@@ -765,10 +765,10 @@ Possible values for to_save:
                 shape = (self.in_shape[0], npt1_rad)
                 worker = Worker(ai, self.in_shape[-2:], (1, npt1_rad), unit=unit)
                 worker.output = "numpy"
-                if self.in_shape[0] < 5:
-                    worker.method = ("full", "histogram", "cython")  # "splitbbox"
-                else:
-                    worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
+                # if self.in_shape[0] < 5:
+                #     worker.method = ("full", "histogram", "cython")  # "splitbbox"
+                # else:
+                worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
                 if self.correct_solid_angle:
                     worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
                 else:
