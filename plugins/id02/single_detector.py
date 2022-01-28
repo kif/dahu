@@ -318,7 +318,7 @@ Possible values for to_save:
         self.cache_ai = CacheKey(str(self.ai), shape)
 
         if self.cache_ai in self.cache:
-            cached_ai = self.get(self.cache_ai)
+            cached_ai = self.cache.get(self.cache_ai)
             self.ai._cached_array.update(cached_ai.array)
             self.ai.engines.update(cached_ai.engine)
         else:
