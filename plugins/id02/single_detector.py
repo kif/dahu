@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/01/2022"
+__date__ = "28/01/2022"
 __status__ = "development"
 __version__ = "0.9.2"
 
@@ -150,7 +150,7 @@ Possible values for to_save:
             "Rot_1", "Rot_2", "Rot_3",
             "RasterOrientation", "SampleDistance", "SaxsDataVersion", "Title", "WaveLength")
     TIMEOUT = 10
-    cache = DataCache(5)
+    cache = DataCache(3)
     REPROCESS_IGNORE = ["metadata_job"]
 
     def __init__(self):
