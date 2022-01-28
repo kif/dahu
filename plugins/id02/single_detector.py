@@ -150,7 +150,7 @@ Possible values for to_save:
             "Rot_1", "Rot_2", "Rot_3",
             "RasterOrientation", "SampleDistance", "SaxsDataVersion", "Title", "WaveLength")
     TIMEOUT = 10
-    cache = DataCache(3)
+    cache = DataCache(5)
     REPROCESS_IGNORE = ["metadata_job"]
 
     def __init__(self):
