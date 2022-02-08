@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "28/01/2022"
+__date__ = "08/02/2022"
 __status__ = "development"
 __version__ = "0.9.2"
 
@@ -157,6 +157,7 @@ Possible values for to_save:
     def __init__(self):
         Plugin.__init__(self)
         self.ai = None
+        self.distortion_detector = None
         self.distortion = None
         self.workers = {}
         self.output_ds = {}  # output datasets
@@ -313,7 +314,7 @@ Possible values for to_save:
             self.ai.detector = detector
         else:
             self.ai.detector.shape = self.in_shape[-2:]
-
+        self.distortion_detector = self.ai.detector.__copy__()
         self.log_warning("AI:%s" % self.ai)
 
         self.cache_ai = CacheKey(str(self.ai), shape)
@@ -337,9 +338,9 @@ Possible values for to_save:
                                                      axis_offset=self.input.get("polarization_axis_offset", 0))
 
         # Static mask is used for distortion correction
-        static_mask = self.ai.detector.mask
-        if static_mask is None:
-            static_mask = numpy.zeros(shape, dtype=bool)
+        self.distortion_mask = self.distortion_detector.mask
+        if self.distortion_mask is None:
+            self.distortion_mask = numpy.zeros(shape, dtype=bool)
 
         # Read and Process dark
         if isinstance(self.dark_filename, StringTypes) and os.path.exists(self.dark_filename):
@@ -403,11 +404,10 @@ Possible values for to_save:
             # extend the static mask with dummy pixels from the flat-field image
             if dummy:
                 if ddummy:
-                    numpy.logical_or(static_mask, abs(self.flat - dummy) <= ddummy, out=static_mask)
+                    numpy.logical_or(self.distortion_mask, abs(self.flat - dummy) <= ddummy, out=self.distortion_mask)
                 else:
-                    numpy.logical_or(static_mask, self.flat == dummy, out=static_mask)
-            self.distortion_mask = static_mask
-        self.ai.detector.mask = self.distortion_mask
+                    numpy.logical_or(self.distortion_mask, self.flat == dummy, out=self.distortion_mask)
+        self.distortion_detector.mask = self.distortion_mask
 
         # Read and Process mask for integration
         self.mask_filename = self.input.get("regrouping_mask_filename")
@@ -810,12 +810,14 @@ Possible values for to_save:
                                           dummy=self.dummy,
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
-                                          detector=self.ai.detector,
+                                          detector=self.distortion_detector,
+                                          device="gpu",
+                                          method="csr"
                                           )
                 self.workers[ext] = worker
                 if self.distortion is None:
                     self.distortion = worker.distortion
-                    self.cache_dis = str(self.ai.detector)
+                    self.cache_dis = str(self.distortion_detector)
                     if self.cache_dis in self.cache:
                         self.distortion.lut = self.cache[self.cache_dis]
                     else:
@@ -831,8 +833,7 @@ Possible values for to_save:
                                           dummy=self.dummy,
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
-                                          detector=self.ai.detector,
-                                          mask=self.distortion_mask,
+                                          detector=self.distortion_detector,
                                           device="gpu",
                                           method="csr"
                                           )
@@ -1043,6 +1044,7 @@ Possible values for to_save:
                 self.log_warning(f"Issue in closing file {filename} {type(err)}: {err}")
 
         self.ai = None
+        self.distortion_detector = None
         self.polarization = None
         self.output["files"] = self.output_hdf5
         Plugin.teardown(self)
