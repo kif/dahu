@@ -3,12 +3,18 @@ import shutil
 import collections
 import io
 import logging
+import re
+import glob
 from dahu.plugin import Plugin
 from dahu.factory import register
 import fabio
 logger = logging.getLogger("id27")
 
-from cryio import crysalis
+try:
+    from cryio import crysalis
+except ImportError:
+    crysalis = None
+
 import subprocess
 # import threading
 # import multiprocessing
@@ -123,38 +129,114 @@ def crysalis_conversion(wave_length=None, distance=None,
                         scan_name=None,
                         calibration_path="", calibration_name="",
                         **kwargs):
-        """Run the `eiger2crysalis` script synchronously
-         
-        """
-        logger.info('start data convertion with parameters:\n'+
-                    f'wave_length={wave_length}\n'+
-                    f'distance={distance}\n'+
-                    f'center={center}\n'+
-                    f'omega_start={omega_start}\n'+
-                    f'omega_step={omega_step}\n'+
-                    f'file_source_path={file_source_path}\n'+
-                    f'scan_name={scan_name}')
+    """Run the `eiger2crysalis` script synchronously
+     
+    """
+    
+    assert crysalis, "cryio is not installed"
+    
+    logger.info('start data convertion with parameters:\n'+
+                f'wave_length={wave_length}\n'+
+                f'distance={distance}\n'+
+                f'center={center}\n'+
+                f'omega_start={omega_start}\n'+
+                f'omega_step={omega_step}\n'+
+                f'file_source_path={file_source_path}\n'+
+                f'scan_name={scan_name}')
 
-        script_name = 'eiger2crysalis'
+    script_name = 'eiger2crysalis'
 
-        crysalis_dir = create_rsync_file(file_source_path)
-        
-        parameters = [script_name,
-                      "-w", f'{wave_length}',
-                      "-d", f'{distance}',
-                      "-b", f'{center[0]}', f'{center[1]}',
-                      f"--omega={omega_start}+{omega_step}*index",
-                      file_source_path,
-                      "-o", os.path.join(crysalis_dir, f'{scan_name}_1_''{index}.esperanto')]
-        logger.info('starts with parameters: %s',parameters)
+    crysalis_dir = create_rsync_file(file_source_path)
+    
+    parameters = [script_name,
+                  "-w", f'{wave_length}',
+                  "-d", f'{distance}',
+                  "-b", f'{center[0]}', f'{center[1]}',
+                  f"--omega={omega_start}+{omega_step}*index",
+                  file_source_path,
+                  "-o", os.path.join(crysalis_dir, f'{scan_name}_1_''{index}.esperanto')]
+    logger.info('starts with parameters: %s',parameters)
 
-        crysalis_files, scans = crysalis_config(calibration_path, calibration_name, number_of_points,  omega_start, omega_step, center, distance, wave_length, exposure_time)
+    crysalis_files, scans = crysalis_config(calibration_path, calibration_name, number_of_points,  omega_start, omega_step, center, distance, wave_length, exposure_time)
 
-        copy_set_ccd(crysalis_files,crysalis_dir, scan_name )
-        createCrysalis(scans, crysalis_dir, scan_name)
-        create_par_file(crysalis_files,crysalis_dir, scan_name)
+    copy_set_ccd(crysalis_files,crysalis_dir, scan_name )
+    createCrysalis(scans, crysalis_dir, scan_name)
+    create_par_file(crysalis_files,crysalis_dir, scan_name)
 
-        return subprocess.run(parameters)
+    return subprocess.run(parameters)
+
+def crysalis_conversion_fscannd(wave_length=None,
+                                distance=None,
+                                center=(None,None),
+                                omega_start=None,
+                                omega_step=None,
+                                exposure_time=None,
+                                npoints=None,
+                                motor_mode=None,
+                                dirname=None,
+                                scan_name=None,
+                                calibration_path="",
+                                calibration_name=""):
+    assert crysalis, "cryio is not installed"
+    script_name = 'eiger2crysalis'
+    pattern = re.compile('eiger_([0-9]+).h5')
+    filenames_to_convert = glob.glob(f'{dirname}/eiger*.h5')
+    results = {}
+    for filepath in sorted(filenames_to_convert):
+        dname, filename = os.path.split(filepath)
+        g = pattern.match(filename)
+        if g:
+            number = int(g.group(1))
+            if motor_mode == "ZIGZAG" and (number % 2):
+                revert_omega_start=omega_start+(omega_step*npoints)
+                omega_par = f"--omega={revert_omega_start}-{omega_step}*index"
+            else:
+                omega_par = f"--omega={omega_start}+{omega_step}*index"
+
+            parameters = [script_name,
+                          "-w", f'{wave_length}',
+                          "-d", f'{distance}',
+                          "-b", f'{center[0]}', f'{center[1]}',
+                          omega_par,
+                          filepath,
+                          "-o", os.path.join(dirname,f'esp_{number}',
+                                             f'{scan_name}_{number}_1_''{index}.esperanto')]
+            print('starts with parameters:',parameters)
+            results[filename] = str(subprocess.run(parameters))
+            crysalis_files, scans = crysalis_config(calibration_path, calibration_name, npoints,  omega_start, omega_step, center, distance, wave_length, exposure_time)
+            crysalis_folder_name = 'esp_'+str(number)
+            crysalis_dir = os.path.join(dirname, crysalis_folder_name)
+            isExist = os.path.exists( crysalis_dir)
+            if not isExist:
+                os.makedirs(crysalis_dir)
+            crysalis_scan_name = scan_name + '_' + str(number)
+            copy_set_ccd(crysalis_files,crysalis_dir, crysalis_scan_name )
+            createCrysalis(scans, crysalis_dir,  crysalis_scan_name)
+            create_par_file(crysalis_files,crysalis_dir, crysalis_scan_name)
+    return results
+
+def fabio_conversion(file_path,
+                     scan_number,
+                     folder="xdi",
+                     fabioimage="tifimage",
+                     extension="tif"):
+
+        filename = os.path.join(file_path,scan_number,'eiger_0000.h5')
+        img_data_fabio = fabio.open(filename)
+        dest_dir = os.path.join(file_path,scan_number, folder)
+        if not os.path.exists(dest_dir):
+            os.makedirs(dest_dir)
+        results = []
+        for i, frame in enumerate(img_data_fabio):
+            conv = frame.convert(fabioimage)
+            data = conv.data.astype('int32')
+            data[data <0 ] = 0
+            conv.data = data
+            #print('xdi converison', i)
+            output = os.path.join(dest_dir, f"frame_{i+1:04d}.{extension}")
+            conv.write(output)
+            results.append(output)
+        return results
 
 ##########################
 # Start the server part
@@ -166,14 +248,14 @@ class CrysalisConversion(Plugin):
     This is the basic plugin of cysalis conversion
        
     Typical JSON file:
-    {"wave_length": 1.54,
-     "distance": 100,
-     "center": [400,500],
+    {"wave_length": 0.3435,
+     "distance": 200,
+     "center": [1606, 1715],
      "omega_start":-90,
      "omega_step": 1,
      "exposure_time":0.1,
-     "number_of_points":180,
-     "file_source_path": "/data/id27/inhouse/sample/example.h5",
+     "number_of_points": 107,
+     "file_source_path": "/data/visitor/hc4672/id27/CDMX22/CDMX22_0001/scan0021/eiger_0000.h5",
      "scan_name": "scan",
      "calibration_path":"/data/id27/inhouse/sample/vanadinite",
      "calibration_name":"vanadinite"
@@ -183,7 +265,123 @@ class CrysalisConversion(Plugin):
     
     def process(self):
         Plugin.process(self)
-        if self.input is None:
-            logger.warning("input is None")
+        if not self.input:
+            logger.error("input is empty")
         result = crysalis_conversion(**self.input)
+        self.output["results"] = str(result)        
+
+
+@register
+class CrysalisConversionFscannd(Plugin):
+    """
+    This is the plugin of cysalis conversion for fscannd type scans
+       
+    Typical JSON file:
+    {"wave_length": 1.54,
+     "distance": 100,
+     "center": [400,500],
+     "omega_start":-90,
+     "omega_step": 1,
+     "exposure_time":0.1,
+     "npoints":180,
+     "motor_mode":"ZIGZAG",
+     "dirname": "/data/id27/inhouse/sample",
+     "scan_name": "scan",
+     "calibration_path":"/data/id27/inhouse/sample/vanadinite",
+     "calibration_name":"vanadinite"
+    }
+    
+    """
+    
+    def process(self):
+        Plugin.process(self)
+        if not self.input:
+            logger.error("input is empty")
+        result = crysalis_conversion_fscannd(**self.input)
         self.output["results"] = result        
+
+@register
+class XdiConversion(Plugin):
+    """
+    This is the plugin to convert an HDF5 to a stack of TIFF files
+       
+    Typical JSON file:
+    {"file_path": "/data/id27/inhouse/some/file.h5",
+     "scan_number": "0001"
+    }
+    
+    """
+    
+    def process(self):
+        Plugin.process(self)
+        if not self.input:
+            logger.error("input is empty")
+        
+        file_path = self.input["file_path"]
+        scan_number = self.input["file_path"]
+        results = fabio_conversion(file_path,
+                         scan_number,
+                         folder="xdi",
+                         fabioimage="tifimage",
+                         extension="tif")
+        self.output["output"] = results        
+
+@register
+class Average(Plugin):
+    """
+    This is the plugin to average out an HDF5 stack of images
+       
+    Typical JSON file:
+    {"file_path": "/data/id27/inhouse/some/file.h5",
+     "scan_number": "0001"
+    }
+    
+    """
+    
+    def process(self):
+        Plugin.process(self)
+        if not self.input:
+            logger.error("input is empty")
+            
+            
+
+        file_path = self.input["file_path"]
+        scan_number = self.input["file_path"]
+        filename = os.path.join(file_path, scan_number,'eiger_0000.h5')
+
+        dest_dir = os.path.join(file_path, scan_number, 'sum')
+
+        if not os.path.exists(dest_dir):
+            os.makedirs(dest_dir)
+
+        output = os.path.join(file_path,scan_number,'sum','sum.edf')
+        command = ['pyFAI-average', '-m', 'sum', '-o', output, filename ]
+        result = subprocess.run(command)
+        
+        self.output["results"] = str(result)        
+
+@register
+class XdsConversion(Plugin):
+    """
+    This is the plugin to convert an HDF5 to a stack of CBF files for XDS
+       
+    Typical JSON file:
+    {"file_path": "/data/id27/inhouse/some/file.h5",
+     "scan_number": "0001"
+    }
+    
+    """
+    
+    def process(self):
+        Plugin.process(self)
+        if not self.input:
+            logger.error("input is empty")
+        
+        file_path = self.input["file_path"]
+        scan_number = self.input["file_path"]
+        results = fabio_conversion(file_path,
+                         scan_number,
+                         folder="cbf",
+                         fabioimage="cbfimage",
+                         extension="cbf")
+        self.output["output"] = results        
