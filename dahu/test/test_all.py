@@ -19,12 +19,14 @@ logger = getLogger(__file__)
 
 from . import test_job
 from . import test_plugin
+from . import test_cache
 
 
 def suite():
     testSuite = unittest.TestSuite()
     testSuite.addTest(test_job.suite())
     testSuite.addTest(test_plugin.suite())
+    testSuite.addTest(test_cache.suite())
     return testSuite
 
 if __name__ == '__main__':
