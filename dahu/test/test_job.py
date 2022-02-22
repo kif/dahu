@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-from __future__ import with_statement, print_function
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "01/09/2020"
-__status__ = "development"
+__date__ = "22/02/2022"
+__status__ = "production"
 
 import os
 import unittest
