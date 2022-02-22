@@ -248,19 +248,20 @@ class CrysalisConversion(Plugin):
     This is the basic plugin of cysalis conversion
        
     Typical JSON file:
-    {"wave_length": 0.3435,
-     "distance": 200,
-     "center": [1606, 1715],
-     "omega_start":-90,
-     "omega_step": 1,
-     "exposure_time":0.1,
-     "number_of_points": 107,
-     "file_source_path": "/data/visitor/hc4672/id27/CDMX22/CDMX22_0001/scan0021/eiger_0000.h5",
-     "scan_name": "scan",
-     "calibration_path":"/data/id27/inhouse/sample/vanadinite",
-     "calibration_name":"vanadinite"
-    }
-    
+
+{"wave_length": 0.3738,
+ "distance": 196.44,
+ "center": [1560.9227, 1682.7944],
+ "omega_start":-32,
+ "omega_step": 0.5,
+ "exposure_time":0.1,
+ "number_of_points":128,
+ "file_source_path": "/data/id27/inhouse/blc13357/id27/Vanadinite_Weck/Vanadinite_Weck_0001/scan0001/eiger_0000.h5",
+ "scan_name": "scan0001",
+ "calibration_path": "/data/id27/inhouse/blc13357/id27/Vanadinite_Weck/Vanadinite_Weck_0001/scan0001/esp",
+ "calibration_name":"scan0001",
+ "plugin_name": "id27.CrysalisConversion"
+}    
     """
     
     def process(self):
