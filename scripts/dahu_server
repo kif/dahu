@@ -5,7 +5,6 @@
 #PYTHONPATH=build/lib.linux-x86_64-2.6/ TANGO_HOST=saxs1:20000 python scripts/dahu_server.py GPU1
 #Example for Jive:
 #"example.square",{\"x\":5}
-from __future__ import print_function, division, with_statement
 """
 
 Data analysis Tango device server ... for UPBL09a
@@ -15,7 +14,7 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "12/06/2014"
+__date__ = "17/12/2021"
 __status__ = "beta"
 __docformat__ = 'restructuredtext'
 
@@ -25,6 +24,11 @@ import tempfile
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dahu_server")
+try:
+    from rfoo.utils import rconsole
+    rconsole.spawn_server()
+except ImportError:
+    logger.debug("No socket opened for debugging. Please install rfoo")
 
 
 import dahu.utils
