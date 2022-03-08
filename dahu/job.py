@@ -492,7 +492,7 @@ class Job(Thread):
                         if as_JSON:
                             output = json.dumps(job._output_data, skipkeys=True, allow_nan=True,
                                                 indent=None, separators=(',', ':'),
-                                                encoding="UTF-8", cls=NumpyEncoder)
+                                                cls=NumpyEncoder)
                         else:
                             output = job._output_data
         else:
@@ -527,7 +527,7 @@ class Job(Thread):
                         if as_JSON:
                             output = json.dumps(job._input_data, skipkeys=True, allow_nan=True,
                                                 indent=None, separators=(',', ':'),
-                                                 encoding="UTF-8", cls=NumpyEncoder)
+                                                cls=NumpyEncoder)
                         else:
                             output = job._input_data
         else:
