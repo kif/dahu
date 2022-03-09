@@ -319,7 +319,7 @@ class XdiConversion(Plugin):
             logger.error("input is empty")
         
         file_path = self.input["file_path"]
-        scan_number = self.input["file_path"]
+        scan_number = self.input["scan_number"]
         results = fabio_conversion(file_path,
                          scan_number,
                          folder="xdi",
@@ -333,8 +333,8 @@ class Average(Plugin):
     This is the plugin to average out an HDF5 stack of images
        
     Typical JSON file:
-    {"file_path": "/data/id27/inhouse/some/file.h5",
-     "scan_number": "0001"
+    {"file_path": "/data/id27/inhouse/some/directory",
+     "scan_number": "scan0001"
     }
     
     """
@@ -347,7 +347,7 @@ class Average(Plugin):
             
 
         file_path = self.input["file_path"]
-        scan_number = self.input["file_path"]
+        scan_number = self.input["scan_number"]
         filename = os.path.join(file_path, scan_number,'eiger_0000.h5')
 
         dest_dir = os.path.join(file_path, scan_number, 'sum')
@@ -355,7 +355,7 @@ class Average(Plugin):
         if not os.path.exists(dest_dir):
             os.makedirs(dest_dir)
 
-        output = os.path.join(file_path,scan_number,'sum','sum.edf')
+        output = os.path.join(dest_dir,'sum.edf')
         command = ['pyFAI-average', '-m', 'sum', '-o', output, filename ]
         result = subprocess.run(command)
         
@@ -379,7 +379,7 @@ class XdsConversion(Plugin):
             logger.error("input is empty")
         
         file_path = self.input["file_path"]
-        scan_number = self.input["file_path"]
+        scan_number = self.input["scan_number"]
         results = fabio_conversion(file_path,
                          scan_number,
                          folder="cbf",
