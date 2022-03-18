@@ -243,7 +243,7 @@ input = {
         if PyTango is None:
             self.log_error("PyTango is needed to connect to C216", do_raise=True)
         c216ds = PyTango.DeviceProxy(str(self.c216))
-
+        c216ds.set_timeout_millis(5000)
         if c216ds.CompStatus("Tango::RUNNING") == "Tango::ON":
             msg = "C216 is running while reading counters ... possible issue"
             self._logging.append(msg)
@@ -286,12 +286,9 @@ input = {
                 self.tfg_grp[key].attrs["interpretation"] = "scalar"
 
         # raw scalers:
-        try:
-            raw_scalers = c216ds.ReadScalersForNLiveFrames([0, frames - 1])
-        except:
-            blocksize = 512
-            raw_scalers = numpy.concatenate([c216ds.ReadScalersForNLiveFrames([start, min(start + blocksize, frames) - 1])
-                                             for start in range(0, frames, blocksize)])
+        blocksize = 512
+        raw_scalers = numpy.concatenate([c216ds.ReadScalersForNLiveFrames([start, min(start + blocksize, frames) - 1])
+                                         for start in range(0, frames, blocksize)])
 
         raw_scalers.shape = frames, -1
         counters = raw_scalers.shape[1]
