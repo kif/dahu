@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "26/08/2021"
+__date__ = "18/03/2022"
 __status__ = "development"
 __version__ = "0.9.2"
 
@@ -16,9 +16,12 @@ import posixpath
 import json
 import numpy
 from dahu.plugin import Plugin
-from dahu import version as dahu_version
 from dahu.utils import get_isotime, fully_qualified_name
-import PyTango
+try:
+    import PyTango
+except ImportError:
+    PyTango = None
+
 import logging
 logger = logging.getLogger("id02.metadata")
 from .common import StringTypes, Nexus, ensure_str
@@ -237,7 +240,10 @@ input = {
         """
         Manage the metadata coming from C216 Time Frame Generator
         """
+        if PyTango is None:
+            self.log_error("PyTango is needed to connect to C216", do_raise=True)
         c216ds = PyTango.DeviceProxy(str(self.c216))
+
         if c216ds.CompStatus("Tango::RUNNING") == "Tango::ON":
             msg = "C216 is running while reading counters ... possible issue"
             self._logging.append(msg)
@@ -280,7 +286,13 @@ input = {
                 self.tfg_grp[key].attrs["interpretation"] = "scalar"
 
         # raw scalers:
-        raw_scalers = c216ds.ReadScalersForNLiveFrames([0, frames - 1])
+        try:
+            raw_scalers = c216ds.ReadScalersForNLiveFrames([0, frames - 1])
+        except:
+            blocksize = 512
+            raw_scalers = numpy.concatenate([c216ds.ReadScalersForNLiveFrames([start, min(start + blocksize, frames) - 1])
+                                             for start in range(0, frames, blocksize)])
+
         raw_scalers.shape = frames, -1
         counters = raw_scalers.shape[1]
         self.mcs_grp["HS32C"] = raw_scalers
