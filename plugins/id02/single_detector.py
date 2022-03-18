@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "26/08/2021"
+__date__ = "02/11/2021"
 __status__ = "development"
 __version__ = "0.9.2"
 
@@ -789,6 +789,8 @@ Possible values for to_save:
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
                                           detector=self.ai.detector,
+                                          device="gpu",
+                                          method="csr"
                                           )
                 self.workers[ext] = worker
                 if self.distortion is None:
