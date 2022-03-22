@@ -225,7 +225,7 @@ def crysalis_conversion_fscannd(wave_length=None,
         g = pattern.match(filename)
         if g:
             number = int(g.group(1))
-            crysalis_folder_name = f'esp_{number}'
+            crysalis_folder_name = f'esp_{number:04d}'
             crysalis_dir = create_rsync_file(filepath, crysalis_folder_name)
             
             if motor_mode == "ZIGZAG" and (number % 2):
