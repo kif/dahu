@@ -243,7 +243,7 @@ def crysalis_conversion_fscannd(wave_length=None,
                           "-o", os.path.join(crysalis_dir,
                                              f'{scan_name}_{number}_1_''{index}.esperanto')]
             #print('starts with parameters:',parameters)
-            results[filename] = str(subprocess.run(parameters, capture_output=True))
+            results[filename] = subprocess.run(parameters, capture_output=True)
             crysalis_files, scans = crysalis_config(calibration_path, calibration_name, npoints,  omega_start, omega_step, center, distance, wave_length, exposure_time)
             
             crysalis_scan_name = scan_name + '_' + str(number)
