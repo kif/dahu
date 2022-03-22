@@ -60,10 +60,12 @@ def crysalis_config(calibration_path,calibration_name, number_of_frames,  omega_
 
     return crysalis_files, scans
 
+
 def copy_set_ccd(crysalis_files, crysalis_dir, basename):
 
     shutil.copy(crysalis_files['set_file'], os.path.join(crysalis_dir,basename+'.set'))
     shutil.copy(crysalis_files['ccd_file'], os.path.join(crysalis_dir,basename+'.ccd'))
+
 
 def unpack_CompletedProcess(cp):
     """Convert a CompletedProcess object in to something which is serialisable
@@ -71,7 +73,18 @@ def unpack_CompletedProcess(cp):
     :param cp: Return of subprocess.run
     :return: dict with the same content
     """
-    return {k: cp.__getattribute__(k) for k in dir(cp) if not (k.startswith("_") or callable(cp.__getattribute__(k)))}
+    res = {}
+    for k in dir(cp):
+        
+        if k.startswith("_"):
+            continue
+        v = cp.__getattribute__(k)
+        if callable(v):
+            continue
+        if "decode" in dir(v):
+            v = v.decode()
+        res[k] = v
+    return res
     
 
 def createCrysalis(scans, crysalis_dir, basename):
