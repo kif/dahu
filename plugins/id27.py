@@ -385,14 +385,11 @@ class Average(Plugin):
      "scan_number": "scan0001"
     }
     
-    """
-    
+    """    
     def process(self):
         Plugin.process(self)
         if not self.input:
             logger.error("input is empty")
-            
-            
 
         file_path = self.input["file_path"]
         scan_number = self.input["scan_number"]
@@ -407,7 +404,8 @@ class Average(Plugin):
         command = ['pyFAI-average', '-m', 'sum', '-o', output, filename ]
         result = subprocess.run(command, capture_output=True)
         self.output["output_filename"] = output
-        self.output["results"] = str(result)        
+        self.output["conversion"] = unpack_CompletedProcess(result)        
+
 
 @register
 class XdsConversion(Plugin):
