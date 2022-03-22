@@ -115,8 +115,10 @@ def create_rsync_file(filename):
             os.makedirs(crysalis_dir)
     with open(os.path.join(dest_dir, ".source"), "w") as source:
         source.write(filename)
-    with open(os.path.join(dest_dir, "sync"), "w") as source:
+    script = os.path.join(dest_dir, "sync")
+    with open(script, "w") as source:
         source.write(f'#!/bin/sh\nrsync -avx {os.path.join(dest_dir, "esp")} {os.path.dirname(filename)}\n')
+    os.chmod(script, 0o755)
     return crysalis_dir
 
 
@@ -165,6 +167,7 @@ def crysalis_conversion(wave_length=None, distance=None,
 
     return subprocess.run(parameters)
 
+
 def crysalis_conversion_fscannd(wave_length=None,
                                 distance=None,
                                 center=(None,None),
@@ -176,7 +179,8 @@ def crysalis_conversion_fscannd(wave_length=None,
                                 dirname=None,
                                 scan_name=None,
                                 calibration_path="",
-                                calibration_name=""):
+                                calibration_name="",
+                                **kwargs):
     assert crysalis, "cryio is not installed"
     script_name = 'eiger2crysalis'
     pattern = re.compile('eiger_([0-9]+).h5')
@@ -214,6 +218,7 @@ def crysalis_conversion_fscannd(wave_length=None,
             createCrysalis(scans, crysalis_dir,  crysalis_scan_name)
             create_par_file(crysalis_files,crysalis_dir, crysalis_scan_name)
     return results
+
 
 def fabio_conversion(file_path,
                      scan_number,
@@ -268,8 +273,13 @@ class CrysalisConversion(Plugin):
         Plugin.process(self)
         if not self.input:
             logger.error("input is empty")
+
+        crysalis_dir = create_rsync_file(self.input["file_source_path"])
+        script = os.path.join(os.path.dirname(crysalis_dir), "sync")
         result = crysalis_conversion(**self.input)
-        self.output["results"] = str(result)        
+        self.output["results"] = str(result)   
+        sync_results = subprocess.run([script])
+        self.output["sync"] = str(sync_results)
 
 
 @register
