@@ -358,7 +358,7 @@ class Average(Plugin):
         output = os.path.join(dest_dir,'sum.edf')
         command = ['pyFAI-average', '-m', 'sum', '-o', output, filename ]
         result = subprocess.run(command)
-        
+        self.output["output_filename"] = output
         self.output["results"] = str(result)        
 
 @register
