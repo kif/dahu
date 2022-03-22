@@ -65,6 +65,14 @@ def copy_set_ccd(crysalis_files, crysalis_dir, basename):
     shutil.copy(crysalis_files['set_file'], os.path.join(crysalis_dir,basename+'.set'))
     shutil.copy(crysalis_files['ccd_file'], os.path.join(crysalis_dir,basename+'.ccd'))
 
+def unpack_CompletedProcess(cp):
+    """Convert a CompletedProcess object in to something which is serialisable
+    
+    :param cp: Return of subprocess.run
+    :return: dict with the same content
+    """
+    return {k: cp.__getattribute__(k) for k in dir(cp) if not (k.startswith("_") or callable(cp.__getattribute__(k)))}
+    
 
 def createCrysalis(scans, crysalis_dir, basename):
     runHeader = crysalis.RunHeader(basename.encode(), crysalis_dir.encode(), 1)
@@ -100,25 +108,35 @@ def create_par_file(crysalis_files, crysalis_dir, basename):
                     new_file.write(line)
 
 
-def create_rsync_file(filename):
+def create_rsync_file(filename, folder="esp"):
     """create 2 files: 
         * .source with the LIMA-HDF5 file 
         * a bash script to synchronise back the reduced crysalis dataset
     
     :param filename: name of the LIMA-HDF5 file with the images
+    :param folder: name of the folder to create. If None, just return the path of the script
     :return: the path of the crysalis directory  
     """
     dest_dir = "/".join(filename.split("/")[3:-1]) #strip /data/visitor ... filename.h5
     dest_dir = os.path.join(WORKDIR, dest_dir)
-    crysalis_dir = os.path.join(dest_dir, 'esp')
+    script = os.path.join(dest_dir, "sync")
+    if folder is None:
+        return script
+
+    crysalis_dir = os.path.join(dest_dir, folder)
     if not os.path.exists(crysalis_dir):
             os.makedirs(crysalis_dir)
-    with open(os.path.join(dest_dir, ".source"), "w") as source:
-        source.write(filename)
-    script = os.path.join(dest_dir, "sync")
-    with open(script, "w") as source:
-        source.write(f'#!/bin/sh\nrsync -avx {os.path.join(dest_dir, "esp")} {os.path.dirname(filename)}\n')
-    os.chmod(script, 0o755)
+    with open(os.path.join(dest_dir, ".source"), "a") as source:
+        source.write(filename+os.linesep)
+    
+    if os.path.exists(script):
+        with open(script, "a") as source:
+            source.write(os.linesep.join([f'rsync -avx {os.path.join(dest_dir, folder)} {os.path.dirname(filename)}', ""]))
+    else:
+        with open(script, "w") as source:
+            source.write(os.linesep.join(['#!/bin/sh', f'rsync -avx {os.path.join(dest_dir, folder)} {os.path.dirname(filename)}', '']))
+        os.chmod(script, 0o755)
+
     return crysalis_dir
 
 
@@ -165,7 +183,7 @@ def crysalis_conversion(wave_length=None, distance=None,
     createCrysalis(scans, crysalis_dir, scan_name)
     create_par_file(crysalis_files,crysalis_dir, scan_name)
 
-    return subprocess.run(parameters)
+    return subprocess.run(parameters, capture_output=True)
 
 
 def crysalis_conversion_fscannd(wave_length=None,
@@ -186,11 +204,17 @@ def crysalis_conversion_fscannd(wave_length=None,
     pattern = re.compile('eiger_([0-9]+).h5')
     filenames_to_convert = glob.glob(f'{dirname}/eiger*.h5')
     results = {}
+    if filenames_to_convert:
+        crysalis
     for filepath in sorted(filenames_to_convert):
-        dname, filename = os.path.split(filepath)
+        
+        filename = os.path.basename(filepath)
         g = pattern.match(filename)
         if g:
             number = int(g.group(1))
+            crysalis_folder_name = f'esp_{number}'
+            crysalis_dir = create_rsync_file(filepath, crysalis_folder_name)
+            
             if motor_mode == "ZIGZAG" and (number % 2):
                 revert_omega_start=omega_start+(omega_step*npoints)
                 omega_par = f"--omega={revert_omega_start}-{omega_step}*index"
@@ -203,16 +227,12 @@ def crysalis_conversion_fscannd(wave_length=None,
                           "-b", f'{center[0]}', f'{center[1]}',
                           omega_par,
                           filepath,
-                          "-o", os.path.join(dirname,f'esp_{number}',
+                          "-o", os.path.join(crysalis_dir,
                                              f'{scan_name}_{number}_1_''{index}.esperanto')]
-            print('starts with parameters:',parameters)
-            results[filename] = str(subprocess.run(parameters))
+            #print('starts with parameters:',parameters)
+            results[filename] = str(subprocess.run(parameters, capture_output=True))
             crysalis_files, scans = crysalis_config(calibration_path, calibration_name, npoints,  omega_start, omega_step, center, distance, wave_length, exposure_time)
-            crysalis_folder_name = 'esp_'+str(number)
-            crysalis_dir = os.path.join(dirname, crysalis_folder_name)
-            isExist = os.path.exists( crysalis_dir)
-            if not isExist:
-                os.makedirs(crysalis_dir)
+            
             crysalis_scan_name = scan_name + '_' + str(number)
             copy_set_ccd(crysalis_files,crysalis_dir, crysalis_scan_name )
             createCrysalis(scans, crysalis_dir,  crysalis_scan_name)
@@ -274,12 +294,12 @@ class CrysalisConversion(Plugin):
         if not self.input:
             logger.error("input is empty")
 
-        crysalis_dir = create_rsync_file(self.input["file_source_path"])
-        script = os.path.join(os.path.dirname(crysalis_dir), "sync")
         result = crysalis_conversion(**self.input)
-        self.output["results"] = str(result)   
-        sync_results = subprocess.run([script])
-        self.output["sync"] = str(sync_results)
+        self.output["results"] = unpack_CompletedProcess(result)   
+
+        script = create_rsync_file(self.input["file_source_path"], None)
+        sync_results = subprocess.run([script], capture_output=True)
+        self.output["sync"] = unpack_CompletedProcess(sync_results)
 
 
 @register
@@ -309,7 +329,12 @@ class CrysalisConversionFscannd(Plugin):
         if not self.input:
             logger.error("input is empty")
         result = crysalis_conversion_fscannd(**self.input)
-        self.output["results"] = result        
+        self.output["results"] = {k: unpack_CompletedProcess(v) for k,v in result.items()}
+        random_filename = glob.glob(f'{self.input["dirname"]}/eiger*.h5')[0]        
+        script = create_rsync_file(random_filename, None)
+        sync_results = subprocess.run([script], capture_output=True)
+        self.output["sync"] = unpack_CompletedProcess(sync_results)
+
 
 @register
 class XdiConversion(Plugin):
@@ -367,7 +392,7 @@ class Average(Plugin):
 
         output = os.path.join(dest_dir,'sum.edf')
         command = ['pyFAI-average', '-m', 'sum', '-o', output, filename ]
-        result = subprocess.run(command)
+        result = subprocess.run(command, capture_output=True)
         self.output["output_filename"] = output
         self.output["results"] = str(result)        
 
