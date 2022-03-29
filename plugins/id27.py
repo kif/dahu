@@ -22,9 +22,24 @@ import subprocess
 WORKDIR = "/scratch/shared"
 
 
-def crysalis_config(calibration_path,calibration_name, number_of_frames,  omega_start, omega_step, center, distance, wave_length, exposure_time):
+def crysalis_config(calibration_path, calibration_name, number_of_frames,  omega_start, omega_step, center, distance, wave_length, exposure_time):
+    """
+    :param calibration_path: typically "/users/opid27/file_conversion/"
+    :param calibration_name: typically "scan0001"
+    :param number_of_frames: integrer
+    :param omega_start: in deg ?
+    :param omega_step: in deg ?
+    :param center: in pixel ?
+    :param distance: in mm ?
+    :param wave_length: in angstrom
+    :param exposure_time: in seconds
+    :return 2 dicts, one containing the path crysalis_files, the second with scans
+    """
+    if not (calibration_path and calibration_name) :
+        calibration_path = "/users/opid27/file_conversion/"
+        calibration_name = "scan0001"
     crysalis_files = {
-        'par_file': os.path.join(calibration_path,calibration_name+'.par'),
+        'par_file': os.path.join(calibration_path, calibration_name+'.par'),
         'set_file': '/users/opid27/file_conversion/scan0001.set',
         'ccd_file': '/users/opid27/file_conversion/scan0001.ccd'}
 
@@ -110,10 +125,10 @@ def createCrysalis(scans, crysalis_dir, basename):
 
 def create_par_file(crysalis_files, crysalis_dir, basename):
 
-    new_par = os.path.join(crysalis_dir,basename+'.par')
+    new_par = os.path.join(crysalis_dir, basename+'.par')
 
-    with io.open(new_par, 'w',encoding='iso-8859-1') as new_file:
-        with io.open(crysalis_files['par_file'], 'r',encoding='iso-8859-1') as old_file:
+    with io.open(new_par, 'w', encoding='iso-8859-1') as new_file:
+        with io.open(crysalis_files['par_file'], 'r', encoding='iso-8859-1') as old_file:
             for line in old_file:
                 if line.startswith("FILE CHIP"):
                     new_file.write('FILE CHIP "' + basename + '.ccd" \n')
@@ -192,7 +207,7 @@ def crysalis_conversion(wave_length=None, distance=None,
 
     crysalis_files, scans = crysalis_config(calibration_path, calibration_name, number_of_points,  omega_start, omega_step, center, distance, wave_length, exposure_time)
 
-    copy_set_ccd(crysalis_files,crysalis_dir, scan_name )
+    copy_set_ccd(crysalis_files, crysalis_dir, scan_name )
     createCrysalis(scans, crysalis_dir, scan_name)
     create_par_file(crysalis_files,crysalis_dir, scan_name)
 
@@ -259,21 +274,42 @@ def fabio_conversion(file_path,
                      fabioimage="tifimage",
                      extension="tif"):
 
-        filename = os.path.join(file_path,scan_number,'eiger_0000.h5')
-        img_data_fabio = fabio.open(filename)
-        dest_dir = os.path.join(file_path,scan_number, folder)
-        if not os.path.exists(dest_dir):
-            os.makedirs(dest_dir)
         results = []
-        for i, frame in enumerate(img_data_fabio):
-            conv = frame.convert(fabioimage)
-            data = conv.data.astype('int32')
-            data[data <0 ] = 0
-            conv.data = data
-            #print('xdi converison', i)
-            output = os.path.join(dest_dir, f"frame_{i+1:04d}.{extension}")
-            conv.write(output)
-            results.append(output)
+        filename = os.path.join(file_path, scan_number,'eiger_????.h5')
+        files = sorted(glob.glob(filename))
+        
+        if len(files) == 0:
+            raise RuntimeError(f"No such file {filename}")
+        
+        elif len(files) == 1:
+            filename = files[0]
+            img_data_fabio = fabio.open(filename)
+            dest_dir = os.path.join(file_path, scan_number, folder)
+            if not os.path.exists(dest_dir):
+                os.makedirs(dest_dir)
+            for i, frame in enumerate(img_data_fabio):
+                conv = frame.convert(fabioimage)
+                data = conv.data.astype('int32')
+                data[data <0 ] = 0
+                conv.data = data
+                output = os.path.join(dest_dir, f"frame_{i+1:04d}.{extension}")
+                conv.write(output)
+                results.append(output)
+        else:
+            for idx_file, filename in enumerate(files):
+                img_data_fabio = fabio.open(filename)
+                dest_dir = os.path.join(file_path, scan_number, "{folder}_{idx_file+1:04d}")
+                if not os.path.exists(dest_dir):
+                    os.makedirs(dest_dir)                
+                for i, frame in enumerate(img_data_fabio):
+                    conv = frame.convert(fabioimage)
+                    data = conv.data.astype('int32')
+                    data[data <0 ] = 0
+                    conv.data = data
+                    output = os.path.join(dest_dir, f"frame_{i+1:04d}.{extension}")
+                    conv.write(output)
+                    results.append(output)
+            
         return results
 
 ##########################
@@ -393,7 +429,8 @@ class Average(Plugin):
 
         file_path = self.input["file_path"]
         scan_number = self.input["scan_number"]
-        filename = os.path.join(file_path, scan_number,'eiger_0000.h5')
+        filename = os.path.join(file_path, scan_number,'eiger_????.h5')
+        filenames = sorted(glob.glob(filename))
 
         dest_dir = os.path.join(file_path, scan_number, 'sum')
 
@@ -401,7 +438,7 @@ class Average(Plugin):
             os.makedirs(dest_dir)
 
         output = os.path.join(dest_dir,'sum.edf')
-        command = ['pyFAI-average', '-m', 'sum', '-o', output, filename ]
+        command = ['pyFAI-average', '-m', 'sum', '-o', output] + filenames
         result = subprocess.run(command, capture_output=True)
         self.output["output_filename"] = output
         self.output["conversion"] = unpack_CompletedProcess(result)        
