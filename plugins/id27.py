@@ -16,8 +16,6 @@ except ImportError:
     crysalis = None
 
 import subprocess
-# import threading
-# import multiprocessing
 
 WORKDIR = "/scratch/shared"
 
@@ -35,14 +33,15 @@ def crysalis_config(calibration_path, calibration_name, number_of_frames,  omega
     :param exposure_time: in seconds
     :return 2 dicts, one containing the path crysalis_files, the second with scans
     """
-    if not (calibration_path and calibration_name) :
-        calibration_path = "/users/opid27/file_conversion/"
-        calibration_name = "scan0001"
+    calibration_name = calibration_name or ""
+    calibration_path = calibration_path or ""
+    par_file = os.path.join(calibration_path, calibration_name+'.par')
+    if not os.path.exists(par_file):
+        par_file = "/users/opid27/file_conversion/scan0001.par"
     crysalis_files = {
-        'par_file': os.path.join(calibration_path, calibration_name+'.par'),
+        'par_file': par_file,
         'set_file': '/users/opid27/file_conversion/scan0001.set',
         'ccd_file': '/users/opid27/file_conversion/scan0001.ccd'}
-
 
     scans = collections.OrderedDict()
     scans[0] = [{
@@ -298,7 +297,7 @@ def fabio_conversion(file_path,
         else:
             for idx_file, filename in enumerate(files):
                 img_data_fabio = fabio.open(filename)
-                dest_dir = os.path.join(file_path, scan_number, "{folder}_{idx_file+1:04d}")
+                dest_dir = os.path.join(file_path, scan_number, f"{folder}_{idx_file+1:04d}")
                 if not os.path.exists(dest_dir):
                     os.makedirs(dest_dir)                
                 for i, frame in enumerate(img_data_fabio):
@@ -431,18 +430,30 @@ class Average(Plugin):
         scan_number = self.input["scan_number"]
         filename = os.path.join(file_path, scan_number,'eiger_????.h5')
         filenames = sorted(glob.glob(filename))
-
-        dest_dir = os.path.join(file_path, scan_number, 'sum')
-
-        if not os.path.exists(dest_dir):
-            os.makedirs(dest_dir)
-
-        output = os.path.join(dest_dir,'sum.edf')
-        command = ['pyFAI-average', '-m', 'sum', '-o', output] + filenames
-        result = subprocess.run(command, capture_output=True)
-        self.output["output_filename"] = output
-        self.output["conversion"] = unpack_CompletedProcess(result)        
-
+        if len(filenames) == 0:
+            raise RuntimeError(f"File does not exist {filename}")
+        elif len(filenames) == 1:
+            dest_dir = os.path.join(file_path, scan_number, 'sum')
+            if not os.path.exists(dest_dir):
+                os.makedirs(dest_dir)
+            output = os.path.join(dest_dir,'sum.edf')
+            command = ['pyFAI-average', '-m', 'sum', '-o', output] + filenames
+            result = subprocess.run(command, capture_output=True)
+            self.output["output_filename"] = [output]
+            self.output["conversion"] = unpack_CompletedProcess(result)        
+        else:
+            results = {}
+            outputs = []
+            for idx_h5, filename in enumerate(filenames):
+                dest_dir = os.path.join(file_path, scan_number, f'sum_{idx_h5+1:04d}')
+                if not os.path.exists(dest_dir):
+                    os.makedirs(dest_dir)
+                output = os.path.join(dest_dir,'sum.edf')
+                command = ['pyFAI-average', '-m', 'sum', '-o', output, filename]
+                results[filename] = unpack_CompletedProcess(subprocess.run(command, capture_output=True))
+                outputs.append(output)
+            self.output["output_filename"] = outputs
+            self.output["conversion"] = results   
 
 @register
 class XdsConversion(Plugin):
