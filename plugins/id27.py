@@ -1,3 +1,6 @@
+"""Online data analysis for ID27
+"""
+
 import os
 import shutil
 import collections
@@ -5,9 +8,11 @@ import io
 import logging
 import re
 import glob
+import subprocess
+import fabio
 from dahu.plugin import Plugin
 from dahu.factory import register
-import fabio
+
 logger = logging.getLogger("id27")
 
 try:
@@ -15,12 +20,11 @@ try:
 except ImportError:
     crysalis = None
 
-import subprocess
-
 WORKDIR = "/scratch/shared"
 
 
-def crysalis_config(calibration_path, calibration_name, number_of_frames,  omega_start, omega_step, center, distance, wave_length, exposure_time):
+def crysalis_config(calibration_path, calibration_name, number_of_frames,
+                    omega_start, omega_step, center, distance, wave_length, exposure_time):
     """
     :param calibration_path: typically "/users/opid27/file_conversion/"
     :param calibration_name: typically "scan0001"
@@ -35,7 +39,7 @@ def crysalis_config(calibration_path, calibration_name, number_of_frames,  omega
     """
     calibration_name = calibration_name or ""
     calibration_path = calibration_path or ""
-    par_file = os.path.join(calibration_path, calibration_name+'.par')
+    par_file = os.path.join(calibration_path, calibration_name + '.par')
     if not os.path.exists(par_file):
         par_file = "/users/opid27/file_conversion/scan0001.par"
     crysalis_files = {
@@ -48,7 +52,7 @@ def crysalis_config(calibration_path, calibration_name, number_of_frames,  omega
             'count': number_of_frames,
             'omega': 0,
             'omega_start': omega_start,
-            'omega_end': omega_start+number_of_frames*omega_step,
+            'omega_end': omega_start + number_of_frames * omega_step,
             'pixel_size': 0.075,
             'omega_runs': None,
             'theta': 0,
@@ -68,7 +72,7 @@ def crysalis_config(calibration_path, calibration_name, number_of_frames,  omega
             'b': wave_length,
             'mono': 0.99,
             'monotype': 'SYNCHROTRON',
-            'chip': [1024,1024],
+            'chip': [1024, 1024],
             'Exposure_time': exposure_time,
             }]
 
@@ -76,30 +80,30 @@ def crysalis_config(calibration_path, calibration_name, number_of_frames,  omega
 
 
 def copy_set_ccd(crysalis_files, crysalis_dir, basename):
+    "copy .set and .ccd file"
+    shutil.copy(crysalis_files['set_file'], os.path.join(crysalis_dir, basename + '.set'))
+    shutil.copy(crysalis_files['ccd_file'], os.path.join(crysalis_dir, basename + '.ccd'))
 
-    shutil.copy(crysalis_files['set_file'], os.path.join(crysalis_dir,basename+'.set'))
-    shutil.copy(crysalis_files['ccd_file'], os.path.join(crysalis_dir,basename+'.ccd'))
 
-
-def unpack_CompletedProcess(cp):
+def unpack_processed(completed_process):
     """Convert a CompletedProcess object in to something which is serialisable
     
-    :param cp: Return of subprocess.run
+    :param completed_process: Return of subprocess.run
     :return: dict with the same content
     """
     res = {}
-    for k in dir(cp):
-        
-        if k.startswith("_"):
+    for key in dir(completed_process):
+
+        if key.startswith("_"):
             continue
-        v = cp.__getattribute__(k)
-        if callable(v):
+        val = completed_process.__getattribute__(key)
+        if callable(val):
             continue
-        if "decode" in dir(v):
-            v = v.decode()
-        res[k] = v
+        if "decode" in dir(val):
+            val = val.decode()
+        res[key] = val
     return res
-    
+
 
 def createCrysalis(scans, crysalis_dir, basename):
     runHeader = crysalis.RunHeader(basename.encode(), crysalis_dir.encode(), 1)
@@ -124,7 +128,7 @@ def createCrysalis(scans, crysalis_dir, basename):
 
 def create_par_file(crysalis_files, crysalis_dir, basename):
 
-    new_par = os.path.join(crysalis_dir, basename+'.par')
+    new_par = os.path.join(crysalis_dir, basename + '.par')
 
     with io.open(new_par, 'w', encoding='iso-8859-1') as new_file:
         with io.open(crysalis_files['par_file'], 'r', encoding='iso-8859-1') as old_file:
@@ -144,7 +148,7 @@ def create_rsync_file(filename, folder="esp"):
     :param folder: name of the folder to create. If None, just return the path of the script
     :return: the path of the crysalis directory  
     """
-    dest_dir = "/".join(filename.split("/")[3:-1]) #strip /data/visitor ... filename.h5
+    dest_dir = "/".join(filename.split("/")[3:-1])  # strip /data/visitor ... filename.h5
     dest_dir = os.path.join(WORKDIR, dest_dir)
     script = os.path.join(dest_dir, "sync")
     if folder is None:
@@ -152,10 +156,10 @@ def create_rsync_file(filename, folder="esp"):
 
     crysalis_dir = os.path.join(dest_dir, folder)
     if not os.path.exists(crysalis_dir):
-            os.makedirs(crysalis_dir)
+        os.makedirs(crysalis_dir)
     with open(os.path.join(dest_dir, ".source"), "a") as source:
-        source.write(filename+os.linesep)
-    
+        source.write(filename + os.linesep)
+
     if os.path.exists(script):
         with open(script, "a") as source:
             source.write(os.linesep.join([f'rsync -avx {os.path.join(dest_dir, folder)} {os.path.dirname(filename)}', ""]))
@@ -169,7 +173,7 @@ def create_rsync_file(filename, folder="esp"):
 
 def crysalis_conversion(wave_length=None, distance=None,
                         center=(None, None),
-                        omega_start=None,omega_step=None,
+                        omega_start=None, omega_step=None,
                         exposure_time=None,
                         number_of_points=None,
                         file_source_path=None,
@@ -179,22 +183,22 @@ def crysalis_conversion(wave_length=None, distance=None,
     """Run the `eiger2crysalis` script synchronously
      
     """
-    
+
     assert crysalis, "cryio is not installed"
-    
-    logger.info('start data convertion with parameters:\n'+
-                f'wave_length={wave_length}\n'+
-                f'distance={distance}\n'+
-                f'center={center}\n'+
-                f'omega_start={omega_start}\n'+
-                f'omega_step={omega_step}\n'+
-                f'file_source_path={file_source_path}\n'+
+
+    logger.info('start data convertion with parameters:\n' +
+                f'wave_length={wave_length}\n' +
+                f'distance={distance}\n' +
+                f'center={center}\n' +
+                f'omega_start={omega_start}\n' +
+                f'omega_step={omega_step}\n' +
+                f'file_source_path={file_source_path}\n' +
                 f'scan_name={scan_name}')
 
     script_name = 'eiger2crysalis'
 
     crysalis_dir = create_rsync_file(file_source_path)
-    
+
     parameters = [script_name,
                   "-w", f'{wave_length}',
                   "-d", f'{distance}',
@@ -202,20 +206,20 @@ def crysalis_conversion(wave_length=None, distance=None,
                   f"--omega={omega_start}+{omega_step}*index",
                   file_source_path,
                   "-o", os.path.join(crysalis_dir, f'{scan_name}_1_''{index}.esperanto')]
-    logger.info('starts with parameters: %s',parameters)
+    logger.info('starts with parameters: %s', parameters)
 
-    crysalis_files, scans = crysalis_config(calibration_path, calibration_name, number_of_points,  omega_start, omega_step, center, distance, wave_length, exposure_time)
+    crysalis_files, scans = crysalis_config(calibration_path, calibration_name, number_of_points, omega_start, omega_step, center, distance, wave_length, exposure_time)
 
-    copy_set_ccd(crysalis_files, crysalis_dir, scan_name )
+    copy_set_ccd(crysalis_files, crysalis_dir, scan_name)
     createCrysalis(scans, crysalis_dir, scan_name)
-    create_par_file(crysalis_files,crysalis_dir, scan_name)
+    create_par_file(crysalis_files, crysalis_dir, scan_name)
 
-    return subprocess.run(parameters, capture_output=True)
+    return subprocess.run(parameters, capture_output=True, check=False)
 
 
 def crysalis_conversion_fscannd(wave_length=None,
                                 distance=None,
-                                center=(None,None),
+                                center=(None, None),
                                 omega_start=None,
                                 omega_step=None,
                                 exposure_time=None,
@@ -229,21 +233,20 @@ def crysalis_conversion_fscannd(wave_length=None,
     assert crysalis, "cryio is not installed"
     script_name = 'eiger2crysalis'
     pattern = re.compile('eiger_([0-9]+).h5')
-    filenames_to_convert = glob.glob(f'{dirname}/eiger*.h5')
+    filenames_to_convert = glob.glob(f'{dirname}/eiger_????.h5')
     results = {}
-    if filenames_to_convert:
-        crysalis
+
     for filepath in sorted(filenames_to_convert):
-        
+
         filename = os.path.basename(filepath)
         g = pattern.match(filename)
         if g:
             number = int(g.group(1))
             crysalis_folder_name = f'esp_{number:04d}'
             crysalis_dir = create_rsync_file(filepath, crysalis_folder_name)
-            
+
             if motor_mode == "ZIGZAG" and (number % 2):
-                revert_omega_start=omega_start+(omega_step*npoints)
+                revert_omega_start = omega_start + (omega_step * npoints)
                 omega_par = f"--omega={revert_omega_start}-{omega_step}*index"
             else:
                 omega_par = f"--omega={omega_start}+{omega_step}*index"
@@ -256,14 +259,14 @@ def crysalis_conversion_fscannd(wave_length=None,
                           filepath,
                           "-o", os.path.join(crysalis_dir,
                                              f'{scan_name}_{number}_1_''{index}.esperanto')]
-            #print('starts with parameters:',parameters)
-            results[filename] = subprocess.run(parameters, capture_output=True)
-            crysalis_files, scans = crysalis_config(calibration_path, calibration_name, npoints,  omega_start, omega_step, center, distance, wave_length, exposure_time)
-            
+            # print('starts with parameters:',parameters)
+            results[filename] = subprocess.run(parameters, capture_output=True, check=False)
+            crysalis_files, scans = crysalis_config(calibration_path, calibration_name, npoints, omega_start, omega_step, center, distance, wave_length, exposure_time)
+
             crysalis_scan_name = scan_name + '_' + str(number)
-            copy_set_ccd(crysalis_files,crysalis_dir, crysalis_scan_name )
-            createCrysalis(scans, crysalis_dir,  crysalis_scan_name)
-            create_par_file(crysalis_files,crysalis_dir, crysalis_scan_name)
+            copy_set_ccd(crysalis_files, crysalis_dir, crysalis_scan_name)
+            createCrysalis(scans, crysalis_dir, crysalis_scan_name)
+            create_par_file(crysalis_files, crysalis_dir, crysalis_scan_name)
     return results
 
 
@@ -272,48 +275,35 @@ def fabio_conversion(file_path,
                      folder="xdi",
                      fabioimage="tifimage",
                      extension="tif"):
+    "Convert a set of eiger files to cbf or tiff"
+    results = []
+    filename = os.path.join(file_path, scan_number, 'eiger_????.h5')
+    files = sorted(glob.glob(filename))
 
-        results = []
-        filename = os.path.join(file_path, scan_number,'eiger_????.h5')
-        files = sorted(glob.glob(filename))
-        
-        if len(files) == 0:
-            raise RuntimeError(f"No such file {filename}")
-        
-        elif len(files) == 1:
-            filename = files[0]
-            img_data_fabio = fabio.open(filename)
-            dest_dir = os.path.join(file_path, scan_number, folder)
-            if not os.path.exists(dest_dir):
-                os.makedirs(dest_dir)
-            for i, frame in enumerate(img_data_fabio):
-                conv = frame.convert(fabioimage)
-                data = conv.data.astype('int32')
-                data[data <0 ] = 0
-                conv.data = data
-                output = os.path.join(dest_dir, f"frame_{i+1:04d}.{extension}")
-                conv.write(output)
-                results.append(output)
-        else:
-            for idx_file, filename in enumerate(files):
-                img_data_fabio = fabio.open(filename)
-                dest_dir = os.path.join(file_path, scan_number, f"{folder}_{idx_file+1:04d}")
-                if not os.path.exists(dest_dir):
-                    os.makedirs(dest_dir)                
-                for i, frame in enumerate(img_data_fabio):
-                    conv = frame.convert(fabioimage)
-                    data = conv.data.astype('int32')
-                    data[data <0 ] = 0
-                    conv.data = data
-                    output = os.path.join(dest_dir, f"frame_{i+1:04d}.{extension}")
-                    conv.write(output)
-                    results.append(output)
-            
-        return results
+    if len(files) == 0:
+        raise RuntimeError(f"No such file {filename}")
+
+    for idx_file, filename in enumerate(files):
+        img_data_fabio = fabio.open(filename)
+        basename = folder if len(files) == 1 else f"{folder}_{idx_file+1:04d}"
+        dest_dir = os.path.join(file_path, scan_number, basename)
+        if not os.path.exists(dest_dir):
+            os.makedirs(dest_dir)
+        for i, frame in enumerate(img_data_fabio):
+            conv = frame.convert(fabioimage)
+            data = conv.data.astype('int32')
+            data[data < 0 ] = 0
+            conv.data = data
+            output = os.path.join(dest_dir, f"frame_{i+1:04d}.{extension}")
+            conv.write(output)
+            results.append(output)
+
+    return results
 
 ##########################
 # Start the server part
 ##########################
+
 
 @register
 class CrysalisConversion(Plugin):
@@ -336,25 +326,25 @@ class CrysalisConversion(Plugin):
  "plugin_name": "id27.CrysalisConversion"
 }    
     """
-    
+
     def process(self):
         Plugin.process(self)
         if not self.input:
             logger.error("input is empty")
 
         result = crysalis_conversion(**self.input)
-        self.output["results"] = unpack_CompletedProcess(result)   
+        self.output["results"] = unpack_processed(result)
 
         script = create_rsync_file(self.input["file_source_path"], None)
-        sync_results = subprocess.run([script], capture_output=True)
-        self.output["sync"] = unpack_CompletedProcess(sync_results)
+        sync_results = subprocess.run([script], capture_output=True, check=False)
+        self.output["sync"] = unpack_processed(sync_results)
 
 
 @register
 class CrysalisConversionFscannd(Plugin):
     """
     This is the plugin of cysalis conversion for fscannd type scans
-       
+
     Typical JSON file:
     {"wave_length": 1.54,
      "distance": 100,
@@ -371,17 +361,17 @@ class CrysalisConversionFscannd(Plugin):
     }
     
     """
-    
+
     def process(self):
         Plugin.process(self)
         if not self.input:
             logger.error("input is empty")
         result = crysalis_conversion_fscannd(**self.input)
-        self.output["results"] = {k: unpack_CompletedProcess(v) for k,v in result.items()}
-        random_filename = glob.glob(f'{self.input["dirname"]}/eiger*.h5')[0]        
+        self.output["results"] = {k: unpack_processed(v) for k, v in result.items()}
+        random_filename = glob.glob(f'{self.input["dirname"]}/eiger*.h5')[0]
         script = create_rsync_file(random_filename, None)
-        sync_results = subprocess.run([script], capture_output=True)
-        self.output["sync"] = unpack_CompletedProcess(sync_results)
+        sync_results = subprocess.run([script], capture_output=True, check=False)
+        self.output["sync"] = unpack_processed(sync_results)
 
 
 @register
@@ -395,12 +385,12 @@ class XdiConversion(Plugin):
     }
     
     """
-    
+
     def process(self):
         Plugin.process(self)
         if not self.input:
             logger.error("input is empty")
-        
+
         file_path = self.input["file_path"]
         scan_number = self.input["scan_number"]
         results = fabio_conversion(file_path,
@@ -408,7 +398,8 @@ class XdiConversion(Plugin):
                          folder="xdi",
                          fabioimage="tifimage",
                          extension="tif")
-        self.output["output"] = results        
+        self.output["output"] = results
+
 
 @register
 class Average(Plugin):
@@ -419,41 +410,47 @@ class Average(Plugin):
     {"file_path": "/data/id27/inhouse/some/directory",
      "scan_number": "scan0001"
     }
-    
-    """    
+    # optional: "output_directory": "/path/to/some/output"
+    """
+
     def process(self):
         Plugin.process(self)
+
+        results = {}
+        outputs = []
+        basename = 'sum.edf'
+        prefix = basename.split('.')[0]
+
         if not self.input:
             logger.error("input is empty")
-
+        output_directory = self.input.get("output_directory")
         file_path = self.input["file_path"]
         scan_number = self.input["scan_number"]
-        filename = os.path.join(file_path, scan_number,'eiger_????.h5')
+        filename = os.path.join(file_path, scan_number, 'eiger_????.h5')
         filenames = sorted(glob.glob(filename))
+
         if len(filenames) == 0:
             raise RuntimeError(f"File does not exist {filename}")
-        elif len(filenames) == 1:
-            dest_dir = os.path.join(file_path, scan_number, 'sum')
+
+        for idx_h5, filename in enumerate(filenames):
+            if output_directory:
+                dest_dir = output_directory
+                sample, dataset = file_path.strip().strip("/").split("/")[-2:]
+                tmpname = basename if len(filenames) == 1 else f'{prefix}_{idx_h5+1:04d}.edf'
+                basename = "_".join((sample, dataset, scan_number, tmpname))
+            else:
+                tmpname = prefix if len(filenames) == 1 else f'{prefix}_{idx_h5+1:04d}'
+                dest_dir = os.path.join(file_path, scan_number, tmpname)
             if not os.path.exists(dest_dir):
                 os.makedirs(dest_dir)
-            output = os.path.join(dest_dir,'sum.edf')
-            command = ['pyFAI-average', '-m', 'sum', '-o', output] + filenames
-            result = subprocess.run(command, capture_output=True)
-            self.output["output_filename"] = [output]
-            self.output["conversion"] = unpack_CompletedProcess(result)        
-        else:
-            results = {}
-            outputs = []
-            for idx_h5, filename in enumerate(filenames):
-                dest_dir = os.path.join(file_path, scan_number, f'sum_{idx_h5+1:04d}')
-                if not os.path.exists(dest_dir):
-                    os.makedirs(dest_dir)
-                output = os.path.join(dest_dir,'sum.edf')
-                command = ['pyFAI-average', '-m', 'sum', '-o', output, filename]
-                results[filename] = unpack_CompletedProcess(subprocess.run(command, capture_output=True))
-                outputs.append(output)
-            self.output["output_filename"] = outputs
-            self.output["conversion"] = results   
+
+            output = os.path.join(dest_dir, basename)
+            command = ['pyFAI-average', '-m', 'sum', '-o', output, filename]
+            results[filename] = unpack_processed(subprocess.run(command, capture_output=True, check=False))
+            outputs.append(output)
+        self.output["output_filename"] = outputs
+        self.output["conversion"] = results
+
 
 @register
 class XdsConversion(Plugin):
@@ -466,12 +463,12 @@ class XdsConversion(Plugin):
     }
     
     """
-    
+
     def process(self):
         Plugin.process(self)
         if not self.input:
             logger.error("input is empty")
-        
+
         file_path = self.input["file_path"]
         scan_number = self.input["scan_number"]
         results = fabio_conversion(file_path,
@@ -479,4 +476,4 @@ class XdsConversion(Plugin):
                          folder="cbf",
                          fabioimage="cbfimage",
                          extension="cbf")
-        self.output["output"] = results        
+        self.output["output"] = results
