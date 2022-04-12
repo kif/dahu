@@ -1,5 +1,6 @@
 """
-Distortion correction and azimuthal integration for a single detector 
+
+Distortion correction and azimuthal integration for a single detector
 
 """
 
@@ -7,9 +8,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "08/02/2022"
+__date__ = "12/04/2022"
 __status__ = "development"
-__version__ = "0.9.2"
+__version__ = "0.9.3"
 
 import os
 import threading
@@ -18,14 +19,9 @@ import posixpath
 from collections import namedtuple
 import json
 import logging
-logger = logging.getLogger("id02.single_detector")
 import numpy
 import numexpr
 import h5py
-from dahu import version as dahu_version
-from dahu.plugin import Plugin
-from dahu.utils import get_isotime, fully_qualified_name
-from dahu.cache import DataCache
 import fabio
 import pyFAI, pyFAI.utils
 from pyFAI.worker import Worker, DistortionWorker, PixelwiseWorker
@@ -37,7 +33,12 @@ except ImportError:
     COMPRESSION = {}
 else:
     COMPRESSION = hdf5plugin.Bitshuffle()
+from dahu import version as dahu_version
+from dahu.plugin import Plugin
+from dahu.utils import get_isotime, fully_qualified_name
+from dahu.cache import DataCache
 
+logger = logging.getLogger("id02.single_detector")
 numexpr.set_num_threads(8)
 
 CacheKey = namedtuple("CacheKey", ["ai", "shape"])
@@ -197,6 +198,8 @@ Possible values for to_save:
         self.cache_dis = None
         self.variance_formula = None
         self.variance_function = lambda data, dark: None
+        self.image_file = None
+        self.entry = None
 
     def setup(self, kwargs=None):
         """
@@ -289,7 +292,8 @@ Possible values for to_save:
             forai[key] = self.metadata.get(key)
 
         self.dist = self.metadata.get("SampleDistance")
-
+        self.distortion_filename = self.input.get("distortion_filename") or None
+        forai["splineFile"] = self.distortion_filename
         # Some safety checks, use-input are sometimes False !
         if self.dist < 0:
             # which is impossible
@@ -301,11 +305,9 @@ Possible values for to_save:
             forai["WaveLength"] = abs(self.metadata.get("WaveLength"))
         self.dummy = self.metadata.get("Dummy", self.dummy)
         self.delta_dummy = self.metadata.get("DDummy", self.delta_dummy)
-
         self.ai = AzimuthalIntegrator()
         self.ai.setSPD(**forai)
 
-        self.distortion_filename = self.input.get("distortion_filename") or None
         if type(self.distortion_filename) in StringTypes:
             detector = pyFAI.detector_factory("Frelon", {"splineFile": self.distortion_filename})
             if tuple(detector.shape) != shape:
@@ -315,7 +317,7 @@ Possible values for to_save:
         else:
             self.ai.detector.shape = self.in_shape[-2:]
         self.distortion_detector = self.ai.detector.__copy__()
-        self.log_warning("AI:%s" % self.ai)
+        self.log_warning(f"AI: {self.ai}")
 
         self.cache_ai = CacheKey(str(self.ai), shape)
 
@@ -470,7 +472,7 @@ Possible values for to_save:
         @param correct_shutter_closing_time: set to true for integrating detector (CCD) and false for counting detector (Pilatus)
         @return: 2-tuple of array with I1 and t
         """
-        if ("I1" in self.input):
+        if "I1" in self.input:
             return numpy.array(self.input["I1"]), None
 
         if not os.path.exists(mfile):
@@ -501,16 +503,18 @@ Possible values for to_save:
         return I1, t
 
     def parse_image_file(self):
+        "select the proper Lima parser"
         self.input_nxs = Nexus(self.image_file, "r")
         creator = self.input_nxs.h5.attrs.get("creator")
         if creator is None:
             return self.parse_image_file_old()
-        elif creator.startswith("LIMA-"):
+        if creator.startswith("LIMA-"):
             version = creator.split("-")[1]
             # test on version of lima
             if version < "1.":
                 self.log_warning("Suspicious version of LIMA: %s" % creator)
             return self.parse_image_file_lima()
+        raise RuntimeError("Unsupported Lima fileformat")
 
     def parse_image_file_old(self):
         """Historical version, works with former LIMA version
@@ -851,8 +855,8 @@ Possible values for to_save:
             else:
                 self.log_warning("unknown treatment %s" % ext)
 
-            if (len(shape) >= 3):
-                compression = {k: v for k, v in COMPRESSION.items()}
+            if len(shape) >= 3:
+                compression = COMPRESSION
             else:
                 compression = {}
             output_ds = nxdata.create_dataset("data",
@@ -932,7 +936,7 @@ Possible values for to_save:
                 elif meth == "azim":
                     res = self.workers[meth].process(data, variance=variance,
                                                      normalization_factor=I1_corrected)
-                    if (variance is not None):
+                    if variance is not None:
                         if len(res) == 2:
                             res, err = res
                         else:
