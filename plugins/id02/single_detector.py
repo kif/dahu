@@ -844,7 +844,7 @@ Possible values for to_save:
                 self.workers[ext] = worker
                 if self.distortion is None and worker.distortion is not None:
                     self.distortion = worker.distortion
-                    self.cache_dis = str(self.ai.detector)
+                    self.cache_dis = str(self.distortion_detector)
                     if self.cache_dis in self.cache:
                         self.distortion.lut = self.cache[self.cache_dis]
                     else:
