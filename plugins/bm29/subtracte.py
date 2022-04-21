@@ -41,7 +41,7 @@ from scipy.optimize import minimize
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     Sample, create_nexus_sample
-from .ispyb import IspybConnector
+from .ispyb import IspybConnector, NumpyEncoder
 
 try:
     import memcache
