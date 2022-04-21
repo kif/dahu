@@ -10,6 +10,7 @@ __date__ = "03/09/2020"
 __status__ = "development"
 __version__ = "1.0.0"
 
+import sys
 import logging
 import h5py
 import pyFAI.io
@@ -31,6 +32,13 @@ except:
 
 StringTypes = (str, bytes)
 
+def ensure_str(junk):
+    "return a unicode string, regardless to the input"
+    if isinstance(junk, bytes):
+        return junk.decode()
+    else:
+        return str(junk)
+    
 """ Remaining code from former single file plugin 
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
