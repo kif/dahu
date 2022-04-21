@@ -535,9 +535,9 @@ class IntegrateMultiframe(Plugin):
         entry_grp.attrs["default"] = ai2_data.name
 
         # Export this to the output JSON
-        self.output["q"] = res2.radial
-        self.output["I"] = res2.intensity
-        self.output["std"] = res2.sigma
+        # self.output["q"] = res2.radial
+        # self.output["I"] = res2.intensity
+        # self.output["std"] = res2.sigma
 
     def process1_integration(self, data):
         "First step of the processing, integrate all frames, return a IntegrationResult namedtuple"
