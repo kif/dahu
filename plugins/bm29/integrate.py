@@ -3,48 +3,53 @@
 
 """Data Analysis plugin for BM29: BioSaxs
 
-* IntegrateMultiframe: perform the integration of many frames contained in a HDF5 file and average them  
- 
+* IntegrateMultiframe: perform the integration of many frames contained in a HDF5 file and average them
+
 """
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/09/2021"
+__date__ = "21/04/2022"
 __status__ = "development"
 __version__ = "0.2.3"
 
 import os
 import time
 import json
-from urllib3.util import parse_url
+import logging
 from collections import namedtuple
+from urllib3.util import parse_url
 from dahu.plugin import Plugin
 from dahu.factory import register
 from dahu.utils import fully_qualified_name
-import logging
-logger = logging.getLogger("bm29.integrate")
+
 import numpy
+import h5py
+import pyFAI
+import pyFAI.azimuthalIntegrator
+import freesas
+import freesas.cormap
+
+from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, get_integrator, KeyCache, \
+                    method, polarization_factor, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
+                    create_nexus_sample
+from .ispyb import IspybConnector, NumpyEncoder
+
+
+logger = logging.getLogger("bm29.integrate")
 try:
     import numexpr
 except ImportError:
     logger.error("Numexpr is not installed, falling back on numpy's implementations")
     numexpr = None
-import h5py
-import fabio
-import pyFAI, pyFAI.azimuthalIntegrator
-import freesas, freesas.cormap
+
 try:
     import memcache
 except (ImportError, ModuleNotFoundError):
     memcache = None
 
-# from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
-from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, get_integrator, KeyCache, \
-                    method, polarization_factor, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
-                    create_nexus_sample
-from .ispyb import IspybConnector, NumpyEncoder
 
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
 CormapResult = namedtuple("CormapResult", "probability count tomerge")
@@ -67,7 +72,7 @@ class IntegrateMultiframe(Plugin):
       "timestamps": [1580985678.47, 1580985678.58],
       "monitor_values": [1, 1.1],
       "storage_ring_current": [199.6, 199.5]
-      "exposure_time": 0.1, 
+      "exposure_time": 0.1,
       "normalisation_factor": 1.0,
       "poni_file": "/tmp/example.poni",
       "mask_file": "/tmp/mask.edf",
@@ -76,6 +81,7 @@ class IntegrateMultiframe(Plugin):
       "fidelity_abs": 1e-5,
       "fidelity_rel": 1e-3,
       "hplc_mode": 0,
+      "timeout": 10,
       "sample": {
         "name": "bsa",
         "description": "protein description like Bovine Serum Albumin",
@@ -88,7 +94,7 @@ class IntegrateMultiframe(Plugin):
         "url": "http://ispyb.esrf.fr:1234",
         "login": "mx1234",
         "passwd": "secret",
-        "pyarch": "/data/pyarch/mx1234/sample", 
+        "pyarch": "/data/pyarch/mx1234/sample",
         "measurement_id": -1,
         "collection_id": -1
        }
@@ -110,6 +116,7 @@ class IntegrateMultiframe(Plugin):
         self.nb_frames = None
         self.ai = None
         self.npt = 1000
+        self.timeout = 10
         self.unit = pyFAI.units.to_unit("q_nm^-1")
         # self.polarization_factor = 0.9 --> constant
         self.poni = self.mask = None
@@ -130,9 +137,10 @@ class IntegrateMultiframe(Plugin):
         if not self.sample.name:
             self.sample = Sample("Unknown sample", *self.sample[1:])
 
+        self.timeout = self.input.get("timeout", self.timeout)
         self.input_file = self.input.get("input_file")
         if self.input_file is not None:
-            self.wait_file(self.input_file)
+            self.wait_file(self.input_file, timeout=self.timeout)
         else:
             self.log_error(f"No valid input file provided {self.input_file}")
 
@@ -182,7 +190,7 @@ class IntegrateMultiframe(Plugin):
         "For performance reasons, all frames are read in one bloc and cached, this returns a 3D numpy array"
         if self._input_frames is None:
             try:
-                with Nexus(self.input_file, "r") as nxs:
+                with Nexus(self.input_file, "r", timeout=self.timeout) as nxs:
                     entry = nxs.get_entries()[0]
                     if "measurement" in entry:
                         measurement = entry["measurement"]
@@ -207,38 +215,40 @@ class IntegrateMultiframe(Plugin):
         if not self.input.get("hplc_mode"):
             self.send_to_ispyb()
 
-    def wait_file(self, filename, timeout=10):
+    def wait_file(self, filename, timeout=None):
         """Wait for a file to appear on a filesystem
 
- 	:param filename: name of the file
+        :param filename: name of the file
         :param timeout: time-out in seconds
-        
+
         Raises an exception and ends the processing in case of missing file!
 	"""
-        end_time = time.time() + timeout
+        timeout = self.timeout if timeout is None else timeout
+        end_time = time.perf_counter() + timeout
         dirname = os.path.dirname(filename)
         while not os.path.isdir(dirname):
-            if time.time() > end_time:
+            if time.perf_counter() > end_time:
                 self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
             time.sleep(0.1)
             os.stat(os.path.dirname(dirname))
 
         while not os.path.exists(filename):
-            if time.time() > end_time:
+            if time.perf_counter() > end_time:
                 self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
             time.sleep(0.1)
             os.stat(dirname)
 
         while not os.stat(filename).st_size:
-            if time.time() > end_time:
+            if time.perf_counter() > end_time:
                 self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
             time.sleep(0.1)
             os.stat(dirname)
-        appear_time = time.time() - end_time + timeout
+        appear_time = time.perf_counter() - end_time + timeout
         if appear_time > 1.0:
             self.log_warning(f"Filename {filename} took {appear_time:.3f}s to appear on filesystem!")
 
     def create_nexus(self):
+        "create the nexus result file with basic structure"
         if not os.path.isdir(os.path.dirname(self.output_file)):
             os.makedirs(os.path.dirname(self.output_file))
         creation_time = os.stat(self.input_file).st_ctime
@@ -404,10 +414,9 @@ class IntegrateMultiframe(Plugin):
         if self.input.get("hplc_mode"):
             entry_grp.attrs["default"] = entry_grp.attrs["default"] = integration_grp.attrs["default"] = hplc_data.name
             self.log_warning("HPLC mode detected, stopping after frame per frame integration")
-
             return
-        else:
-            integration_grp.attrs["default"] = integration_data.name
+
+        integration_grp.attrs["default"] = integration_data.name
 
     # Process 2: Freesas cormap
         cormap_grp = nxs.new_class(entry_grp, "2_correlation_mapping", "NXprocess")
@@ -599,7 +608,5 @@ class IntegrateMultiframe(Plugin):
                 keys[k] = key
                 value = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
                 rc[k] = mc.set(key, value)
-                # self.log_warning(f"key {k} dtype {self.to_memcached[k].dtype}, shape {self.to_memcached[k].shape}, nbytes {self.to_memcached[k].nbytes}") 
         self.log_warning(f"Return codes for memcached {rc}")
         return keys
-
