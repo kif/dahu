@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/04/2021"
+__date__ = "21/04/2022"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -43,7 +43,7 @@ from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integra
                     Sample, create_nexus_sample
 from .ispyb import IspybConnector
 
-NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I sigma poni mask energy polarization method signal2d error2d sample")
+NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I sigma poni mask energy polarization method signal2d error2d normalization sample")
 
 
 class SubtractBuffer(Plugin):
@@ -252,19 +252,19 @@ class SubtractBuffer(Plugin):
         average_data.attrs["signal"] = "intensity_normed"
     # Stage 2 processing
 
-        # Nota: formula probably wrong ! Take into account the number of input frames in each averaged buffer !
-        # TODO implement those math using numexpr:
+        # Nota: This formula takes into account the number of input frames in each averaged buffer !        
         #  avg = Σdata / Σnorm
-        #  var = Σdata / (Σnorm)²
-        #  Σnorm = avg / var
-        #  Σdata = avg² / var
-        # The propagate the error based on the number of frames in each buffer with quadratic summation
-
-        buffer_average = numpy.mean([self.buffer_juices[i].signal2d for i in range(*tomerge)], axis=0)
-        buffer_variance = numpy.sum([(self.buffer_juices[i].error2d) ** 2 for i in range(*tomerge)], axis=0) / (tomerge[1] - tomerge[0]) ** 2
+        #  var = sigma² = ΣV / Σnorm
+        # TODO implement those math using numexpr:
+        sum_signal = sum([self.buffer_juices[i].normalization * self.buffer_juices[i].signal2d for i in range(*tomerge)])
+        sum_variance = sum([(self.buffer_juices[i].normalization * self.buffer_juices[i].error2d) ** 2 for i in range(*tomerge)])
+        norm = [self.buffer_juices[i].normalization for i in range(*tomerge)]
+        sum_norm = sum(norm)
+        buffer_average = sum_signal / sum_norm
+        buffer_variance = sum_variance / sum_norm
         sample_average = self.sample_juice.signal2d
         sample_variance = self.sample_juice.error2d ** 2
-        sub_average = self.sample_juice.signal2d - buffer_average
+        sub_average = sample_average - buffer_average
         sub_variance = sample_variance + buffer_variance
         sub_std = numpy.sqrt(sub_variance)
 
@@ -272,12 +272,12 @@ class SubtractBuffer(Plugin):
                                                  data=numpy.ascontiguousarray(sub_average, dtype=numpy.float32),
                                                  **cmp_float)
         int_avg_ds.attrs["interpretation"] = "image"
-        int_avg_ds.attrs["formula"] = "sample_signal - mean(buffer_signal_i)"
+        int_avg_ds.attrs["formula"] = "sample_signal - weighted_mean(buffer_signal_i)"
         int_std_ds = average_data.create_dataset("intensity_std",
                                                  data=numpy.ascontiguousarray(sub_std, dtype=numpy.float32),
                                                  **cmp_float)
         int_std_ds.attrs["interpretation"] = "image"
-        int_std_ds.attrs["formula"] = "sqrt( sample_variance + (sum(buffer_variance)/n_buffer**2 ))"
+        int_std_ds.attrs["formula"] = "sqrt( sample_variance + weighted_mean(buffer_variance_i) )"
         int_std_ds.attrs["method"] = "quadratic sum of sample error and buffer errors"
         average_grp.attrs["default"] = average_data.name
 
@@ -518,13 +518,15 @@ class SubtractBuffer(Plugin):
         qRg_ds = kratky_data.create_dataset("qRg", data=xdata.astype(numpy.float32))
         qRg_ds.attrs["interpretation"] = "spectrum"
         qRg_ds.attrs["long_name"] = "q·Rg (unit-less)"
-        k_ds = kratky_data.create_dataset("q2Rg2I/I0", data=ydata.astype(numpy.float32))
+        
+        #Nota the "/" hereafter is chr(8725), the division sign and not the usual slash
+        k_ds = kratky_data.create_dataset("q2Rg2I∕I0", data=ydata.astype(numpy.float32)) 
         k_ds.attrs["interpretation"] = "spectrum"
         k_ds.attrs["long_name"] = "q²Rg²I(q)/I₀"
         ke_ds = kratky_data.create_dataset("errors", data=dy.astype(numpy.float32))
         ke_ds.attrs["interpretation"] = "spectrum"
         kratky_data_attrs = kratky_data.attrs
-        kratky_data_attrs["signal"] = "q2Rg2I/I0"
+        kratky_data_attrs["signal"] = "q2Rg2I∕I0"
         kratky_data_attrs["axes"] = "qRg"
 
     # stage 6: Rambo-Tainer invariant
@@ -676,6 +678,7 @@ class SubtractBuffer(Plugin):
             img_grp = nxsr.get_class(entry_grp["3_time_average"], class_type="NXdata")[0]
             image2d = img_grp["intensity_normed"][()]
             error2d = img_grp["intensity_std"][()]
+            norm =  img_grp["normalization"][()] if "normalization" in img_grp else None
             # Read the sample description:
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
             sample_name = sample_grp.name
@@ -688,7 +691,7 @@ class SubtractBuffer(Plugin):
             temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
             sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
 
-        return NexusJuice(filename, h5path, npt, unit, q, I, sigma, poni, mask, energy, polarization, method, image2d, error2d, sample)
+        return NexusJuice(filename, h5path, npt, unit, q, I, sigma, poni, mask, energy, polarization, method, image2d, error2d, norm, sample)
 
     def send_to_ispyb(self):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
