@@ -43,6 +43,11 @@ from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integra
                     Sample, create_nexus_sample
 from .ispyb import IspybConnector
 
+try:
+    import memcache
+except (ImportError, ModuleNotFoundError):
+    memcache = None
+
 NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I sigma poni mask energy polarization method signal2d error2d normalization sample")
 
 
@@ -54,7 +59,7 @@ class SubtractBuffer(Plugin):
       "buffer_files": ["buffer_001.h5", "buffer_002.h5"],
       "sample_file": "sample.h5",
       "output_file": "subtracted.h5"
-      "fidelity":= 0.001,
+      "fidelity": 0.001,
       "ispyb": {
         "url": "http://ispyb.esrf.fr:1234",
         "login": "mx1234",
@@ -83,6 +88,7 @@ class SubtractBuffer(Plugin):
         self.Rg = self.I0 = self.Dmax = self.Vc = self.mass = None
         self.ispyb = None
         self.to_pyarch = {}
+        self.to_memcached = {}  # data to be shared via memcached
 
     def setup(self, kwargs=None):
         logger.debug("SubtractBuffer.setup")
@@ -117,12 +123,15 @@ class SubtractBuffer(Plugin):
         self.output["Dmax"] = self.Dmax
         self.output["Vc"] = self.Vc
         self.output["mass"] = self.mass
+        self.output["memcached"] = self.send_to_memcached()
+        #teardown everything else:
         if self.nxs is not None:
             self.nxs.close()
         self.sample_juice = None
         self.buffer_juices = []
         self.ispyb = None
         self.to_pyarch = None
+        self.to_memcached = None
 
     def process(self):
         Plugin.process(self)
@@ -142,7 +151,9 @@ class SubtractBuffer(Plugin):
                                      (type(err2), err2, "\n".join(traceback.format_exc(limit=10))))
                 raise(err)
         else:
-            self.send_to_ispyb()
+            self.send_to_ispyb()        
+        
+
 
     def validate_buffer(self, buffer_file):
         "Validate if a buffer is consitent with the sample, return some buffer_juice or None when unconsistent"
@@ -239,6 +250,7 @@ class SubtractBuffer(Plugin):
         count_ds.attrs["long_name"] = "Longest sequence where curves do not cross each other"
 
         to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*tomerge, dtype=numpy.uint16))
+        self.log_warning(f"to_merge: {tomerge}")
         to_merge_ds.attrs["long_name"] = "Index of equivalent frames"
         cormap_grp.attrs["default"] = cormap_data.name
 
@@ -353,9 +365,12 @@ class SubtractBuffer(Plugin):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             self.to_pyarch["subtracted"] = res3
         # Export this to the output JSON
-        self.output["q"] = res3.radial
-        self.output["I"] = res3.intensity
-        self.output["std"] = res3.sigma
+        #self.output["q"] = res3.radial
+        #self.output["I"] = res3.intensity
+        #self.output["std"] = res3.sigma
+        self.to_memcached["q"] = res3.radial
+        self.to_memcached["I"] = res3.intensity
+        self.to_memcached["std"] = res3.sigma
 
         #  Finally declare the default entry and default dataset ...
         #  overlay the BIFT fitted data on top of the scattering curve
@@ -699,3 +714,20 @@ class SubtractBuffer(Plugin):
             ispyb.send_subtracted(self.to_pyarch)
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
+
+
+    def send_to_memcached(self):
+        "Send the content of self.to_memcached to the storage"
+        keys = {}
+        rc = {}
+        if memcache is not None:
+            mc = memcache.Client([('stanza', 11211)])
+            key_base = self.output_file
+            for k in sorted(self.to_memcached.keys(), key=lambda i:self.to_memcached[i].nbytes):
+                key = key_base + "_" + k
+                keys[k] = key
+                value = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
+                rc[k] = mc.set(key, value)
+        self.log_warning(f"Return codes for memcached {rc}")
+        return keys
+
