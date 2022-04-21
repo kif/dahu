@@ -249,8 +249,9 @@ class SubtractBuffer(Plugin):
         count_ds.attrs["interpretation"] = "image"
         count_ds.attrs["long_name"] = "Longest sequence where curves do not cross each other"
 
-        to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*tomerge, dtype=numpy.uint16))
-        self.log_warning(f"to_merge: {tomerge}")
+        to_merge_idx = numpy.arange(*tomerge, dtype=numpy.uint16)
+        to_merge_ds = cormap_data.create_dataset("to_merge", data=to_merge_idx)
+        # self.log_warning(f"to_merge: {tomerge}")
         to_merge_ds.attrs["long_name"] = "Index of equivalent frames"
         cormap_grp.attrs["default"] = cormap_data.name
 
@@ -268,10 +269,9 @@ class SubtractBuffer(Plugin):
         #  avg = Σdata / Σnorm
         #  var = sigma² = ΣV / Σnorm
         # TODO implement those math using numexpr:
-        sum_signal = sum([self.buffer_juices[i].normalization * self.buffer_juices[i].signal2d for i in range(*tomerge)])
-        sum_variance = sum([(self.buffer_juices[i].normalization * self.buffer_juices[i].error2d) ** 2 for i in range(*tomerge)])
-        norm = [self.buffer_juices[i].normalization for i in range(*tomerge)]
-        sum_norm = sum(norm)
+        sum_signal = sum(self.buffer_juices[i].normalization * self.buffer_juices[i].signal2d for i in to_merge_idx)
+        sum_variance = sum((self.buffer_juices[i].normalization * self.buffer_juices[i].error2d) ** 2 for i in to_merge_idx)
+        sum_norm = sum(self.buffer_juices[i].normalization for i in to_merge_idx)
         buffer_average = sum_signal / sum_norm
         buffer_variance = sum_variance / sum_norm
         sample_average = self.sample_juice.signal2d
