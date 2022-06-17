@@ -1,8 +1,8 @@
 #This file contains the list of requirements for the BM29 plugin to work
 numpy
 scipy
-sklearn
-pyfai
+scikit-learn
+pyFAI
 h5py
 hdf5plugin
 freesas
