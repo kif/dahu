@@ -7,13 +7,12 @@ Data Analysis RPC server over Tango:
 
 Class Cache for storing the data in a Borg  
 """
-from __future__ import with_statement, print_function, absolute_import, division
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "07/02/2020" 
+__date__ = "22/02/2022" 
 __status__ = "production"
 
 import os
@@ -24,27 +23,39 @@ logger = logging.getLogger("dahu.cache")
 
 class DataCache(dict):
     """
-    This class is a Borg : 
-    always returns the same values regardless to the instance of the object
-    it is used as data storage for images ... with a limit on the number of images to keep in memory.
+    Class behaves like a dict with a finite size, used to cache some data for some time 
+    then discard them when other things are stored.
+    
+    This class can be configured as a borg (singleton-like): 
+    It always returns the same values regardless to the instance of the object
     """
     __shared_state = {}
     __data_initialized = False
 
-    def __init__(self, max_size=10):
+    def __init__(self, max_size=10, borg=True):
         """
         Constructor of DataCache
-        @param max_size: number of element to keep in memory
+        :param max_size: number of element to keep in memory
+        :param borg: set to false to have the behavour of a normal class. By default, this is a Borg, all instances have the same content. 
         """
-        self.__dict__ = self.__shared_state
-        if DataCache.__data_initialized is False:
-            DataCache.__data_initialized = True
-            logger.debug("DataCache.__init__: initalization of the Borg")
+        if borg:
+            self.__dict__ = self.__shared_state
+            if DataCache.__data_initialized is False:
+                DataCache.__data_initialized = True
+                logger.debug("DataCache.__init__: initalization of the Borg")
+                self.ordered = []
+                self.dict = {}
+                self.max_size = max_size
+                self._sem = Semaphore()
+            else:
+                logger.debug("DataCache.__init__: Borg already initialized")
+        else:
+            logger.debug("DataCache.__init__: initalization of a standard class")
             self.ordered = []
             self.dict = {}
             self.max_size = max_size
             self._sem = Semaphore()
-
+            
     def __repr__(self):
         """
         """

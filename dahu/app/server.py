@@ -40,13 +40,14 @@ if logger.getEffectiveLevel() > logging.INFO:
 from argparse import ArgumentParser
 import PyTango
 
-if __name__ == '__main__':
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv
     logger.info("Starting Dahu Tango Device Server")
     description = """Data Analysis Tango device server 
 """
     epilog = """ Provided by the Data analysis unit - ESRF 
         """
-    usage = "dahu_server [-d]  tango-options"
     parser = ArgumentParser(description=description, epilog=epilog, add_help=True)
     parser.add_argument("-V", "--version", action='version', version='%(prog)s 0.0')
     parser.add_argument("-d", "--debug", dest="debug", default=False,
@@ -60,20 +61,17 @@ if __name__ == '__main__':
                         help="directory where dahu stores logs ")
 #    parser.add_argument("-n", "--nbcpu", dest="nbcpu", type=int,
 #                  help="Maximum bumber of processing threads to be started", default=None)
-    parser.add_argument(dest="tango", nargs="*", help="Tango device server options")
-    options = parser.parse_args()
+
+    options, tango_options = parser.parse_known_args(argv[1:])
     dahu.utils.get_workdir(options.dahu_log)
-    tangoParam = ["DahuDS"] + options.tango
+    if options.debug:
+        logging.root.setLevel(logging.DEBUG)
+
+    tangoParam = ["DahuDS"] + tango_options
     if options.tango_verbose:
         tangoParam += ["-v%s" % options.tango_verbose]
     if options.tango_file:
         tangoParam += ["-file=%s" % options.tango_file]
-
-    # Analyse arguments and options
-    if options.debug:
-        logger.debug("Switch logger to debug level")
-        logger.setLevel(logging.DEBUG)
-        logging.root.etLevel(logging.DEBUG)
 
     try:
         print(tangoParam)
@@ -84,7 +82,12 @@ if __name__ == '__main__':
         U.server_run()
     except PyTango.DevFailed as err:
         logger.error('PyTango --> Received a DevFailed exception: %s' % err)
-        sys.exit(-1)
+        return -1
     except Exception as err:
         logger.error('PyTango --> An unforeseen exception occurred....%s' % err)
-        sys.exit(-1)
+        return -1
+    return 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
