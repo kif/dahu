@@ -1,5 +1,7 @@
 #This file contains the list of requirements for the BM29 plugin to work
 numpy
+scipy
+sklearn
 pyfai
 h5py
 hdf5plugin
