@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/05/2022"
+__date__ = "20/06/2022"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -581,15 +581,15 @@ class IntegrateMultiframe(Plugin):
         valid_slice = slice(*tomerge)
         mask = self.ai.detector.mask
         sum_data = (self.input_frames[valid_slice]).sum(axis=0)
-        sum_norm = (numpy.array(self.monitor_values)[valid_slice]).sum() * self.scale_factor
-        # TODO: There is an error at hte sqrt level ... to be investigated further   
+        sum_norm = self.scale_factor * sum(self.monitor_values[valid_slice])    
         if numexpr is not None:
             # Numexpr is many-times faster than numpy when it comes to element-wise operations
             intensity_avg = numexpr.evaluate("where(mask==0, sum_data/sum_norm, 0.0)")
-            intensity_std = numexpr.evaluate("sqrt(intensity_avg)")
+            intensity_std = numexpr.evaluate("where(mask==0, sqrt(sum_data)/sum_norm, 0.0") # Assuming Poisson, no uncertainties on the diode
         else:
-            intensity_avg = sum_data / sum_norm
-            intensity_std = numpy.sqrt(intensity_avg)
+            with numpy.errstate(divide='ignore'):
+                intensity_avg = sum_data / sum_norm
+                intensity_std = numpy.sqrt(sum_data)/sum_norm
             wmask = numpy.where(mask)
             intensity_avg[wmask] = 0.0
             intensity_std[wmask] = 0.0
