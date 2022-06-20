@@ -333,7 +333,7 @@ class IntegrateMultiframe(Plugin):
             frames_ds.attrs["interpretation"] = "image"
             measurement_grp["images"] = frames_ds
         else:  # use external links
-            with Nexus(self.input_file, "r") as nxsr:
+            with Nexus(self.input_file, "r", timeout=self.timeout) as nxsr:
                 entry = nxsr.get_entries()[0]
                 if "measurement" in entry:
                     measurement = entry["measurement"]
