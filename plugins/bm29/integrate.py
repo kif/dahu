@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/04/2022"
+__date__ = "20/06/2022"
 __status__ = "development"
-__version__ = "0.2.3"
+__version__ = "0.3.0"
 
 import os
 import time
@@ -53,7 +53,7 @@ except (ImportError, ModuleNotFoundError):
 
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
 CormapResult = namedtuple("CormapResult", "probability count tomerge")
-AverageResult = namedtuple("AverageResult", "average deviation")
+AverageResult = namedtuple("AverageResult", "average deviation normalization")
 
 
 @register
@@ -464,6 +464,7 @@ class IntegrateMultiframe(Plugin):
 
         Iavg = numpy.ascontiguousarray(res3.average, dtype=numpy.float32)
         sigma_avg = numpy.ascontiguousarray(res3.deviation, dtype=numpy.float32)
+        norm = numpy.ascontiguousarray(res3.normalization, dtype=numpy.float32)
 
         int_avg_ds = average_data.create_dataset("intensity_normed",
                                                   data=Iavg,
@@ -474,8 +475,12 @@ class IntegrateMultiframe(Plugin):
                                                    data=sigma_avg,
                                                    **cmp_float)
         int_std_ds.attrs["interpretation"] = "image"
-        int_std_ds.attrs["formula"] = "sqrt(sum_i(variance_i))/sum(normalization_i)"
+        int_std_ds.attrs["formula"] = "sqrt(sum_i(variance_i)/sum_i(normalization_i))"
         int_std_ds.attrs["method"] = "Propagated error from weighted mean assuming poissonian behavour of every data-point"
+        
+        int_nrm_ds = average_data.create_dataset("normalization", data=norm)
+        int_nrm_ds.attrs["formula"] = "sum_i(normalization_i))"
+        
         average_grp.attrs["default"] = average_data.name
 
     # Process 4: Azimuthal integration of the time average image
@@ -530,9 +535,9 @@ class IntegrateMultiframe(Plugin):
         entry_grp.attrs["default"] = ai2_data.name
 
         # Export this to the output JSON
-        self.output["q"] = res2.radial
-        self.output["I"] = res2.intensity
-        self.output["std"] = res2.sigma
+        # self.output["q"] = res2.radial
+        # self.output["I"] = res2.intensity
+        # self.output["std"] = res2.sigma
 
     def process1_integration(self, data):
         "First step of the processing, integrate all frames, return a IntegrationResult namedtuple"
@@ -576,18 +581,19 @@ class IntegrateMultiframe(Plugin):
         valid_slice = slice(*tomerge)
         mask = self.ai.detector.mask
         sum_data = (self.input_frames[valid_slice]).sum(axis=0)
-        sum_norm = (numpy.array(self.monitor_values)[valid_slice]).sum() * self.scale_factor
+        sum_norm = self.scale_factor * sum(self.monitor_values[valid_slice])    
         if numexpr is not None:
             # Numexpr is many-times faster than numpy when it comes to element-wise operations
             intensity_avg = numexpr.evaluate("where(mask==0, sum_data/sum_norm, 0.0)")
-            intensity_std = numexpr.evaluate("where(mask==0, sqrt(sum_data)/sum_norm, 0.0)")
+            intensity_std = numexpr.evaluate("where(mask==0, sqrt(sum_data)/sum_norm, 0.0") # Assuming Poisson, no uncertainties on the diode
         else:
-            intensity_avg = sum_data / sum_norm
-            intensity_std = numpy.sqrt(sum_data) / sum_norm
+            with numpy.errstate(divide='ignore'):
+                intensity_avg = sum_data / sum_norm
+                intensity_std = numpy.sqrt(sum_data)/sum_norm
             wmask = numpy.where(mask)
             intensity_avg[wmask] = 0.0
             intensity_std[wmask] = 0.0
-        return AverageResult(intensity_avg, intensity_std)
+        return AverageResult(intensity_avg, intensity_std, sum_norm)
 
     def send_to_ispyb(self):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
