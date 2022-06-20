@@ -585,7 +585,7 @@ class IntegrateMultiframe(Plugin):
         if numexpr is not None:
             # Numexpr is many-times faster than numpy when it comes to element-wise operations
             intensity_avg = numexpr.evaluate("where(mask==0, sum_data/sum_norm, 0.0)")
-            intensity_std = numexpr.evaluate("where(mask==0, sqrt(sum_data)/sum_norm, 0.0") # Assuming Poisson, no uncertainties on the diode
+            intensity_std = numexpr.evaluate("where(mask==0, sqrt(sum_data)/sum_norm, 0.0)") # Assuming Poisson, no uncertainties on the diode
         else:
             with numpy.errstate(divide='ignore'):
                 intensity_avg = sum_data / sum_norm
