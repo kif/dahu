@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/04/2021"
+__date__ = "21/04/2022"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -41,9 +41,14 @@ from scipy.optimize import minimize
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     Sample, create_nexus_sample
-from .ispyb import IspybConnector
+from .ispyb import IspybConnector, NumpyEncoder
 
-NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I sigma poni mask energy polarization method signal2d error2d sample")
+try:
+    import memcache
+except (ImportError, ModuleNotFoundError):
+    memcache = None
+
+NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I sigma poni mask energy polarization method signal2d error2d normalization sample")
 
 
 class SubtractBuffer(Plugin):
@@ -54,7 +59,7 @@ class SubtractBuffer(Plugin):
       "buffer_files": ["buffer_001.h5", "buffer_002.h5"],
       "sample_file": "sample.h5",
       "output_file": "subtracted.h5"
-      "fidelity":= 0.001,
+      "fidelity": 0.001,
       "ispyb": {
         "url": "http://ispyb.esrf.fr:1234",
         "login": "mx1234",
@@ -83,6 +88,7 @@ class SubtractBuffer(Plugin):
         self.Rg = self.I0 = self.Dmax = self.Vc = self.mass = None
         self.ispyb = None
         self.to_pyarch = {}
+        self.to_memcached = {}  # data to be shared via memcached
 
     def setup(self, kwargs=None):
         logger.debug("SubtractBuffer.setup")
@@ -117,12 +123,15 @@ class SubtractBuffer(Plugin):
         self.output["Dmax"] = self.Dmax
         self.output["Vc"] = self.Vc
         self.output["mass"] = self.mass
+        self.output["memcached"] = self.send_to_memcached()
+        #teardown everything else:
         if self.nxs is not None:
             self.nxs.close()
         self.sample_juice = None
         self.buffer_juices = []
         self.ispyb = None
         self.to_pyarch = None
+        self.to_memcached = None
 
     def process(self):
         Plugin.process(self)
@@ -142,7 +151,9 @@ class SubtractBuffer(Plugin):
                                      (type(err2), err2, "\n".join(traceback.format_exc(limit=10))))
                 raise(err)
         else:
-            self.send_to_ispyb()
+            self.send_to_ispyb()        
+        
+
 
     def validate_buffer(self, buffer_file):
         "Validate if a buffer is consitent with the sample, return some buffer_juice or None when unconsistent"
@@ -238,7 +249,9 @@ class SubtractBuffer(Plugin):
         count_ds.attrs["interpretation"] = "image"
         count_ds.attrs["long_name"] = "Longest sequence where curves do not cross each other"
 
-        to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*tomerge, dtype=numpy.uint16))
+        to_merge_idx = numpy.arange(*tomerge, dtype=numpy.uint16)
+        to_merge_ds = cormap_data.create_dataset("to_merge", data=to_merge_idx)
+        # self.log_warning(f"to_merge: {tomerge}")
         to_merge_ds.attrs["long_name"] = "Index of equivalent frames"
         cormap_grp.attrs["default"] = cormap_data.name
 
@@ -252,19 +265,18 @@ class SubtractBuffer(Plugin):
         average_data.attrs["signal"] = "intensity_normed"
     # Stage 2 processing
 
-        # Nota: formula probably wrong ! Take into account the number of input frames in each averaged buffer !
-        # TODO implement those math using numexpr:
+        # Nota: This formula takes into account the number of input frames in each averaged buffer !        
         #  avg = Σdata / Σnorm
-        #  var = Σdata / (Σnorm)²
-        #  Σnorm = avg / var
-        #  Σdata = avg² / var
-        # The propagate the error based on the number of frames in each buffer with quadratic summation
-
-        buffer_average = numpy.mean([self.buffer_juices[i].signal2d for i in range(*tomerge)], axis=0)
-        buffer_variance = numpy.sum([(self.buffer_juices[i].error2d) ** 2 for i in range(*tomerge)], axis=0) / (tomerge[1] - tomerge[0]) ** 2
+        #  var = sigma² = ΣV / Σnorm
+        # TODO implement those math using numexpr:
+        sum_signal = sum(self.buffer_juices[i].normalization * self.buffer_juices[i].signal2d for i in to_merge_idx)
+        sum_variance = sum((self.buffer_juices[i].normalization * self.buffer_juices[i].error2d) ** 2 for i in to_merge_idx)
+        sum_norm = sum(self.buffer_juices[i].normalization for i in to_merge_idx)
+        buffer_average = sum_signal / sum_norm
+        buffer_variance = sum_variance / sum_norm
         sample_average = self.sample_juice.signal2d
         sample_variance = self.sample_juice.error2d ** 2
-        sub_average = self.sample_juice.signal2d - buffer_average
+        sub_average = sample_average - buffer_average
         sub_variance = sample_variance + buffer_variance
         sub_std = numpy.sqrt(sub_variance)
 
@@ -272,12 +284,12 @@ class SubtractBuffer(Plugin):
                                                  data=numpy.ascontiguousarray(sub_average, dtype=numpy.float32),
                                                  **cmp_float)
         int_avg_ds.attrs["interpretation"] = "image"
-        int_avg_ds.attrs["formula"] = "sample_signal - mean(buffer_signal_i)"
+        int_avg_ds.attrs["formula"] = "sample_signal - weighted_mean(buffer_signal_i)"
         int_std_ds = average_data.create_dataset("intensity_std",
                                                  data=numpy.ascontiguousarray(sub_std, dtype=numpy.float32),
                                                  **cmp_float)
         int_std_ds.attrs["interpretation"] = "image"
-        int_std_ds.attrs["formula"] = "sqrt( sample_variance + (sum(buffer_variance)/n_buffer**2 ))"
+        int_std_ds.attrs["formula"] = "sqrt( sample_variance + weighted_mean(buffer_variance_i) )"
         int_std_ds.attrs["method"] = "quadratic sum of sample error and buffer errors"
         average_grp.attrs["default"] = average_data.name
 
@@ -353,9 +365,12 @@ class SubtractBuffer(Plugin):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             self.to_pyarch["subtracted"] = res3
         # Export this to the output JSON
-        self.output["q"] = res3.radial
-        self.output["I"] = res3.intensity
-        self.output["std"] = res3.sigma
+        #self.output["q"] = res3.radial
+        #self.output["I"] = res3.intensity
+        #self.output["std"] = res3.sigma
+        self.to_memcached["q"] = res3.radial
+        self.to_memcached["I"] = res3.intensity
+        self.to_memcached["std"] = res3.sigma
 
         #  Finally declare the default entry and default dataset ...
         #  overlay the BIFT fitted data on top of the scattering curve
@@ -518,13 +533,15 @@ class SubtractBuffer(Plugin):
         qRg_ds = kratky_data.create_dataset("qRg", data=xdata.astype(numpy.float32))
         qRg_ds.attrs["interpretation"] = "spectrum"
         qRg_ds.attrs["long_name"] = "q·Rg (unit-less)"
-        k_ds = kratky_data.create_dataset("q2Rg2I/I0", data=ydata.astype(numpy.float32))
+        
+        #Nota the "/" hereafter is chr(8725), the division sign and not the usual slash
+        k_ds = kratky_data.create_dataset("q2Rg2I∕I0", data=ydata.astype(numpy.float32)) 
         k_ds.attrs["interpretation"] = "spectrum"
         k_ds.attrs["long_name"] = "q²Rg²I(q)/I₀"
         ke_ds = kratky_data.create_dataset("errors", data=dy.astype(numpy.float32))
         ke_ds.attrs["interpretation"] = "spectrum"
         kratky_data_attrs = kratky_data.attrs
-        kratky_data_attrs["signal"] = "q2Rg2I/I0"
+        kratky_data_attrs["signal"] = "q2Rg2I∕I0"
         kratky_data_attrs["axes"] = "qRg"
 
     # stage 6: Rambo-Tainer invariant
@@ -676,6 +693,7 @@ class SubtractBuffer(Plugin):
             img_grp = nxsr.get_class(entry_grp["3_time_average"], class_type="NXdata")[0]
             image2d = img_grp["intensity_normed"][()]
             error2d = img_grp["intensity_std"][()]
+            norm =  img_grp["normalization"][()] if "normalization" in img_grp else None
             # Read the sample description:
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
             sample_name = sample_grp.name
@@ -688,7 +706,7 @@ class SubtractBuffer(Plugin):
             temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
             sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
 
-        return NexusJuice(filename, h5path, npt, unit, q, I, sigma, poni, mask, energy, polarization, method, image2d, error2d, sample)
+        return NexusJuice(filename, h5path, npt, unit, q, I, sigma, poni, mask, energy, polarization, method, image2d, error2d, norm, sample)
 
     def send_to_ispyb(self):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
@@ -696,3 +714,20 @@ class SubtractBuffer(Plugin):
             ispyb.send_subtracted(self.to_pyarch)
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
+
+
+    def send_to_memcached(self):
+        "Send the content of self.to_memcached to the storage"
+        keys = {}
+        rc = {}
+        if memcache is not None:
+            mc = memcache.Client([('stanza', 11211)])
+            key_base = self.output_file
+            for k in sorted(self.to_memcached.keys(), key=lambda i:self.to_memcached[i].nbytes):
+                key = key_base + "_" + k
+                keys[k] = key
+                value = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
+                rc[k] = mc.set(key, value)
+        self.log_warning(f"Return codes for memcached {rc}")
+        return keys
+
