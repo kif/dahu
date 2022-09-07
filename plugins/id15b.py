@@ -208,7 +208,9 @@ def crysalis_conversion(wave_length=None, distance=None,
                   "-b", f'{center[0]}', f'{center[1]}',
                   f"--omega={omega_start}+{omega_step}*index",
                   file_source_path,
-                  "-o", os.path.join(crysalis_dir, f'{scan_name}_1_''{index}.esperanto')]
+                  "-o", os.path.join(crysalis_dir, f'{scan_name}_1_''{index}.esperanto'),
+#                  "--debug"
+                  ]
     logger.info('starts with parameters: %s', parameters)
 
     crysalis_files, scans = crysalis_config(calibration_path, calibration_name, number_of_points, omega_start, omega_step, center, distance, wave_length, exposure_time)
@@ -335,12 +337,17 @@ class CrysalisConversion(Plugin):
         if not self.input:
             logger.error("input is empty")
 #        self.log_warning(f"path is {', '.join(sys.path)}")
-        result = crysalis_conversion(**self.input)
+        scan_name = self.input.get("scan_name")
+        if scan_name is None: 
+            scan_name = self.input.get("file_source_path","//scan/").split("/")[-3]
+        iput = self.input.copy()
+        iput["scan_name"] = scan_name
+        result = crysalis_conversion(**iput)
         self.output["results"] = unpack_processed(result)
 
-        script = create_rsync_file(self.input["file_source_path"], None)
-        sync_results = subprocess.run([script], capture_output=True, check=False)
-        self.output["sync"] = unpack_processed(sync_results)
+        #script = create_rsync_file(self.input["file_source_path"], None)
+        #sync_results = subprocess.run([script], capture_output=True, check=False)
+        #self.output["sync"] = unpack_processed(sync_results)
 
 
 @register
