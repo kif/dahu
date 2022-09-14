@@ -233,8 +233,7 @@ class IntegrateMultiframe(Plugin):
         self.ai = get_integrator(KeyCache(self.npt, self.unit, self.poni, self.mask, self.energy))
         self.create_nexus()
         self.output["memcached"] = self.send_to_memcached()
-        if not self.input.get("hplc_mode"):
-            self.send_to_ispyb()
+        self.send_to_ispyb()
 
     def wait_file(self, filename, timeout=None):
         """Wait for a file to appear on a filesystem
@@ -619,7 +618,8 @@ class IntegrateMultiframe(Plugin):
     def send_to_ispyb(self):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
-            ispyb.send_averaged(self.to_pyarch)
+            if not self.input.get("hplc_mode"):
+                ispyb.send_averaged(self.to_pyarch)
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
 

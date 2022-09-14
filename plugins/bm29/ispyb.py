@@ -105,6 +105,8 @@ class IspybConnector:
                                         str_list(frames),
                                         str_list(discarded),
                                         str(averaged))
+        sasm = numpy.vstack((aver_data.radial, aver_data.intensity, aver_data.sigma)).T
+        scatterPlot = self.scatter_plot(sasm, basename=basename)
 
     def _mk_filename(self, index, path, basename="frame", ext=".dat"):
         dest = os.path.join(self.pyarch, path)
