@@ -132,7 +132,6 @@ class IntegrateMultiframe(Plugin):
         logger.debug("IntegrateMultiframe.setup")
         Plugin.setup(self, kwargs)
 
-        self.ispyb = Ispyb._fromdict(self.input.get("ispyb", {}))
         self.sample = Sample._fromdict(self.input.get("sample", {}))
         if not self.sample.name:
             self.sample = Sample("Unknown sample", *self.sample[1:])
@@ -163,6 +162,18 @@ class IntegrateMultiframe(Plugin):
                     self.log_warning(f"Unable to create dir {dirname}. {type(err)}: {err}")
 
             self.log_warning(f"No output file provided, using: {self.output_file}")
+        #Manage gallery here
+        dirname = os.path.dirname(self.output_file)
+        gallery = os.path.join(dirname, "gallery")
+        if not isdir(gallery):
+            try:
+                os.makedirs(gallery)
+            except Exception as err:
+                self.log_warning(f"Unable to create dir {gallery}. {type(err)}: {err}")
+        ispydict = self.input.get("ispyb", {})
+        ispydict["gallery"] = gallery
+        self.ispyb = Ispyb._fromdict(ispydict)
+
         self.nb_frames = len(self.input.get("frame_ids", []))
         self.npt = self.input.get("npt", self.npt)
         self.unit = pyFAI.units.to_unit(self.input.get("unit", self.unit))

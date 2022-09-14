@@ -115,6 +115,7 @@ class Ispyb(NamedTuple):
     url: str = None
     login: str = _default_passwd.get("username")
     passwd: str = _default_passwd.get("password")
+    gallery: str = ""
     pyarch: str = ""
 #     collection_id: int = -1 # This is now deprecated
 #     measurement_id: int = -1  # This is now deprecated

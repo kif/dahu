@@ -20,6 +20,7 @@ logger = logging.getLogger("bm29.ispyb")
 import os
 import shutil
 import json
+import tempfile
 import numpy
 from suds.client import Client
 from suds.transport.https import HttpAuthenticated
@@ -45,7 +46,7 @@ def str_list(lst):
 class IspybConnector:
     "This class is a conector to the web-service"
 
-    def __init__(self, url, login=None, passwd=None, pyarch=None,
+    def __init__(self, url, login=None, passwd=None, gallery=None, pyarch=None,
                  experiment_id=-1, run_number=-1, **kwargs):
         """Constructor of the ISPyB connections
 
@@ -59,6 +60,11 @@ class IspybConnector:
         self._url = url
         self.authentication = HttpAuthenticated(username=login, password=passwd)
         self.client = Client(url, transport=self.authentication, cache=None)
+        if gallery:
+            self.gallery = os.path.abspath(gallery)
+        else:
+            logger.error("No `gallery` destination provided ... things will go wrong")
+            self.gallery = tempfile.gettempdir()
         if pyarch:
             self.pyarch = os.path.abspath(pyarch)
         else:
@@ -151,13 +157,15 @@ class IspybConnector:
         return filename
 
     def scatter_plot(self, sasm, guinier, ift, basename="frame"):
-        filename = self._mk_filename("Scattering", "plot", basename, ext=".png")
+        pyarch_fn = self._mk_filename("Scattering", "plot", basename, ext=".png")
+        gallery_fn = os.path.join(self.gallery, os.path.basename(pyarch_fn))
         fig = scatter_plot(sasm, guinier, ift,
-                           filename=filename, img_format="png", unit="nm",
+                           filename=gallery_fn, img_format="png", unit="nm",
                            title="Scattering curve ",
                            ax=None, labelsize=None, fontsize=None)
         matplotlib.pyplot.close(fig)
-        return filename
+        shutil.copyfile(gallery_fn,pyarch_fn)
+        return pyarch_fn
 
     def density_plot(self, ift, basename="frame"):
         filename = self._mk_filename("Density", "plot", basename, ext=".png")
