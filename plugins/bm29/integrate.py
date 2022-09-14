@@ -151,7 +151,17 @@ class IntegrateMultiframe(Plugin):
         if self.output_file is None:
             lst = list(os.path.splitext(self.input_file))
             lst.insert(1, "-integrate")
-            self.output_file = "".join(lst)
+            dirname, basename = os.path.split("".join(lst))
+            dirname = os.path.dirname(dirname)
+            dirname = os.path.join(dirname, "processed")
+            dirname = os.path.join(dirname, "integrate")
+            self.output_file = os.path.join(dirname, basename)
+            if not os.path.isdir(dirname):
+                try:
+                    os.makedirs(dirname)
+                except Exception as err:
+                    self.log_warning(f"Unable to create dir {dirname}. {type(err)}: {err}")
+
             self.log_warning(f"No output file provided, using: {self.output_file}")
         self.nb_frames = len(self.input.get("frame_ids", []))
         self.npt = self.input.get("npt", self.npt)

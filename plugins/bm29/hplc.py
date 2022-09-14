@@ -175,7 +175,17 @@ class HPLC(Plugin):
 
         self.output_file = self.input.get("output_file")
         if not self.output_file:
-            self.output_file = os.path.commonprefix(self.input_files) + "_hplc.h5"
+            dirname, basename = os.path.split(os.path.commonprefix(self.input_files) + "_hplc.h5")
+            dirname = os.path.dirname(dirname)
+#            dirname = os.path.join(dirname, "processed")
+            dirname = os.path.join(dirname, "hplc")
+            self.output_file = os.path.join(dirname, basename)
+            if not os.path.isdir(dirname):
+                try:
+                    os.makedirs(dirname)
+                except Exception as err:
+                    self.log_warning(f"Unable to create dir {dirname}. {type(err)}: {err}")
+
             self.log_warning("No output file provided, using " + self.output_file)
         self.nmf_components = int(self.input.get("nmf_components", self.NMF_COMP))
         self.ispyb = Ispyb._fromdict(self.input.get("ispyb", {}))

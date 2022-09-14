@@ -106,8 +106,17 @@ class SubtractBuffer(Plugin):
         if self.output_file is None:
             lst = list(os.path.splitext(self.sample_file))
             lst.insert(1, "-sub")
-            self.output_file = "".join(lst)
-            self.log_warning(f"No output file provided, using: {self.output_file}")
+            dirname, basename = os.path.split("".join(lst))
+            dirname = os.path.dirname(dirname)
+#            dirname = os.path.join(dirname, "processed")
+            dirname = os.path.join(dirname, "subtract")
+            self.output_file = os.path.join(dirname, basename)
+            if not os.path.isdir(dirname):
+                try:
+                    os.makedirs(dirname)
+                except Exception as err:
+                    self.log_warning(f"Unable to create dir {dirname}. {type(err)}: {err}")
+
         self.buffer_files = [os.path.abspath(fn) for fn in self.input.get("buffer_files", [])
                              if os.path.exists(fn)]
         self.ispyb = Ispyb._fromdict(self.input.get("ispyb", {}))
