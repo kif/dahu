@@ -160,7 +160,7 @@ class IspybConnector:
                             ax=None, labelsize=None, fontsize=None)
         matplotlib.pyplot.close(fig)
         shutil.copyfile(gallery_fn, pyarch_fn)
-        return filename
+        return pyarch_fn
 
     def scatter_plot(self, sasm, guinier=None, ift=None, basename="frame"):
         pyarch_fn = self._mk_filename("Scattering", "plot", basename, ext=".png")
