@@ -142,20 +142,24 @@ class IspybConnector:
         return filename
 
     def kratky_plot(self, sasm, guinier, basename="frame"):
-        filename = self._mk_filename("Kratky", "plot", basename, ext=".png")
+        pyarch_fn = self._mk_filename("Kratky", "plot", basename, ext=".png")
+        gallery_fn = os.path.join(self.gallery, os.path.basename(pyarch_fn))
         fig = kratky_plot(sasm, guinier,
-                           filename=filename, img_format="png", unit="nm",
+                           filename=gallery_fn, img_format="png", unit="nm",
                            title="Dimensionless Kratky plot",
                            ax=None, labelsize=None, fontsize=None)
         matplotlib.pyplot.close(fig)
-        return filename
+        shutil.copyfile(gallery_fn, pyarch_fn)
+        return pyarch_fn
 
     def guinier_plot(self, sasm, guinier, basename="frame"):
-        filename = self._mk_filename("Guinier", "plot", basename, ext=".png")
-        fig = guinier_plot(sasm, guinier, filename=filename,
+        pyarch_fn = self._mk_filename("Guinier", "plot", basename, ext=".png")
+        gallery_fn = os.path.join(self.gallery, os.path.basename(pyarch_fn))
+        fig = guinier_plot(sasm, guinier, filename=gallery_fn,
                             img_format="png", unit="nm",
                             ax=None, labelsize=None, fontsize=None)
         matplotlib.pyplot.close(fig)
+        shutil.copyfile(gallery_fn, pyarch_fn)
         return filename
 
     def scatter_plot(self, sasm, guinier=None, ift=None, basename="frame"):
@@ -166,15 +170,17 @@ class IspybConnector:
                            title="Scattering curve ",
                            ax=None, labelsize=None, fontsize=None)
         matplotlib.pyplot.close(fig)
-        shutil.copyfile(gallery_fn,pyarch_fn)
+        shutil.copyfile(gallery_fn, pyarch_fn)
         return pyarch_fn
 
     def density_plot(self, ift, basename="frame"):
-        filename = self._mk_filename("Density", "plot", basename, ext=".png")
-        fig = density_plot(ift, filename=filename, img_format="png", unit="nm",
+        pyarch_fn = self._mk_filename("Density", "plot", basename, ext=".png")
+        gallery_fn = os.path.join(self.gallery, os.path.basename(pyarch_fn))
+        fig = density_plot(ift, filename=gallery_fn, img_format="png", unit="nm",
                      ax=None, labelsize=None, fontsize=None)
         matplotlib.pyplot.close(fig)
-        return filename
+        shutil.copyfile(gallery_fn, pyarch_fn)
+        return pyarch_fn
 
     def send_subtracted(self, data):
         """send the result of the subtraction to Ispyb
