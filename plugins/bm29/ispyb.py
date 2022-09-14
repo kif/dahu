@@ -158,7 +158,7 @@ class IspybConnector:
         matplotlib.pyplot.close(fig)
         return filename
 
-    def scatter_plot(self, sasm, guinier, ift, basename="frame"):
+    def scatter_plot(self, sasm, guinier=None, ift=None, basename="frame"):
         pyarch_fn = self._mk_filename("Scattering", "plot", basename, ext=".png")
         gallery_fn = os.path.join(self.gallery, os.path.basename(pyarch_fn))
         fig = scatter_plot(sasm, guinier, ift,
