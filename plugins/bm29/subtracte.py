@@ -119,7 +119,17 @@ class SubtractBuffer(Plugin):
 
         self.buffer_files = [os.path.abspath(fn) for fn in self.input.get("buffer_files", [])
                              if os.path.exists(fn)]
-        self.ispyb = Ispyb._fromdict(self.input.get("ispyb", {}))
+        #Manage gallery here
+        dirname = os.path.dirname(self.output_file)
+        gallery = os.path.join(dirname, "gallery")
+        if not os.path.isdir(gallery):
+            try:
+                os.makedirs(gallery)
+            except Exception as err:
+                self.log_warning(f"Unable to create dir {gallery}. {type(err)}: {err}")
+        ispydict = self.input.get("ispyb", {})
+        ispydict["gallery"] = gallery
+        self.ispyb = Ispyb._fromdict(ispydict)
 
     def teardown(self):
         Plugin.teardown(self)
