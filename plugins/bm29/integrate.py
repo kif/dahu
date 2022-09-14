@@ -165,7 +165,7 @@ class IntegrateMultiframe(Plugin):
         #Manage gallery here
         dirname = os.path.dirname(self.output_file)
         gallery = os.path.join(dirname, "gallery")
-        if not isdir(gallery):
+        if not os.path.isdir(gallery):
             try:
                 os.makedirs(gallery)
             except Exception as err:
