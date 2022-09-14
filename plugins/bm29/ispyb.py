@@ -125,10 +125,12 @@ class IspybConnector:
         :param: integrate_result: an IntegrationResult to be saved
         :return: the full path of the file in pyarch
         """
-        filename = self._mk_filename(index, "1d", basename)
+        pyarch_fn = self._mk_filename(index, "1d", basename)
+        gallery_fn = os.path.join(self.gallery, os.path.basename(pyarch_fn))
         sasl = numpy.vstack((integrate_result.radial, integrate_result.intensity, integrate_result.sigma))
-        numpy.savetxt(filename, sasl.T)
-        return filename
+        numpy.savetxt(gallery_fn, sasl.T)
+        shutil.copyfile(gallery_fn, pyarch_fn)
+        return pyarch_fn
 
     def save_bift(self, bift, basename="frame"):
         """Save a  IFT curve into the pyarch. Not those file do not exist outside pyarch
@@ -137,9 +139,11 @@ class IspybConnector:
         :param: bift: an StatResults object to be saved (freesas >= 0.8.4)
         :return: the full path of the file in pyarch
         """
-        filename = self._mk_filename("BIFT", "plot", basename, ext=".out")
-        bift.save(filename)
-        return filename
+        pyarch_fn = self._mk_filename("BIFT", "1d", basename, ext=".out")
+        gallery_fn = os.path.join(self.gallery, os.path.basename(pyarch_fn))
+        bift.save(gallery_fn)
+        shutil.copyfile(gallery_fn, pyarch_fn)
+        return pyarch_fn
 
     def kratky_plot(self, sasm, guinier, basename="frame"):
         pyarch_fn = self._mk_filename("Kratky", "plot", basename, ext=".png")
