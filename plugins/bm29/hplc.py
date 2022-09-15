@@ -200,6 +200,7 @@ class HPLC(Plugin):
         ispydict = self.input.get("ispyb", {})
         ispydict["gallery"] = gallery
         self.ispyb = Ispyb._fromdict(ispydict)
+        print(self.ispyb)
 
     def process(self):
         self.create_nexus()
