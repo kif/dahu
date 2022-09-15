@@ -58,11 +58,11 @@ class IspybConnector:
         :param run_number: identify the run in an experiment (sample/buffer localization)
         """
         self._url = url
-        try:
-            self.authentication = HttpAuthenticated(username=login, password=passwd)
-            self.client = Client(url, transport=self.authentication, cache=None)
-        except Exception as err:
-            logger.error(f"Connection to the web-service {type(err)}:{err}")
+        # try:
+        self.authentication = HttpAuthenticated(username=login, password=passwd)
+        self.client = Client(url, transport=self.authentication, cache=None)
+        # except Exception as err:
+        #     logger.error(f"Connection to the web-service {type(err)}:{err}")
         if gallery:
             self.gallery = os.path.abspath(gallery)
         else:
