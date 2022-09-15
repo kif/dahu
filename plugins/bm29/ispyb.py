@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/06/2021"
+__date__ = "15/09/2022"
 __status__ = "development"
-version = "0.1.1"
+version = "0.2.0"
 
 import logging
 logger = logging.getLogger("bm29.ispyb")
@@ -27,7 +27,7 @@ from suds.transport.https import HttpAuthenticated
 import matplotlib.pyplot
 matplotlib.use("Agg")
 from freesas.collections import RG_RESULT, RT_RESULT, StatsResult
-from freesas.plot import kratky_plot, guinier_plot, scatter_plot, density_plot
+from freesas.plot import kratky_plot, guinier_plot, scatter_plot, density_plot, hplc_plot
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -58,8 +58,11 @@ class IspybConnector:
         :param run_number: identify the run in an experiment (sample/buffer localization)
         """
         self._url = url
-        self.authentication = HttpAuthenticated(username=login, password=passwd)
-        self.client = Client(url, transport=self.authentication, cache=None)
+        try:
+            self.authentication = HttpAuthenticated(username=login, password=passwd)
+            self.client = Client(url, transport=self.authentication, cache=None)
+        except Exception as err:
+            logger.error(f"Connection to the web-service {type(err)}:{err}")
         if gallery:
             self.gallery = os.path.abspath(gallery)
         else:
@@ -249,8 +252,22 @@ class IspybConnector:
 
         :param data: a dict with all information to be saved in Ispyb
         """
+        sample = data.get("sample_name", "sample")
+        #gallery
+        gallery = os.path.join(self.gallery, f'{sample}_hplc.png')
+        chromatogram = data.get("sum_I")
+        
+        if chromatogram is not None:
+            fractions = data.get("merge_frames")
+            if fractions is not None:
+                fractions.sort()
+            hplc_plot(chromatogram, fractions,
+                      title=f"Chromatogram of {sample}", 
+                      filename=gallery, 
+                      img_format="png", )
+
         hdf5_file = data.get("hdf5_filename")
-        filename = self._mk_filename("hplc", ".", data.get("sample_name", "sample"), ext=".h5")
+        filename = self._mk_filename("hplc", ".", sample, ext=".h5")
         filename = os.path.abspath(filename)
         json_file = os.path.splitext(filename)[0] + ".json"
         with open(json_file, mode="w") as w:

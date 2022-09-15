@@ -10,9 +10,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/09/2021"
+__date__ = "15/09/2022"
 __status__ = "development"
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 
 import time
 import os
@@ -23,12 +23,12 @@ import posixpath
 from collections import namedtuple
 from urllib3.util import parse_url
 from dahu.plugin import Plugin
-from dahu.utils import fully_qualified_name
+# from dahu.utils import fully_qualified_name
 import logging
 logger = logging.getLogger("bm29.hplc")
 import numpy
 import h5py
-import pyFAI, pyFAI.azimuthalIntegrator
+import pyFAI, pyFAI.azimuthalIntegrator, pyFAI.units
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap, freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier
@@ -141,7 +141,7 @@ class HPLC(Plugin):
         "measurement_id": -1,
         "collection_id": -1
        },
-       "nmf_components = 5, 
+       "nmf_components": 5, 
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.hplc"
     } 
@@ -188,7 +188,18 @@ class HPLC(Plugin):
 
             self.log_warning("No output file provided, using " + self.output_file)
         self.nmf_components = int(self.input.get("nmf_components", self.NMF_COMP))
-        self.ispyb = Ispyb._fromdict(self.input.get("ispyb", {}))
+
+        #Manage gallery here
+        dirname = os.path.dirname(self.output_file)
+        gallery = os.path.join(dirname, "gallery")
+        if not os.path.isdir(gallery):
+            try:
+                os.makedirs(gallery)
+            except Exception as err:
+                self.log_warning(f"Unable to create dir {gallery}. {type(err)}: {err}")
+        ispydict = self.input.get("ispyb", {})
+        ispydict["gallery"] = gallery
+        self.ispyb = Ispyb._fromdict(ispydict)
 
     def process(self):
         self.create_nexus()
@@ -403,7 +414,7 @@ class HPLC(Plugin):
         fraction_grp["minimum_size"] = window = 10
 
         fractions, nfractions = search_peaks(Isum, window)
-        self.to_pyarch["merge_frames"] = numpy.zeros((nfractions, 2), dtype=numpy.float32)
+        self.to_pyarch["merge_frames"] = numpy.zeros((nfractions, 2), dtype=numpy.int32)
         self.to_pyarch["merge_I"] = numpy.zeros((nfractions, nbin), dtype=numpy.float32)
         self.to_pyarch["merge_Stdev"] = numpy.zeros((nfractions, nbin), dtype=numpy.float32)
 
