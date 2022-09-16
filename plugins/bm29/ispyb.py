@@ -117,7 +117,7 @@ class IspybConnector:
                 metadata[k] = v
         sample = data.get("sample")
         if sample:
-            metadata["SAXS_concentration"] = sample.concentration
+            metadata["SAXS_concentration"] = str(sample.concentration)
             metadata["SAXS_code"] = sample.name
             metadata["SAXS_comments"] = sample.description
             metadata["SAXS_storage_temperature"] = sample.temperature_env
@@ -141,12 +141,12 @@ class IspybConnector:
         if tomerge:
             metadata["SAXS_frames_averaged"] = f"{tomerge[0]}-{tomerge[1]}"
         
-        volume = data.get("volume")
+        volume = str(data.get("volume"))
         if volume:
             metadata["SAXS_porod_volume"] = volume 
         #Other metadata one may collect ...
         metadata["SAXS_experimentType"]= data.get("experiment_type", "")         
-
+        metadata["datasetName"] = dataset
         icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
         kwargs = {"beamline":beamline, 
                   "proposal":proposal, 
@@ -284,7 +284,7 @@ class IspybConnector:
         gnom = data.get("bift")
         subtracted = data.get("subtracted")
         basename = data.get("basename", "frame")
-        sub = self.save_curve("subtracted", subtracted, basename)
+        sub = self.save_curve("subtracted", subtracted, basename, gallery=True)
         buf = self.save_curve("buffer_avg", data.get("buffer"), basename)
         individual_buffers = []
         for i, bufi in enumerate(data.get("buffers", [])):
