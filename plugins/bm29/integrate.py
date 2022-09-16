@@ -618,9 +618,13 @@ class IntegrateMultiframe(Plugin):
     def send_to_ispyb(self):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
-            if not self.input.get("hplc_mode"):
+            if self.input.get("hplc_mode"):
+                self.to_pyarch["experiment_type"]="hplc"
+            else:
                 ispyb.send_averaged(self.to_pyarch)
-                ispyb.send_icat(data=self.to_pyarch)
+                self.to_pyarch["experiment_type"]="sample-changer"
+            self.to_pyarch["sample"] = self.sample
+            ispyb.send_icat(data=self.to_pyarch)
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
 

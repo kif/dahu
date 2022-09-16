@@ -124,7 +124,31 @@ class IspybConnector:
         tomerge = data.get("merged")
         if tomerge:
             metadata["SAXS_frames_averaged"] = f"{tomerge[0]}-{tomerge[1]}"
-        
+        #Other metadata one may collect ...
+        metadata["SAXS_experimentType"]= data.get("experiment_type", "") 
+        #SAXS_maskFile
+        #SAXS_numberFrames
+        #SAXS_timePerFrame
+        #SAXS_detector_distance
+        #SAXS_waveLength
+        #SAXS_pixelSizeX
+        #SAXS_pixelSizeY
+        #SAXS_beam_center_x
+        #SAXS_beam_center_y
+        #SAXS_normalisation
+        #SAXS_diode_currents
+        #SAXS_porod_volume
+        #
+        sample = data.get("sample")
+        if sample:
+            metadata["SAXS_concentration"] = sample.concentration
+            metadata["SAXS_code"] = sample.name
+            metadata["SAXS_comments"] = sample.description
+            metadata["SAXS_storage_temperature"] = sample.temperature_env
+            metadata["SAXS_exposure_temperature"] = sample.temperature
+            metadata["SAXS_column_type"] = sample.hplc
+            #"buffer": "description of buffer, pH, ...",
+
         icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
         kwargs = {"beamline":beamline, 
                   "proposal":proposal, 
@@ -132,7 +156,7 @@ class IspybConnector:
                   "path":path, 
                   "metadata":metadata, 
                   "raw":[raw]}
-        print(json.dumps(kwargs))
+        print("Sent to iCAT:",json.dumps(kwargs, indent=2))
         icat_client.store_processed_data(**kwargs)
 
     def send_averaged(self, data):
