@@ -141,9 +141,9 @@ class IspybConnector:
         if tomerge:
             metadata["SAXS_frames_averaged"] = f"{tomerge[0]}-{tomerge[1]}"
         
-        volume = str(data.get("volume"))
+        volume = data.get("volume")
         if volume:
-            metadata["SAXS_porod_volume"] = volume 
+            metadata["SAXS_porod_volume"] = str(volume) 
         #Other metadata one may collect ...
         metadata["SAXS_experimentType"]= data.get("experiment_type", "")         
         metadata["datasetName"] = dataset
@@ -154,9 +154,6 @@ class IspybConnector:
                   "path":path, 
                   "metadata":metadata, 
                   "raw":[raw]}
-        print("Sent to iCAT:",
-              kwargs)
-        print(json.dumps(kwargs))
         icat_client.store_processed_data(**kwargs)
 
     def send_averaged(self, data):
