@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "15/09/2022"
+__date__ = "16/09/2022"
 __status__ = "development"
 version = "0.2.0"
 
@@ -24,6 +24,7 @@ import tempfile
 import numpy
 from suds.client import Client
 from suds.transport.https import HttpAuthenticated
+from pyicat_plus.client.main import IcatClient
 import matplotlib.pyplot
 matplotlib.use("Agg")
 from freesas.collections import RG_RESULT, RT_RESULT, StatsResult
@@ -63,6 +64,7 @@ class IspybConnector:
         self.client = Client(url, transport=self.authentication, cache=None)
         # except Exception as err:
         #     logger.error(f"Connection to the web-service {type(err)}:{err}")
+
         if gallery:
             self.gallery = os.path.abspath(gallery)
         else:
@@ -75,9 +77,61 @@ class IspybConnector:
 
         self.experiment_id = experiment_id
         self.run_number = run_number
+        
 
     def __repr__(self):
         return f"Ispyb connector to {self._url}"
+
+    def send_icat(self, proposal=None, beamline=None, sample=None, dataset=None, path=None, raw=None,  data=None):
+        """
+        :param proposal: mx1324
+        :param beamline: name of the beamline
+        :param sample: sample name as registered in icat
+        :param dataset: name given by BLISS
+        :param path: directory name where processed data are staying
+        :param raw: directory name of the raw data (not the processed ones)
+        :param data: dict with all data sent to ISpyB
+        """
+        tmp = self.gallery.strip("/").split("/")
+        idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")][-1]
+        assert idx_process>5
+        if proposal is None:
+            proposal = tmp[idx_process-5]
+        if beamline is None:
+            beamline = tmp[idx_process-4]
+        if sample is None:
+            sample = tmp[idx_process-2]
+        if dataset is None:
+            dataset = tmp[idx_process-1]
+            if len(dataset) > len(sample):
+                dataset = dataset[len(sample)+1:]
+        if path is None:
+            path = os.path.dirname(self.gallery)
+        if raw is None:            
+            raw = os.path.abspath(self.gallery[:self.gallery.lower().index("process")])            
+        
+        metadata = {"definition": "SAXS",
+                    "Sample_name": sample}
+        guinier = data.get("guinier")
+        if guinier:
+            metadata["SAXS_guinier_rg"] = f"{guinier.Rg:.1f}±{guinier.sigma_Rg:.1f}"
+            metadata["SAXS_guinier_points"] = f"{guinier.start_point}-{guinier.end_point}"
+            metadata["SAXS_guinier_i0"] = f"{guinier.I0:.1f}±{guinier.sigma_I0:.1f}"
+        bift = data.get("bift")
+        if bift:
+            metadata["SAXS_rg"] =  f"{bift.Rg_avg:.1f}±{bift.Rg_std:.1f}"
+            metadata["SAXS_d_max"] = f"{bift.Dmax_avg:.1f}±{bift.Dmax_std:.1f}"
+        tomerge = data.get("to_merge")
+        if tomerge:
+            metadata["SAXS_frames_averaged"] = f"{tomerge[0]}-{tomerge[1]}"
+        
+        icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
+        icat_client.store_processed_data(beamline=beamline, 
+                                         proposal=proposal, 
+                                         dataset=dataset, 
+                                         path=path, 
+                                         metadata=metadata, 
+                                         raw=[raw])
 
     def send_averaged(self, data):
         """Send this to ISPyB and backup to PyArch
@@ -109,7 +163,11 @@ class IspybConnector:
                                         str_list(discarded),
                                         str(averaged))
         sasm = numpy.vstack((aver_data.radial, aver_data.intensity, aver_data.sigma)).T
-        scatterPlot = self.scatter_plot(sasm, basename=basename)
+        self.scatter_plot(sasm, basename=basename)
+        
+        
+        
+        
 
     def _mk_filename(self, index, path, basename="frame", ext=".dat"):
         dest = os.path.join(self.pyarch, path)

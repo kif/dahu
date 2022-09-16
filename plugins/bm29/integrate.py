@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/06/2022"
+__date__ = "16/09/2022"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -620,6 +620,7 @@ class IntegrateMultiframe(Plugin):
             ispyb = IspybConnector(*self.ispyb)
             if not self.input.get("hplc_mode"):
                 ispyb.send_averaged(self.to_pyarch)
+                ispyb.icat_client(data=self.to_pyarch)
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
 
