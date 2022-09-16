@@ -146,7 +146,8 @@ class IspybConnector:
             metadata["SAXS_comments"] = sample.description
             metadata["SAXS_storage_temperature"] = sample.temperature_env
             metadata["SAXS_exposure_temperature"] = sample.temperature
-            metadata["SAXS_column_type"] = sample.hplc
+            if sample.hplc:
+                metadata["SAXS_column_type"] = sample.hplc
             #"buffer": "description of buffer, pH, ...",
 
         icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
@@ -174,11 +175,11 @@ class IspybConnector:
         merged = data.pop("merged")
 
         aver_data = data.pop("avg")
-        averaged = self.save_curve("avg", aver_data, basename)
+        averaged = self.save_curve("avg", aver_data, basename, gallery=True)
         list_merged = list(range(*merged))
         for k, v in data.items():
             if isinstance(k, int):
-                fn = self.save_curve(k, v, basename)
+                fn = self.save_curve(k, v, basename, gallery=False)
                 if k in list_merged:
                     frames.append(fn)
                 else:
@@ -205,18 +206,20 @@ class IspybConnector:
             filename = os.path.join(dest, "%s_%s%s" % (basename, index, ext))
         return filename
 
-    def save_curve(self, index, integrate_result, basename="frame"):
+    def save_curve(self, index, integrate_result, basename="frame", gallery=False):
         """Save a  1D curve into the pyarch. Not those file do not exist outside pyarch
 
         :param: index: prefix or index value for
         :param: integrate_result: an IntegrationResult to be saved
+        :param gallery: make a copy to the gallery
         :return: the full path of the file in pyarch
         """
         pyarch_fn = self._mk_filename(index, "1d", basename)
-        gallery_fn = os.path.join(self.gallery, os.path.basename(pyarch_fn))
         sasl = numpy.vstack((integrate_result.radial, integrate_result.intensity, integrate_result.sigma))
-        numpy.savetxt(gallery_fn, sasl.T)
-        shutil.copyfile(gallery_fn, pyarch_fn)
+        numpy.savetxt(pyarch_fn, sasl.T)
+        if gallery:
+            gallery_fn = os.path.join(self.gallery, os.path.basename(pyarch_fn))
+            shutil.copyfile(pyarch_fn, gallery_fn)
         return pyarch_fn
 
     def save_bift(self, bift, basename="frame"):
