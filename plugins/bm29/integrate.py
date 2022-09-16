@@ -636,7 +636,7 @@ class IntegrateMultiframe(Plugin):
             self.to_pyarch["SAXS_pixelSizeY"] = str(self.ai.detector.pixel1)
             f2d = self.ai.getFit2D()
             self.to_pyarch["SAXS_beam_center_x"] = str(f2d["centerX"])
-            self.to_pyarch["SAXS_beam_center_x"] = str(f2d["centerY"])
+            self.to_pyarch["SAXS_beam_center_y"] = str(f2d["centerY"])
 
             ispyb.send_icat(data=self.to_pyarch)
         else:
