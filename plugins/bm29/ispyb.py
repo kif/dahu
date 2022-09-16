@@ -121,7 +121,7 @@ class IspybConnector:
         if bift:
             metadata["SAXS_rg"] =  f"{bift.Rg_avg:.1f}±{bift.Rg_std:.1f}"
             metadata["SAXS_d_max"] = f"{bift.Dmax_avg:.1f}±{bift.Dmax_std:.1f}"
-        tomerge = data.get("to_merge")
+        tomerge = data.get("merged")
         if tomerge:
             metadata["SAXS_frames_averaged"] = f"{tomerge[0]}-{tomerge[1]}"
         
