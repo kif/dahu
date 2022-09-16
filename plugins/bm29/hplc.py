@@ -940,5 +940,9 @@ class HPLC(Plugin):
         if self.ispyb and self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
             ispyb.send_hplc(self.to_pyarch)
+            self.to_pyarch["experiment_type"]="hplc"
+            self.to_pyarch["sample"] = self.juices[0].sample
+            ispyb.send_icat(data=self.to_pyarch)
+
         else:
             self.log_warning(f"Not sending to ISPyB: no valid URL in {self.ispyb}")
