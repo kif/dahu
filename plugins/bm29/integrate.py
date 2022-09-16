@@ -620,7 +620,7 @@ class IntegrateMultiframe(Plugin):
             ispyb = IspybConnector(*self.ispyb)
             if not self.input.get("hplc_mode"):
                 ispyb.send_averaged(self.to_pyarch)
-                ispyb.icat_client(data=self.to_pyarch)
+                ispyb.send_icat(data=self.to_pyarch)
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
 
