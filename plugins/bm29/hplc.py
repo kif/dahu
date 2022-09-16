@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "15/09/2022"
+__date__ = "16/09/2022"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -200,7 +200,6 @@ class HPLC(Plugin):
         ispydict = self.input.get("ispyb", {})
         ispydict["gallery"] = gallery
         self.ispyb = Ispyb._fromdict(ispydict)
-        print(self.ispyb)
 
     def process(self):
         self.create_nexus()
