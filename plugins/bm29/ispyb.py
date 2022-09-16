@@ -126,12 +126,14 @@ class IspybConnector:
             metadata["SAXS_frames_averaged"] = f"{tomerge[0]}-{tomerge[1]}"
         
         icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
-        icat_client.store_processed_data(beamline=beamline, 
-                                         proposal=proposal, 
-                                         dataset=dataset, 
-                                         path=path, 
-                                         metadata=metadata, 
-                                         raw=[raw])
+        kwargs = {"beamline":beamline, 
+                  "proposal":proposal, 
+                  "dataset":dataset, 
+                  "path":path, 
+                  "metadata":metadata, 
+                  "raw":[raw]}
+        print(json.dumps(kwargs))
+        icat_client.store_processed_data(**kwargs)
 
     def send_averaged(self, data):
         """Send this to ISPyB and backup to PyArch
