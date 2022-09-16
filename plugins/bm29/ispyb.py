@@ -169,6 +169,7 @@ class IspybConnector:
                 "merged": list of index merged
                 0,1,2,3 the different indexes for individual frames.
         """
+        data = data.copy()
         basename = data.pop("basename")
         discarded = []
         frames = []
