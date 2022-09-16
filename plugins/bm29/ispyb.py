@@ -154,7 +154,8 @@ class IspybConnector:
                   "path":path, 
                   "metadata":metadata, 
                   "raw":[raw]}
-        print("Sent to iCAT:",json.dumps(kwargs, indent=2))
+        print("Sent to iCAT:",
+              kwargs)
         icat_client.store_processed_data(**kwargs)
 
     def send_averaged(self, data):
