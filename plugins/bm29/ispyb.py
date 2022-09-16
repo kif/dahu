@@ -112,33 +112,9 @@ class IspybConnector:
         
         metadata = {"definition": "SAXS",
                     "Sample_name": sample}
-        guinier = data.get("guinier")
-        if guinier:
-            metadata["SAXS_guinier_rg"] = f"{guinier.Rg:.1f}±{guinier.sigma_Rg:.1f}"
-            metadata["SAXS_guinier_points"] = f"{guinier.start_point}-{guinier.end_point}"
-            metadata["SAXS_guinier_i0"] = f"{guinier.I0:.1f}±{guinier.sigma_I0:.1f}"
-        bift = data.get("bift")
-        if bift:
-            metadata["SAXS_rg"] =  f"{bift.Rg_avg:.1f}±{bift.Rg_std:.1f}"
-            metadata["SAXS_d_max"] = f"{bift.Dmax_avg:.1f}±{bift.Dmax_std:.1f}"
-        tomerge = data.get("merged")
-        if tomerge:
-            metadata["SAXS_frames_averaged"] = f"{tomerge[0]}-{tomerge[1]}"
-        #Other metadata one may collect ...
-        metadata["SAXS_experimentType"]= data.get("experiment_type", "") 
-        #SAXS_maskFile
-        #SAXS_numberFrames
-        #SAXS_timePerFrame
-        #SAXS_detector_distance
-        #SAXS_waveLength
-        #SAXS_pixelSizeX
-        #SAXS_pixelSizeY
-        #SAXS_beam_center_x
-        #SAXS_beam_center_y
-        #SAXS_normalisation
-        #SAXS_diode_currents
-        #SAXS_porod_volume
-        #
+        for k,v in data.items():
+            if k.startswith("SAXS_"):
+                metadata[k] = v
         sample = data.get("sample")
         if sample:
             metadata["SAXS_concentration"] = sample.concentration
@@ -149,6 +125,27 @@ class IspybConnector:
             if sample.hplc:
                 metadata["SAXS_column_type"] = sample.hplc
             #"buffer": "description of buffer, pH, ...",
+
+        guinier = data.get("guinier")
+        if guinier:
+            metadata["SAXS_guinier_rg"] = f"{guinier.Rg:.1f}±{guinier.sigma_Rg:.1f}"
+            metadata["SAXS_guinier_points"] = f"{guinier.start_point}-{guinier.end_point}"
+            metadata["SAXS_guinier_i0"] = f"{guinier.I0:.1f}±{guinier.sigma_I0:.1f}"
+
+        bift = data.get("bift")
+        if bift:
+            metadata["SAXS_rg"] =  f"{bift.Rg_avg:.1f}±{bift.Rg_std:.1f}"
+            metadata["SAXS_d_max"] = f"{bift.Dmax_avg:.1f}±{bift.Dmax_std:.1f}"
+
+        tomerge = data.get("merged")
+        if tomerge:
+            metadata["SAXS_frames_averaged"] = f"{tomerge[0]}-{tomerge[1]}"
+        
+        volume = data.get("volume")
+        if volume:
+            metadata["SAXS_porod_volume"] = volume 
+        #Other metadata one may collect ...
+        metadata["SAXS_experimentType"]= data.get("experiment_type", "")         
 
         icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
         kwargs = {"beamline":beamline, 

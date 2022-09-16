@@ -623,7 +623,21 @@ class IntegrateMultiframe(Plugin):
             else:
                 ispyb.send_averaged(self.to_pyarch)
                 self.to_pyarch["experiment_type"]="sample-changer"
+            #Some more metadata for iCat, as strings:
             self.to_pyarch["sample"] = self.sample
+            self.to_pyarch["SAXS_maskFile"] = self.mask
+            self.to_pyarch["SAXS_waveLength"] = str(self.ai.wavelength)
+            self.to_pyarch["SAXS_normalisation"] = str(self.normalization_factor)
+            self.to_pyarch["SAXS_diode_currents"] = str(self.monitor_values)
+            self.to_pyarch["SAXS_numberFrames"] = str(self.nb_frames)
+            self.to_pyarch["SAXS_timePerFrame"] = self.input.get("exposure_time", "?")
+            self.to_pyarch["SAXS_detector_distance"] = str(self.ai.dist)
+            self.to_pyarch["SAXS_pixelSizeX"] = str(self.ai.detector.pixel2)
+            self.to_pyarch["SAXS_pixelSizeY"] = str(self.ai.detector.pixel1)
+            f2d = self.ai.getFit2D()
+            self.to_pyarch["SAXS_beam_center_x"] = str(f2d["centerX"])
+            self.to_pyarch["SAXS_beam_center_x"] = str(f2d["centerY"])
+
             ispyb.send_icat(data=self.to_pyarch)
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
