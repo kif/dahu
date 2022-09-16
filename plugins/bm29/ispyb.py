@@ -113,7 +113,7 @@ class IspybConnector:
         metadata = {"definition": "SAXS",
                     "Sample_name": sample}
         for k,v in data.items():
-            if k.startswith("SAXS_"):
+            if isinstance(k, str) and k.startswith("SAXS_"):
                 metadata[k] = v
         sample = data.get("sample")
         if sample:
