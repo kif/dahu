@@ -941,6 +941,8 @@ class HPLC(Plugin):
             ispyb = IspybConnector(*self.ispyb)
             ispyb.send_hplc(self.to_pyarch)
             self.to_pyarch["experiment_type"]="hplc"
+            if "volume" in self.to_pyarch:
+                self.to_pyarch.pop("volume")
             self.to_pyarch["sample"] = self.juices[0].sample
             ispyb.send_icat(data=self.to_pyarch)
 

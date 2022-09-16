@@ -120,8 +120,8 @@ class IspybConnector:
             metadata["SAXS_concentration"] = str(sample.concentration)
             metadata["SAXS_code"] = sample.name
             metadata["SAXS_comments"] = sample.description
-            metadata["SAXS_storage_temperature"] = sample.temperature_env
-            metadata["SAXS_exposure_temperature"] = sample.temperature
+            metadata["SAXS_storage_temperature"] = str(sample.temperature_env)
+            metadata["SAXS_exposure_temperature"] = str(sample.temperature)
             if sample.hplc:
                 metadata["SAXS_column_type"] = sample.hplc
             #"buffer": "description of buffer, pH, ...",
@@ -156,6 +156,7 @@ class IspybConnector:
                   "raw":[raw]}
         print("Sent to iCAT:",
               kwargs)
+        print(json.dumps(kwargs))
         icat_client.store_processed_data(**kwargs)
 
     def send_averaged(self, data):
