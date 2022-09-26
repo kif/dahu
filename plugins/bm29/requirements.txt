@@ -8,3 +8,4 @@ hdf5plugin
 freesas
 suds-jurko
 memcache
+pyicat-plus

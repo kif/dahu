@@ -10,9 +10,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/09/2021"
+__date__ = "16/09/2022"
 __status__ = "development"
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 
 import time
 import os
@@ -23,12 +23,12 @@ import posixpath
 from collections import namedtuple
 from urllib3.util import parse_url
 from dahu.plugin import Plugin
-from dahu.utils import fully_qualified_name
+# from dahu.utils import fully_qualified_name
 import logging
 logger = logging.getLogger("bm29.hplc")
 import numpy
 import h5py
-import pyFAI, pyFAI.azimuthalIntegrator
+import pyFAI, pyFAI.azimuthalIntegrator, pyFAI.units
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap, freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier
@@ -36,6 +36,7 @@ from freesas.bift import BIFT
 from scipy.optimize import minimize
 import scipy.signal
 import scipy.ndimage
+import sklearn
 from sklearn.decomposition import NMF
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
@@ -141,7 +142,7 @@ class HPLC(Plugin):
         "measurement_id": -1,
         "collection_id": -1
        },
-       "nmf_components = 5, 
+       "nmf_components": 5, 
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.hplc"
     } 
@@ -175,10 +176,31 @@ class HPLC(Plugin):
 
         self.output_file = self.input.get("output_file")
         if not self.output_file:
-            self.output_file = os.path.commonprefix(self.input_files) + "_hplc.h5"
+            dirname, basename = os.path.split(os.path.commonprefix(self.input_files) + "_hplc.h5")
+            dirname = os.path.dirname(dirname)
+#            dirname = os.path.join(dirname, "processed")
+            dirname = os.path.join(dirname, "hplc")
+            self.output_file = os.path.join(dirname, basename)
+            if not os.path.isdir(dirname):
+                try:
+                    os.makedirs(dirname)
+                except Exception as err:
+                    self.log_warning(f"Unable to create dir {dirname}. {type(err)}: {err}")
+
             self.log_warning("No output file provided, using " + self.output_file)
         self.nmf_components = int(self.input.get("nmf_components", self.NMF_COMP))
-        self.ispyb = Ispyb._fromdict(self.input.get("ispyb", {}))
+
+        #Manage gallery here
+        dirname = os.path.dirname(self.output_file)
+        gallery = os.path.join(dirname, "gallery")
+        if not os.path.isdir(gallery):
+            try:
+                os.makedirs(gallery)
+            except Exception as err:
+                self.log_warning(f"Unable to create dir {gallery}. {type(err)}: {err}")
+        ispydict = self.input.get("ispyb", {})
+        ispydict["gallery"] = gallery
+        self.ispyb = Ispyb._fromdict(ispydict)
 
     def process(self):
         self.create_nexus()
@@ -317,40 +339,32 @@ class HPLC(Plugin):
     # Process 3: NMF matrix decomposition
         nmf_grp = nxs.new_class(entry_grp, "3_NMF", "NXprocess")
         nmf_grp["sequence_index"] = self.sequence_index()
+        nmf_grp["program"] = "sklearn.decomposition.NMF"
+        nmf_grp["version"] = sklearn.__version__
         nmf = NMF(n_components=self.nmf_components, init='nndsvd',
                   max_iter=1000)
-        W = nmf.fit_transform(I.T)
-        eigen_data = nxs.new_class(nmf_grp, "eigenvectors", "NXdata")
-        eigen_ds = eigen_data.create_dataset("W", data=numpy.ascontiguousarray(W.T, dtype=numpy.float32))
-        eigen_ds.attrs["interpretation"] = "spectrum"
-        eigen_data.attrs["signal"] = "W"
-        eigen_data.attrs["SILX_style"] = SAXS_STYLE
+        try:
+            W = nmf.fit_transform(I.T)
+        except ValueError as err:
+            self.log_warning(f"NMF data decomposition failed with: {err}")
+            nmf_grp[str(type(err))] = str(err)
+        else:
+            eigen_data = nxs.new_class(nmf_grp, "eigenvectors", "NXdata")
+            eigen_ds = eigen_data.create_dataset("W", data=numpy.ascontiguousarray(W.T, dtype=numpy.float32))
+            eigen_ds.attrs["interpretation"] = "spectrum"
+            eigen_data.attrs["signal"] = "W"
+            eigen_data.attrs["SILX_style"] = SAXS_STYLE
 
-        eigen_ds.attrs["units"] = "arbitrary"
-        eigen_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
+            eigen_ds.attrs["units"] = "arbitrary"
+            eigen_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
 
-        H = nmf.components_
-        chroma_data = nxs.new_class(nmf_grp, "chromatogram", "NXdata")
-        chroma_ds = chroma_data.create_dataset("H", data=numpy.ascontiguousarray(H, dtype=numpy.float32))
-        chroma_ds.attrs["interpretation"] = "spectrum"
-        chroma_data.attrs["signal"] = "H"
-        chroma_data.attrs["SILX_style"] = NORMAL_STYLE
-        nmf_grp.attrs["default"] = chroma_data.name
-        # Background obtained from NMF is not as good as the one obtained from SVD ...
-        # quantiles = (0.1, 0.6)  # assume weakest diffracting are background keep 10-40%
-        # background = W[:, 0] * (numpy.sort(H[0])[int(nframes * quantiles[0]): int(nframes * quantiles[-1])]).mean()
-        # bg_data = nxs.new_class(nmf_grp, "background", "NXdata")
-        # bg_data.attrs["signal"] = "I"
-        # bg_data.attrs["SILX_style"] = SAXS_STYLE
-        # bg_data.attrs["axes"] = radial_unit
-        # bg_ds = bg_data.create_dataset("I", data=numpy.ascontiguousarray(background, dtype=numpy.float32))
-        # bg_ds.attrs["interpretation"] = "spectrum"
-        # bg_data.attrs["quantiles"] = quantiles
-        # bg_q_ds = bg_data.create_dataset(radial_unit,
-        #                                  data=numpy.ascontiguousarray(q, dtype=numpy.float32))
-        # bg_q_ds.attrs["units"] = unit_name
-        # radius_unit = "nm" if "nm" in unit_name else "Å"
-        # bg_q_ds.attrs["long_name"] = f"Scattering vector q ({radius_unit}⁻¹)"
+            H = nmf.components_
+            chroma_data = nxs.new_class(nmf_grp, "chromatogram", "NXdata")
+            chroma_ds = chroma_data.create_dataset("H", data=numpy.ascontiguousarray(H, dtype=numpy.float32))
+            chroma_ds.attrs["interpretation"] = "spectrum"
+            chroma_data.attrs["signal"] = "H"
+            chroma_data.attrs["SILX_style"] = NORMAL_STYLE
+            nmf_grp.attrs["default"] = chroma_data.name
 
     # Process 5: Background estimation
         bg_grp = nxs.new_class(entry_grp, "4_background", "NXprocess")
@@ -393,7 +407,7 @@ class HPLC(Plugin):
         fraction_grp["minimum_size"] = window = 10
 
         fractions, nfractions = search_peaks(Isum, window)
-        self.to_pyarch["merge_frames"] = numpy.zeros((nfractions, 2), dtype=numpy.float32)
+        self.to_pyarch["merge_frames"] = numpy.zeros((nfractions, 2), dtype=numpy.int32)
         self.to_pyarch["merge_I"] = numpy.zeros((nfractions, nbin), dtype=numpy.float32)
         self.to_pyarch["merge_Stdev"] = numpy.zeros((nfractions, nbin), dtype=numpy.float32)
 
@@ -919,5 +933,11 @@ class HPLC(Plugin):
         if self.ispyb and self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
             ispyb.send_hplc(self.to_pyarch)
+            self.to_pyarch["experiment_type"]="hplc"
+            if "volume" in self.to_pyarch:
+                self.to_pyarch.pop("volume")
+            self.to_pyarch["sample"] = self.juices[0].sample
+            ispyb.send_icat(data=self.to_pyarch)
+
         else:
             self.log_warning(f"Not sending to ISPyB: no valid URL in {self.ispyb}")

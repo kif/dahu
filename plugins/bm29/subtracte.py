@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/04/2022"
+__date__ = "16/09/2022"
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -106,11 +106,30 @@ class SubtractBuffer(Plugin):
         if self.output_file is None:
             lst = list(os.path.splitext(self.sample_file))
             lst.insert(1, "-sub")
-            self.output_file = "".join(lst)
-            self.log_warning(f"No output file provided, using: {self.output_file}")
+            dirname, basename = os.path.split("".join(lst))
+            dirname = os.path.dirname(dirname)
+#            dirname = os.path.join(dirname, "processed")
+            dirname = os.path.join(dirname, "subtract")
+            self.output_file = os.path.join(dirname, basename)
+            if not os.path.isdir(dirname):
+                try:
+                    os.makedirs(dirname)
+                except Exception as err:
+                    self.log_warning(f"Unable to create dir {dirname}. {type(err)}: {err}")
+
         self.buffer_files = [os.path.abspath(fn) for fn in self.input.get("buffer_files", [])
                              if os.path.exists(fn)]
-        self.ispyb = Ispyb._fromdict(self.input.get("ispyb", {}))
+        #Manage gallery here
+        dirname = os.path.dirname(self.output_file)
+        gallery = os.path.join(dirname, "gallery")
+        if not os.path.isdir(gallery):
+            try:
+                os.makedirs(gallery)
+            except Exception as err:
+                self.log_warning(f"Unable to create dir {gallery}. {type(err)}: {err}")
+        ispydict = self.input.get("ispyb", {})
+        ispydict["gallery"] = gallery
+        self.ispyb = Ispyb._fromdict(ispydict)
 
     def teardown(self):
         Plugin.teardown(self)
@@ -712,6 +731,9 @@ class SubtractBuffer(Plugin):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
             ispyb.send_subtracted(self.to_pyarch)
+            self.to_pyarch["experiment_type"]="sample-changer"
+            self.to_pyarch["sample"] = self.sample_juice.sample
+            ispyb.send_icat(data=self.to_pyarch)
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
 

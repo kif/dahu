@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/06/2022"
+__date__ = "16/09/2022"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -132,7 +132,6 @@ class IntegrateMultiframe(Plugin):
         logger.debug("IntegrateMultiframe.setup")
         Plugin.setup(self, kwargs)
 
-        self.ispyb = Ispyb._fromdict(self.input.get("ispyb", {}))
         self.sample = Sample._fromdict(self.input.get("sample", {}))
         if not self.sample.name:
             self.sample = Sample("Unknown sample", *self.sample[1:])
@@ -151,8 +150,30 @@ class IntegrateMultiframe(Plugin):
         if self.output_file is None:
             lst = list(os.path.splitext(self.input_file))
             lst.insert(1, "-integrate")
-            self.output_file = "".join(lst)
+            dirname, basename = os.path.split("".join(lst))
+            dirname = os.path.dirname(dirname)
+            dirname = os.path.join(dirname, "processed")
+            dirname = os.path.join(dirname, "integrate")
+            self.output_file = os.path.join(dirname, basename)
+            if not os.path.isdir(dirname):
+                try:
+                    os.makedirs(dirname)
+                except Exception as err:
+                    self.log_warning(f"Unable to create dir {dirname}. {type(err)}: {err}")
+
             self.log_warning(f"No output file provided, using: {self.output_file}")
+        #Manage gallery here
+        dirname = os.path.dirname(self.output_file)
+        gallery = os.path.join(dirname, "gallery")
+        if not os.path.isdir(gallery):
+            try:
+                os.makedirs(gallery)
+            except Exception as err:
+                self.log_warning(f"Unable to create dir {gallery}. {type(err)}: {err}")
+        ispydict = self.input.get("ispyb", {})
+        ispydict["gallery"] = gallery
+        self.ispyb = Ispyb._fromdict(ispydict)
+
         self.nb_frames = len(self.input.get("frame_ids", []))
         self.npt = self.input.get("npt", self.npt)
         self.unit = pyFAI.units.to_unit(self.input.get("unit", self.unit))
@@ -212,8 +233,7 @@ class IntegrateMultiframe(Plugin):
         self.ai = get_integrator(KeyCache(self.npt, self.unit, self.poni, self.mask, self.energy))
         self.create_nexus()
         self.output["memcached"] = self.send_to_memcached()
-        if not self.input.get("hplc_mode"):
-            self.send_to_ispyb()
+        self.send_to_ispyb()
 
     def wait_file(self, filename, timeout=None):
         """Wait for a file to appear on a filesystem
@@ -598,7 +618,28 @@ class IntegrateMultiframe(Plugin):
     def send_to_ispyb(self):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
-            ispyb.send_averaged(self.to_pyarch)
+            if self.input.get("hplc_mode"):
+                self.to_pyarch["experiment_type"]="hplc"
+            else:
+                ispyb.send_averaged(self.to_pyarch)
+                self.to_pyarch["experiment_type"]="sample-changer"
+            #Some more metadata for iCat, as strings:
+            self.to_pyarch["sample"] = self.sample
+            self.to_pyarch["SAXS_maskFile"] = self.mask
+            self.to_pyarch["SAXS_waveLength"] = str(self.ai.wavelength)
+            self.to_pyarch["SAXS_normalisation"] = str(self.normalization_factor)
+            self.to_pyarch["SAXS_diode_currents"] = str(self.monitor_values)
+            self.to_pyarch["SAXS_numberFrames"] = str(self.nb_frames)
+            self.to_pyarch["SAXS_timePerFrame"] = self.input.get("exposure_time", "?")
+            self.to_pyarch["SAXS_detector_distance"] = str(self.ai.dist)
+            self.to_pyarch["SAXS_pixelSizeX"] = str(self.ai.detector.pixel2)
+            self.to_pyarch["SAXS_pixelSizeY"] = str(self.ai.detector.pixel1)
+            f2d = self.ai.getFit2D()
+            self.to_pyarch["SAXS_beam_center_x"] = str(f2d["centerX"])
+            self.to_pyarch["SAXS_beam_center_y"] = str(f2d["centerY"])
+
+            icat = ispyb.send_icat(data=self.to_pyarch)
+            self.log_warning("Sent to icat: " + str(icat))
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
 
