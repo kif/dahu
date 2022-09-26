@@ -36,6 +36,7 @@ from freesas.bift import BIFT
 from scipy.optimize import minimize
 import scipy.signal
 import scipy.ndimage
+import sklearn
 from sklearn.decomposition import NMF
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
@@ -338,40 +339,32 @@ class HPLC(Plugin):
     # Process 3: NMF matrix decomposition
         nmf_grp = nxs.new_class(entry_grp, "3_NMF", "NXprocess")
         nmf_grp["sequence_index"] = self.sequence_index()
+        nmf_grp["program"] = "sklearn.decomposition.NMF"
+        nmf_grp["version"] = sklearn.__version__
         nmf = NMF(n_components=self.nmf_components, init='nndsvd',
                   max_iter=1000)
-        W = nmf.fit_transform(I.T)
-        eigen_data = nxs.new_class(nmf_grp, "eigenvectors", "NXdata")
-        eigen_ds = eigen_data.create_dataset("W", data=numpy.ascontiguousarray(W.T, dtype=numpy.float32))
-        eigen_ds.attrs["interpretation"] = "spectrum"
-        eigen_data.attrs["signal"] = "W"
-        eigen_data.attrs["SILX_style"] = SAXS_STYLE
+        try:
+            W = nmf.fit_transform(I.T)
+        except ValueError as err:
+            self.log_warning(f"NMF data decomposition failed with: {err}")
+            nmf_grp[str(type(err))] = str(err)
+        else:
+            eigen_data = nxs.new_class(nmf_grp, "eigenvectors", "NXdata")
+            eigen_ds = eigen_data.create_dataset("W", data=numpy.ascontiguousarray(W.T, dtype=numpy.float32))
+            eigen_ds.attrs["interpretation"] = "spectrum"
+            eigen_data.attrs["signal"] = "W"
+            eigen_data.attrs["SILX_style"] = SAXS_STYLE
 
-        eigen_ds.attrs["units"] = "arbitrary"
-        eigen_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
+            eigen_ds.attrs["units"] = "arbitrary"
+            eigen_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
 
-        H = nmf.components_
-        chroma_data = nxs.new_class(nmf_grp, "chromatogram", "NXdata")
-        chroma_ds = chroma_data.create_dataset("H", data=numpy.ascontiguousarray(H, dtype=numpy.float32))
-        chroma_ds.attrs["interpretation"] = "spectrum"
-        chroma_data.attrs["signal"] = "H"
-        chroma_data.attrs["SILX_style"] = NORMAL_STYLE
-        nmf_grp.attrs["default"] = chroma_data.name
-        # Background obtained from NMF is not as good as the one obtained from SVD ...
-        # quantiles = (0.1, 0.6)  # assume weakest diffracting are background keep 10-40%
-        # background = W[:, 0] * (numpy.sort(H[0])[int(nframes * quantiles[0]): int(nframes * quantiles[-1])]).mean()
-        # bg_data = nxs.new_class(nmf_grp, "background", "NXdata")
-        # bg_data.attrs["signal"] = "I"
-        # bg_data.attrs["SILX_style"] = SAXS_STYLE
-        # bg_data.attrs["axes"] = radial_unit
-        # bg_ds = bg_data.create_dataset("I", data=numpy.ascontiguousarray(background, dtype=numpy.float32))
-        # bg_ds.attrs["interpretation"] = "spectrum"
-        # bg_data.attrs["quantiles"] = quantiles
-        # bg_q_ds = bg_data.create_dataset(radial_unit,
-        #                                  data=numpy.ascontiguousarray(q, dtype=numpy.float32))
-        # bg_q_ds.attrs["units"] = unit_name
-        # radius_unit = "nm" if "nm" in unit_name else "Å"
-        # bg_q_ds.attrs["long_name"] = f"Scattering vector q ({radius_unit}⁻¹)"
+            H = nmf.components_
+            chroma_data = nxs.new_class(nmf_grp, "chromatogram", "NXdata")
+            chroma_ds = chroma_data.create_dataset("H", data=numpy.ascontiguousarray(H, dtype=numpy.float32))
+            chroma_ds.attrs["interpretation"] = "spectrum"
+            chroma_data.attrs["signal"] = "H"
+            chroma_data.attrs["SILX_style"] = NORMAL_STYLE
+            nmf_grp.attrs["default"] = chroma_data.name
 
     # Process 5: Background estimation
         bg_grp = nxs.new_class(entry_grp, "4_background", "NXprocess")
