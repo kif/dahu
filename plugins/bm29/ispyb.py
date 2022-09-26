@@ -102,9 +102,9 @@ class IspybConnector:
         if sample is None:
             sample = tmp[idx_process-2]
         if dataset is None:
-            dataset = tmp[idx_process-1]
-            if len(dataset) > len(sample):
-                dataset = dataset[len(sample)+1:]
+            dataset = tmp[idx_process+1]
+            #f len(dataset) > len(sample):
+            #   dataset = dataset[len(sample)+1:]
         if path is None:
             path = os.path.dirname(self.gallery)
         if raw is None:            
@@ -155,6 +155,7 @@ class IspybConnector:
                   "metadata":metadata, 
                   "raw":[raw]}
         icat_client.store_processed_data(**kwargs)
+        return kwargs
 
     def send_averaged(self, data):
         """Send this to ISPyB and backup to PyArch
