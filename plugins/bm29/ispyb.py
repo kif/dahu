@@ -67,6 +67,11 @@ class IspybConnector:
 
         if gallery:
             self.gallery = os.path.abspath(gallery)
+            if not os.path.isdir(self.gallery):
+                try:
+                   os.makedirs(self.gallery)
+                except Exception as err:
+                    logger.warning(f"Unable to create dir {self.gallery}. {type(err)}: {err}")
         else:
             logger.error("No `gallery` destination provided ... things will go wrong")
             self.gallery = tempfile.gettempdir()
@@ -103,8 +108,6 @@ class IspybConnector:
             sample = tmp[idx_process-2]
         if dataset is None:
             dataset = tmp[idx_process+1]
-            #f len(dataset) > len(sample):
-            #   dataset = dataset[len(sample)+1:]
         if path is None:
             path = os.path.dirname(self.gallery)
         if raw is None:            
@@ -189,15 +192,15 @@ class IspybConnector:
                                         str(averaged))
         sasm = numpy.vstack((aver_data.radial, aver_data.intensity, aver_data.sigma)).T
         self.scatter_plot(sasm, basename=basename)
-        
-        
-        
-        
 
     def _mk_filename(self, index, path, basename="frame", ext=".dat"):
         dest = os.path.join(self.pyarch, path)
         if not os.path.isdir(dest):
-            os.makedirs(dest)
+            try:
+                os.makedirs(dest)
+            except Exception as err:
+                logger.error("Unable to create directory %s: %s: %s", dest, type(err), err)
+        os.stat(dest) #this is to enforce the mounting of the directory
         if isinstance(index, int):
             filename = os.path.join(dest, "%s_%04d%s" % (basename, index, ext))
         else:
@@ -361,3 +364,4 @@ class IspybConnector:
         self.client.service.storeHPLC(str(self.experiment_id),
                                       filename,
                                       json_file)
+
