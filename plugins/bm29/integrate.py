@@ -639,7 +639,7 @@ class IntegrateMultiframe(Plugin):
             self.to_pyarch["SAXS_beam_center_y"] = str(f2d["centerY"])
 
             icat = ispyb.send_icat(data=self.to_pyarch)
-            self.log_warning("Sent to icat: " + str(icat))
+            #self.log_warning("Sent to icat: " + str(icat))
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
 

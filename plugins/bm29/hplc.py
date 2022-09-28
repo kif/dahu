@@ -938,6 +938,5 @@ class HPLC(Plugin):
                 self.to_pyarch.pop("volume")
             self.to_pyarch["sample"] = self.juices[0].sample
             ispyb.send_icat(data=self.to_pyarch)
-
         else:
             self.log_warning(f"Not sending to ISPyB: no valid URL in {self.ispyb}")
