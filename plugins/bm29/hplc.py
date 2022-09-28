@@ -347,7 +347,7 @@ class HPLC(Plugin):
             W = nmf.fit_transform(I.T)
         except ValueError as err:
             self.log_warning(f"NMF data decomposition failed with: {err}")
-            nmf_grp[str(type(err))] = str(err)
+            nmf_grp[err.__class__.__name__] = str(err)
         else:
             eigen_data = nxs.new_class(nmf_grp, "eigenvectors", "NXdata")
             eigen_ds = eigen_data.create_dataset("W", data=numpy.ascontiguousarray(W.T, dtype=numpy.float32))
