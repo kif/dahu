@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/09/2022"
+__date__ = "03/10/2022"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -311,7 +311,7 @@ class IntegrateMultiframe(Plugin):
         nrj_ds.attrs["units"] = "keV"
         nrj_ds.attrs["resolution"] = 0.014
 
-        detector_grp = nxs.new_class(instrument_grp, str(self.ai.detector), "NXdetector")
+        detector_grp = nxs.new_class(instrument_grp, self.ai.detector.name, "NXdetector")
         dist_ds = detector_grp.create_dataset("distance", data=self.ai.dist)
         dist_ds.attrs["units"] = "m"
         xpix_ds = detector_grp.create_dataset("x_pixel_size", data=self.ai.pixel2)
