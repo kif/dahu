@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/09/2022"
+__date__ = "05/10/2022"
 __status__ = "development"
 version = "0.2.0"
 
@@ -342,7 +342,7 @@ class IspybConnector:
         """
         sample = data.get("sample_name", "sample")
         #gallery
-        gallery = os.path.join(self.gallery, f'{sample}_hplc.png')
+        gallery = os.path.join(self.gallery, 'chromatogram.png')
         chromatogram = data.get("sum_I")
         
         if chromatogram is not None:
