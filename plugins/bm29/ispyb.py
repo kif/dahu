@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "05/10/2022"
+__date__ = "03/11/2022"
 __status__ = "development"
-version = "0.2.0"
+version = "0.2.1"
 
 import logging
 logger = logging.getLogger("bm29.ispyb")
@@ -22,9 +22,18 @@ import shutil
 import json
 import tempfile
 import numpy
-from suds.client import Client
-from suds.transport.https import HttpAuthenticated
-from pyicat_plus.client.main import IcatClient
+try:
+    from suds.client import Client
+    from suds.transport.https import HttpAuthenticated
+except ImportError:
+    print("ISPyB connection will no work")
+    Client = HttpAuthenticated = None
+try:
+    from pyicat_plus.client.main import IcatClient
+except ImportError:
+    print("iCat connection will no work")
+    IcatClient = None
+
 import matplotlib.pyplot
 matplotlib.use("Agg")
 from freesas.collections import RG_RESULT, RT_RESULT, StatsResult

@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/09/2022"
+__date__ = "03/11/2022"
 __status__ = "development"
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 import os
 import json
@@ -58,7 +58,7 @@ class SubtractBuffer(Plugin):
     {
       "buffer_files": ["buffer_001.h5", "buffer_002.h5"],
       "sample_file": "sample.h5",
-      "output_file": "subtracted.h5"
+      "output_file": "subtracted.h5",
       "fidelity": 0.001,
       "ispyb": {
         "url": "http://ispyb.esrf.fr:1234",
@@ -291,8 +291,9 @@ class SubtractBuffer(Plugin):
         sum_signal = sum(self.buffer_juices[i].normalization * self.buffer_juices[i].signal2d for i in to_merge_idx)
         sum_variance = sum((self.buffer_juices[i].normalization * self.buffer_juices[i].error2d) ** 2 for i in to_merge_idx)
         sum_norm = sum(self.buffer_juices[i].normalization for i in to_merge_idx)
+        sum_norm2 = sum(self.buffer_juices[i].normalization**2 for i in to_merge_idx)
         buffer_average = sum_signal / sum_norm
-        buffer_variance = sum_variance / sum_norm
+        buffer_variance = sum_variance / sum_norm2
         sample_average = self.sample_juice.signal2d
         sample_variance = self.sample_juice.error2d ** 2
         sub_average = sample_average - buffer_average
