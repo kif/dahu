@@ -145,7 +145,7 @@ class IspybConnector:
         if volume:
             metadata["SAXS_porod_volume"] = str(volume) 
         #Other metadata one may collect ...
-        metadata["SAXS_experimentType"]= data.get("experiment_type", "")         
+        metadata["SAXS_experiment_type"]= data.get("experiment_type", "UNKNOWN")
         metadata["datasetName"] = dataset
         icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
         kwargs = {"beamline":beamline, 
