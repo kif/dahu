@@ -732,7 +732,7 @@ class SubtractBuffer(Plugin):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
             ispyb.send_subtracted(self.to_pyarch)
-            self.to_pyarch["experiment_type"]="sample-changer"
+            self.to_pyarch["experiment_type"]="sampleChanger"
             self.to_pyarch["sample"] = self.sample_juice.sample
             ispyb.send_icat(data=self.to_pyarch)
         else:
