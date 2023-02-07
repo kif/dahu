@@ -148,7 +148,16 @@ def create_rsync_file(filename, folder="esp"):
     :param folder: name of the folder to create. If None, just return the path of the script
     :return: the path of the crysalis directory  
     """
-    dest_dir = "/".join(filename.split("/")[3:-1])  # strip /data/visitor ... filename.h5
+    splitted = filename.split("/")
+    if "raw" in splitted:
+        splitted[splitted.index("raw")] = "processed"
+        destname =  "/".join(splitted)
+        ddir = os.path.dirname(destname)
+        if not os.path.isdir(ddir):
+            os.makedirs(ddir)
+    else:
+        destname = filename
+    dest_dir = "/".join(splitted[3:-1])  # strip /data/visitor ... filename.h5
     dest_dir = os.path.join(WORKDIR, dest_dir)
     script = os.path.join(dest_dir, "sync")
     if folder is None:
@@ -162,10 +171,10 @@ def create_rsync_file(filename, folder="esp"):
 
     if os.path.exists(script):
         with open(script, "a") as source:
-            source.write(os.linesep.join([f'rsync -avx {os.path.join(dest_dir, folder)} {os.path.dirname(filename)}', ""]))
+            source.write(os.linesep.join([f'rsync -avx {os.path.join(dest_dir, folder)} {os.path.dirname(destname)}', ""]))
     else:
         with open(script, "w") as source:
-            source.write(os.linesep.join(['#!/bin/sh', f'rsync -avx {os.path.join(dest_dir, folder)} {os.path.dirname(filename)}', '']))
+            source.write(os.linesep.join(['#!/bin/sh', f'rsync -avx {os.path.join(dest_dir, folder)} {os.path.dirname(destname)}', '']))
         os.chmod(script, 0o755)
 
     return crysalis_dir
@@ -279,6 +288,18 @@ def fabio_conversion(file_path,
     results = []
     filename = os.path.join(file_path, scan_number, 'eiger_????.h5')
     files = sorted(glob.glob(filename))
+    file_path = file_path.rstrip("/")
+
+    splitted = file_path.split("/")
+    dset_name = splitted[-1]
+    if "raw" in splitted:
+        raw_pos = splitted.index("raw")
+        splitted[raw_pos] = "processed"
+        splitted.append(scan_number)
+        splitted.insert(0, "/")
+        dest_dir = os.path.join(*splitted)    
+    else:
+        dest_dir = os.path.join(file_path, scan_number)
 
     if len(files) == 0:
         raise RuntimeError(f"No such file {filename}")
@@ -286,15 +307,16 @@ def fabio_conversion(file_path,
     for idx_file, filename in enumerate(files):
         img_data_fabio = fabio.open(filename)
         basename = folder if len(files) == 1 else f"{folder}_{idx_file+1:04d}"
-        dest_dir = os.path.join(file_path, scan_number, basename)
-        if not os.path.exists(dest_dir):
-            os.makedirs(dest_dir)
+
+        dest_dir2 = os.path.join(dest_dir, basename)
+        if not os.path.exists(dest_dir2):
+            os.makedirs(dest_dir2)
         for i, frame in enumerate(img_data_fabio):
             conv = frame.convert(fabioimage)
             data = conv.data.astype('int32')
             data[data < 0 ] = 0
             conv.data = data
-            output = os.path.join(dest_dir, f"frame_{i+1:04d}.{extension}")
+            output = os.path.join(dest_dir2, f"{dset_name}_{i+1:04d}.{extension}")
             conv.write(output)
             results.append(output)
 
@@ -418,7 +440,7 @@ class Average(Plugin):
 
         results = {}
         outputs = []
-        basename = 'sum.edf'
+        basename = 'sum.h5'
         prefix = basename.split('.')[0]
 
         if not self.input:
@@ -436,16 +458,25 @@ class Average(Plugin):
             if output_directory:
                 dest_dir = output_directory
                 sample, dataset = file_path.strip().strip("/").split("/")[-2:]
-                tmpname = basename if len(filenames) == 1 else f'{prefix}_{idx_h5+1:04d}.edf'
+                tmpname = basename if len(filenames) == 1 else f'{prefix}_{idx_h5+1:04d}.h5'
                 basename = "_".join((sample, dataset, scan_number, tmpname))
             else:
                 tmpname = prefix if len(filenames) == 1 else f'{prefix}_{idx_h5+1:04d}'
-                dest_dir = os.path.join(file_path, scan_number, tmpname)
+                splitted = file_path.split("/")
+                if "raw" in splitted:
+                    raw_pos = splitted.index("raw")
+                    splitted[raw_pos] = "processed"
+                    splitted.append(scan_number)
+                    splitted.append(tmpname)
+                    splitted.insert(0, "/")
+                    dest_dir = os.path.join(*splitted)    
+                else:
+                    dest_dir = os.path.join(file_path, scan_number, tmpname)
             if not os.path.exists(dest_dir):
                 os.makedirs(dest_dir)
 
             output = os.path.join(dest_dir, basename)
-            command = ['pyFAI-average', '-m', 'sum', '-o', output, filename]
+            command = ['pyFAI-average', '-m', 'sum', '-F', 'lima', '-o', output, filename]
             results[filename] = unpack_processed(subprocess.run(command, capture_output=True, check=False))
             outputs.append(output)
         self.output["output_filename"] = outputs
