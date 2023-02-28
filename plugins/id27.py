@@ -10,10 +10,14 @@ import re
 import glob
 import subprocess
 import fabio
+import pyFAI
 from dahu.plugin import Plugin
 from dahu.factory import register
 
 logger = logging.getLogger("id27")
+
+RAW = "raw"
+PROCESSED = "processed"
 
 try:
     from cryio import crysalis
@@ -106,6 +110,7 @@ def unpack_processed(completed_process):
 
 
 def createCrysalis(scans, crysalis_dir, basename):
+    """Unused"""
     runHeader = crysalis.RunHeader(basename.encode(), crysalis_dir.encode(), 1)
     runname = os.path.join(crysalis_dir, basename)
     runFile = []
@@ -149,8 +154,8 @@ def create_rsync_file(filename, folder="esp"):
     :return: the path of the crysalis directory  
     """
     splitted = filename.split("/")
-    if "raw" in splitted:
-        splitted[splitted.index("raw")] = "processed"
+    if RAW in splitted:
+        splitted[splitted.index(RAW)] = PROCESSED
         destname =  "/".join(splitted)
         ddir = os.path.dirname(destname)
         if not os.path.isdir(ddir):
@@ -188,6 +193,7 @@ def crysalis_conversion(wave_length=None, distance=None,
                         file_source_path=None,
                         scan_name=None,
                         calibration_path="", calibration_name="",
+                        update_mask=False, update_par=False,
                         **kwargs):
     """Run the `eiger2crysalis` script synchronously
      
@@ -215,13 +221,17 @@ def crysalis_conversion(wave_length=None, distance=None,
                   f"--omega={omega_start}+{omega_step}*index",
                   file_source_path,
                   "-o", os.path.join(crysalis_dir, f'{scan_name}_1_''{index}.esperanto')]
+    if update_mask:
+        parameters.append("--calc-mask")
     logger.info('starts with parameters: %s', parameters)
 
     crysalis_files, scans = crysalis_config(calibration_path, calibration_name, number_of_points, omega_start, omega_step, center, distance, wave_length, exposure_time)
 
-    copy_set_ccd(crysalis_files, crysalis_dir, scan_name)
-    createCrysalis(scans, crysalis_dir, scan_name)
-    create_par_file(crysalis_files, crysalis_dir, scan_name)
+    if not update_mask:
+        copy_set_ccd(crysalis_files, crysalis_dir, scan_name)
+    #createCrysalis(scans, crysalis_dir, scan_name) # .run file already implemented in eiger2crysalis
+    if not update_par:
+        create_par_file(crysalis_files, crysalis_dir, scan_name)
 
     return subprocess.run(parameters, capture_output=True, check=False)
 
@@ -292,9 +302,9 @@ def fabio_conversion(file_path,
 
     splitted = file_path.split("/")
     dset_name = splitted[-1]
-    if "raw" in splitted:
-        raw_pos = splitted.index("raw")
-        splitted[raw_pos] = "processed"
+    if RAW in splitted:
+        raw_pos = splitted.index(RAW)
+        splitted[raw_pos] = PROCESSED
         splitted.append(scan_number)
         splitted.insert(0, "/")
         dest_dir = os.path.join(*splitted)    
@@ -345,7 +355,9 @@ class CrysalisConversion(Plugin):
  "scan_name": "scan0001",
  "calibration_path": "/data/id27/inhouse/blc13357/id27/Vanadinite_Weck/Vanadinite_Weck_0001/scan0001/esp",
  "calibration_name":"scan0001",
- "plugin_name": "id27.CrysalisConversion"
+ "plugin_name": "id27.CrysalisConversion",
+ "update_mask": 0,
+ "update_par": 0
 }    
     """
 
@@ -463,9 +475,9 @@ class Average(Plugin):
             else:
                 tmpname = prefix if len(filenames) == 1 else f'{prefix}_{idx_h5+1:04d}'
                 splitted = file_path.split("/")
-                if "raw" in splitted:
-                    raw_pos = splitted.index("raw")
-                    splitted[raw_pos] = "processed"
+                if RAW in splitted:
+                    raw_pos = splitted.index(RAW)
+                    splitted[raw_pos] = PROCESSED
                     splitted.append(scan_number)
                     splitted.append(tmpname)
                     splitted.insert(0, "/")
@@ -508,3 +520,61 @@ class XdsConversion(Plugin):
                          fabioimage="cbfimage",
                          extension="cbf")
         self.output["output"] = results
+
+@register
+class DiffMap(Plugin):
+    """
+    This plugin performs the azimuthal integration of a set of data and populate a diffraction map
+
+    Typical JSON input structure:
+    { "ponifile": "/tmp/geometry.poni",
+      "maskfile": "/tmp/mask.msk",
+      "npt": 2000,
+      "file_path": "/data/id27/inhouse/some/path",
+      "scan_number": "scan_0001"
+      "slow_scan" = 10,
+      "fast_scan" = 10
+    }
+    """
+    def process(self):
+        Plugin.process(self)
+        if not self.input:
+            logger.error("input is empty")
+
+        file_path = self.input["file_path"]
+        scan_number = self.input["scan_number"]
+        dest_dir = file_path.replace(RAW,PROCESSED) 
+        filename = os.path.join(file_path, scan_number, 'eiger_????.h5')
+        files = sorted(glob.glob(filename))
+        if not os.path.isdir(dest_dir):
+            os.makedirs(dest_dir)
+        config = os.path.join(dest_dir, "diff_map.json")
+        dest = os.path.join(dest_dir, "diff_map.h5")
+        results = {}
+        param = {}
+        ai = pyFAI.load(self.input.get("ponifile")).get_config()
+        if "maskfile" in self.input:
+            ai["do_mask"] = True
+            ai["mask_file"] = self.input["maskfile"]
+        # some constants hardcoded for the beamline:
+        ai["unit"] = "q_nm^-1"
+        ai["do_polarization"] = True,
+        ai["polarization_factor"]= 0.99
+        ai["do_solid_angle"]= True
+        ai["error_model"]="poisson"
+	ai["application"] = "pyfai-integrate"
+        ai["version"] = 3
+        ai["method"] =[ "full", "csr", "opencl" ]
+        ai["opencl_device"] = "gpu"
+        param["ai"] = ai
+        param["experiment_title"] = os.path.join(os.path.basename(file_path),scan_number)
+        param["fast_motor_name": "fast",
+        param["slow_motor_name": "slow",
+        param["fast_motor_points"] = self.input.get("fast_scan" ,1)
+        param["slow_motor_points"] = self.input.get("slow_scan" ,1)
+        param["offset"]: None
+        param["output_file"] = dest
+        param["input_data"] =  [ files ]
+        with open(config, "w") as w:
+            w.write(json.dumps(param, indent=2))
+        results["config"] = config
