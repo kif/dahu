@@ -2,6 +2,7 @@
 """
 
 import os
+import sys
 import shutil
 import collections
 import io
@@ -18,13 +19,14 @@ logger = logging.getLogger("id27")
 
 RAW = "raw"
 PROCESSED = "processed"
+WORKDIR = "/scratch/shared"
+PREFIX = os.path.dirname(sys.executable) #where there scripts are
 
 try:
     from cryio import crysalis
 except ImportError:
     crysalis = None
 
-WORKDIR = "/scratch/shared"
 
 
 def crysalis_config(calibration_path, calibration_name, number_of_frames,
@@ -52,32 +54,31 @@ def crysalis_config(calibration_path, calibration_name, number_of_frames,
         'ccd_file': '/users/opid27/file_conversion/scan0001.ccd'}
 
     scans = collections.OrderedDict()
-    scans[0] = [{
-            'count': number_of_frames,
-            'omega': 0,
-            'omega_start': omega_start,
-            'omega_end': omega_start + number_of_frames * omega_step,
-            'pixel_size': 0.075,
-            'omega_runs': None,
-            'theta': 0,
-            'kappa': 0,
-            'phi': 0,
-            'domega': omega_step,
-            'dtheta': 0,
-            'dkappa': 0,
-            'dphi': 0,
-            'center_x': center[0],
-            'center_y': center[1],
-            'alpha': 50,
-            'dist': distance,
-            'l1': wave_length,
-            'l2': wave_length,
-            'l12': wave_length,
-            'b': wave_length,
-            'mono': 0.99,
-            'monotype': 'SYNCHROTRON',
-            'chip': [1024, 1024],
-            'Exposure_time': exposure_time,
+    scans[0] = [{'count': number_of_frames,
+                 'omega': 0,
+                 'omega_start': omega_start,
+                 'omega_end': omega_start + number_of_frames * omega_step,
+                 'pixel_size': 0.075,
+                 'omega_runs': None,
+                 'theta': 0,
+                 'kappa': 0,
+                 'phi': 0,
+                 'domega': omega_step,
+                 'dtheta': 0,
+                 'dkappa': 0,
+                 'dphi': 0,
+                 'center_x': center[0],
+                 'center_y': center[1],
+                 'alpha': 50,
+                 'dist': distance,
+                 'l1': wave_length,
+                 'l2': wave_length,
+                 'l12': wave_length,
+                 'b': wave_length,
+                 'mono': 0.99,
+                 'monotype': 'SYNCHROTRON',
+                 'chip': [1024, 1024],
+                 'Exposure_time': exposure_time,
             }]
 
     return crysalis_files, scans
@@ -210,7 +211,7 @@ def crysalis_conversion(wave_length=None, distance=None,
                 f'file_source_path={file_source_path}\n' +
                 f'scan_name={scan_name}')
 
-    script_name = 'eiger2crysalis'
+    script_name = os.path.join(PREFIX, 'eiger2crysalis')
 
     crysalis_dir = create_rsync_file(file_source_path)
 
@@ -250,7 +251,7 @@ def crysalis_conversion_fscannd(wave_length=None,
                                 calibration_name="",
                                 **kwargs):
     assert crysalis, "cryio is not installed"
-    script_name = 'eiger2crysalis'
+    script_name = os.path.join(PREFIX, 'eiger2crysalis')
     pattern = re.compile('eiger_([0-9]+).h5')
     filenames_to_convert = glob.glob(f'{dirname}/eiger_????.h5')
     results = {}
@@ -559,22 +560,22 @@ class DiffMap(Plugin):
         # some constants hardcoded for the beamline:
         ai["unit"] = "q_nm^-1"
         ai["do_polarization"] = True,
-        ai["polarization_factor"]= 0.99
-        ai["do_solid_angle"]= True
-        ai["error_model"]="poisson"
-	ai["application"] = "pyfai-integrate"
+        ai["polarization_factor"] = 0.99
+        ai["do_solid_angle"] = True
+        ai["error_model"] = "poisson"
+        ai["application"] = "pyfai-integrate"
         ai["version"] = 3
-        ai["method"] =[ "full", "csr", "opencl" ]
+        ai["method"] = ["full", "csr", "opencl"]
         ai["opencl_device"] = "gpu"
         param["ai"] = ai
-        param["experiment_title"] = os.path.join(os.path.basename(file_path),scan_number)
-        param["fast_motor_name": "fast",
-        param["slow_motor_name": "slow",
-        param["fast_motor_points"] = self.input.get("fast_scan" ,1)
-        param["slow_motor_points"] = self.input.get("slow_scan" ,1)
-        param["offset"]: None
+        param["experiment_title"] = os.path.join(os.path.basename(file_path), scan_number)
+        param["fast_motor_name"] = "fast"
+        param["slow_motor_name"] = "slow"
+        param["fast_motor_points"] = self.input.get("fast_scan", 1)
+        param["slow_motor_points"] = self.input.get("slow_scan", 1)
+        param["offset"] = 0
         param["output_file"] = dest
-        param["input_data"] =  [ files ]
+        param["input_data"] =  files
         with open(config, "w") as w:
             w.write(json.dumps(param, indent=2))
         results["config"] = config
