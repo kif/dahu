@@ -227,6 +227,7 @@ def crysalis_conversion(wave_length=None, distance=None,
         parameters.append("--calc-mask")
     logger.info('starts with parameters: %s', parameters)
 
+    res = subprocess.run(parameters, capture_output=True, check=False)
     crysalis_files, scans = crysalis_config(calibration_path, calibration_name, number_of_points, omega_start, omega_step, center, distance, wave_length, exposure_time)
 
     if not update_mask:
@@ -235,7 +236,7 @@ def crysalis_conversion(wave_length=None, distance=None,
     if not update_par:
         create_par_file(crysalis_files, crysalis_dir, scan_name)
 
-    return subprocess.run(parameters, capture_output=True, check=False)
+    return res
 
 
 def crysalis_conversion_fscannd(wave_length=None,
