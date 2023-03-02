@@ -10,6 +10,7 @@ import logging
 import re
 import glob
 import subprocess
+import json
 import fabio
 import pyFAI
 from dahu.plugin import Plugin
@@ -489,7 +490,7 @@ class Average(Plugin):
                 os.makedirs(dest_dir)
 
             output = os.path.join(dest_dir, basename)
-            command = ['pyFAI-average', '-m', 'sum', '-F', 'lima', '-o', output, filename]
+            command = [os.path.join(PREFIX,'pyFAI-average'), '-m', 'sum', '-F', 'lima', '-o', output, filename]
             results[filename] = unpack_processed(subprocess.run(command, capture_output=True, check=False))
             outputs.append(output)
         self.output["output_filename"] = outputs
@@ -528,13 +529,15 @@ class DiffMap(Plugin):
     This plugin performs the azimuthal integration of a set of data and populate a diffraction map
 
     Typical JSON input structure:
-    { "ponifile": "/tmp/geometry.poni",
+    { "plugin_name": "id27.diffmap",
+      "ponifile": "/tmp/geometry.poni",
       "maskfile": "/tmp/mask.msk",
+      "unit": "2th_deg",
       "npt": 2000,
       "file_path": "/data/id27/inhouse/some/path",
-      "scan_number": "scan_0001"
-      "slow_scan" = 10,
-      "fast_scan" = 10
+      "scan_number": "scan_0001",
+      "slow_scan": 10,
+      "fast_scan": 10
     }
     """
     def process(self):
@@ -558,8 +561,7 @@ class DiffMap(Plugin):
             ai["do_mask"] = True
             ai["mask_file"] = self.input["maskfile"]
         # some constants hardcoded for the beamline:
-        ai["unit"] = "q_nm^-1"
-        ai["do_polarization"] = True,
+        ai["do_polarization"] = True
         ai["polarization_factor"] = 0.99
         ai["do_solid_angle"] = True
         ai["error_model"] = "poisson"
@@ -567,6 +569,10 @@ class DiffMap(Plugin):
         ai["version"] = 3
         ai["method"] = ["full", "csr", "opencl"]
         ai["opencl_device"] = "gpu"
+        ai["nbpt_rad"] = self.input.get("npt", 1)
+        ai["nbpt_azim"] = 1
+        ai["do_2D"] = False
+        ai["unit"] = self.input.get("unit", "q_nm^-1")
         param["ai"] = ai
         param["experiment_title"] = os.path.join(os.path.basename(file_path), scan_number)
         param["fast_motor_name"] = "fast"
@@ -575,7 +581,11 @@ class DiffMap(Plugin):
         param["slow_motor_points"] = self.input.get("slow_scan", 1)
         param["offset"] = 0
         param["output_file"] = dest
-        param["input_data"] =  files
+        param["input_data"] =  [(i, None, None) for i in files]
         with open(config, "w") as w:
             w.write(json.dumps(param, indent=2))
         results["config"] = config
+        command = [os.path.join(PREFIX, 'pyFAI-diffmap'), '--no-gui', '--config', config]
+        results["processing"] = unpack_processed(subprocess.run(command, capture_output=True, check=False))
+        self.output["output_filename"] = dest
+        self.output["diffmap"] = results
