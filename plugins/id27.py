@@ -45,11 +45,11 @@ def crysalis_config(calibration_path, calibration_name, number_of_frames,
     """
     calibration_name = calibration_name or ""
     calibration_path = calibration_path or ""
-    par_file = os.path.join(calibration_path, calibration_name + '.par')
-    if not os.path.exists(par_file):
-        par_file = "/users/opid27/file_conversion/scan0001.par"
+    # par_file = os.path.join(calibration_path, calibration_name + '.par')
+    # if not os.path.exists(par_file):
+    #     par_file = "/users/opid27/file_conversion/scan0001.par"
     crysalis_files = {
-        'par_file': par_file,
+        'par_file': "/users/opid27/file_conversion/scan0001.par",
         'set_file': '/users/opid27/file_conversion/scan0001.set',
         'ccd_file': '/users/opid27/file_conversion/scan0001.ccd'}
 
