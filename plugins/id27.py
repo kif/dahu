@@ -50,7 +50,7 @@ def crysalis_config(calibration_path, calibration_name, number_of_frames,
     if not os.path.exists(par_file):
         par_file = "/users/opid27/file_conversion/scan0001.par"
     crysalis_files = {
-        'par_file': "/users/opid27/file_conversion/scan0001.par",
+        'par_file': par_file,
         'set_file': '/users/opid27/file_conversion/scan0001.set',
         'ccd_file': '/users/opid27/file_conversion/scan0001.ccd'}
 
@@ -134,11 +134,16 @@ def createCrysalis(scans, crysalis_dir, basename):
 
 
 def create_par_file(crysalis_files, crysalis_dir, basename):
-
+    """Create a new par-file by copying a reference one and 
+       changing the ....
+    """    
+    ref_par = crysalis_files['par_file']
     new_par = os.path.join(crysalis_dir, basename + '.par')
-
+    if os.path.exists(new_par):
+        "make a backup"
+        os.rename(new_par, new_par+".bak")
     with io.open(new_par, 'w', encoding='iso-8859-1') as new_file:
-        with io.open(crysalis_files['par_file'], 'r', encoding='iso-8859-1') as old_file:
+        with io.open(ref_par, 'r', encoding='iso-8859-1') as old_file:
             for line in old_file:
                 if line.startswith("FILE CHIP"):
                     new_file.write('FILE CHIP "' + basename + '.ccd" \n')
