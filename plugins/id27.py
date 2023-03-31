@@ -18,8 +18,8 @@ from dahu.factory import register
 
 logger = logging.getLogger("id27")
 
-RAW = "raw"
-PROCESSED = "processed"
+RAW = "RAW_DATA"
+PROCESSED = "PROCESSED_DATA"
 WORKDIR = "/scratch/shared"
 PREFIX = os.path.dirname(sys.executable) #where there scripts are
 
@@ -553,7 +553,7 @@ class DiffMap(Plugin):
 
         file_path = self.input["file_path"]
         scan_number = self.input["scan_number"]
-        dest_dir = file_path.replace(RAW,PROCESSED) 
+        dest_dir = os.path.join(file_path.replace(RAW, PROCESSED),  scan_number)
         filename = os.path.join(file_path, scan_number, 'eiger_????.h5')
         files = sorted(glob.glob(filename))
         if not os.path.isdir(dest_dir):
