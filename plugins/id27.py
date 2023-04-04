@@ -15,7 +15,8 @@ import fabio
 import pyFAI
 from dahu.plugin import Plugin
 from dahu.factory import register
-
+from threading import Semaphore
+lock = Semaphore()
 logger = logging.getLogger("id27")
 
 RAW = "RAW_DATA"
@@ -166,7 +167,9 @@ def create_rsync_file(filename, folder="esp"):
         destname =  "/".join(splitted)
         ddir = os.path.dirname(destname)
         if not os.path.isdir(ddir):
-            os.makedirs(ddir)
+            with lock:
+                if not os.path.isdir(ddir):
+                    os.makedirs(ddir)
     else:
         destname = filename
     dest_dir = "/".join(splitted[3:-1])  # strip /data/visitor ... filename.h5
@@ -177,7 +180,9 @@ def create_rsync_file(filename, folder="esp"):
 
     crysalis_dir = os.path.join(dest_dir, folder)
     if not os.path.exists(crysalis_dir):
-        os.makedirs(crysalis_dir)
+        with lock:
+            if not os.path.exists(crysalis_dir):
+                os.makedirs(crysalis_dir)
     with open(os.path.join(dest_dir, ".source"), "a") as source:
         source.write(filename + os.linesep)
 
@@ -328,7 +333,9 @@ def fabio_conversion(file_path,
 
         dest_dir2 = os.path.join(dest_dir, basename)
         if not os.path.exists(dest_dir2):
-            os.makedirs(dest_dir2)
+            with lock:
+                if not os.path.exists(dest_dir2):
+                    os.makedirs(dest_dir2)
         for i, frame in enumerate(img_data_fabio):
             conv = frame.convert(fabioimage)
             data = conv.data.astype('int32')
@@ -493,7 +500,9 @@ class Average(Plugin):
                 else:
                     dest_dir = os.path.join(file_path, scan_number, tmpname)
             if not os.path.exists(dest_dir):
-                os.makedirs(dest_dir)
+                with lock:
+                    if not os.path.exists(dest_dir):
+                        os.makedirs(dest_dir)
 
             output = os.path.join(dest_dir, basename)
             command = [os.path.join(PREFIX,'pyFAI-average'), '-m', 'sum', '-F', 'lima', '-o', output, filename]
@@ -557,7 +566,9 @@ class DiffMap(Plugin):
         filename = os.path.join(file_path, scan_number, 'eiger_????.h5')
         files = sorted(glob.glob(filename))
         if not os.path.isdir(dest_dir):
-            os.makedirs(dest_dir)
+            with lock:
+                if not os.path.isdir(dest_dir):
+                    os.makedirs(dest_dir)
         config = os.path.join(dest_dir, "diff_map.json")
         dest = os.path.join(dest_dir, "diff_map.h5")
         results = {}
