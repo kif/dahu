@@ -339,7 +339,7 @@ def fabio_conversion(file_path,
         for i, frame in enumerate(img_data_fabio):
             conv = frame.convert(fabioimage)
             data = conv.data.astype('int32')
-            data[data < 0 ] = 0
+            data[data < 0] = 0
             conv.data = data
             output = os.path.join(dest_dir2, f"{dset_name}_{i+1:04d}.{extension}")
             conv.write(output)
@@ -443,10 +443,10 @@ class XdiConversion(Plugin):
         file_path = self.input["file_path"]
         scan_number = self.input["scan_number"]
         results = fabio_conversion(file_path,
-                         scan_number,
-                         folder="xdi",
-                         fabioimage="tifimage",
-                         extension="tif")
+                                   scan_number,
+                                   folder="xdi",
+                                   fabioimage="tifimage",
+                                   extension="tif")
         self.output["output"] = results
 
 
@@ -505,7 +505,8 @@ class Average(Plugin):
                         os.makedirs(dest_dir)
 
             output = os.path.join(dest_dir, basename)
-            command = [os.path.join(PREFIX,'pyFAI-average'), '-m', 'sum', '-F', 'lima', '-o', output, filename]
+            command = [os.path.join(PREFIX, 'pyFAI-average'), 
+                       '-m', 'sum', '-F', 'lima', '-o', output, filename]
             results[filename] = unpack_processed(subprocess.run(command, capture_output=True, check=False))
             outputs.append(output)
         self.output["output_filename"] = outputs
@@ -532,10 +533,10 @@ class XdsConversion(Plugin):
         file_path = self.input["file_path"]
         scan_number = self.input["scan_number"]
         results = fabio_conversion(file_path,
-                         scan_number,
-                         folder="cbf",
-                         fabioimage="cbfimage",
-                         extension="cbf")
+                                   scan_number,
+                                   folder="cbf",
+                                   fabioimage="cbfimage",
+                                   extension="cbf")
         self.output["output"] = results
 
 @register
@@ -562,7 +563,7 @@ class DiffMap(Plugin):
 
         file_path = self.input["file_path"]
         scan_number = self.input["scan_number"]
-        dest_dir = os.path.join(file_path.replace(RAW, PROCESSED),  scan_number)
+        dest_dir = os.path.join(file_path.replace(RAW, PROCESSED), scan_number)
         filename = os.path.join(file_path, scan_number, 'eiger_????.h5')
         files = sorted(glob.glob(filename))
         if not os.path.isdir(dest_dir):
@@ -598,7 +599,7 @@ class DiffMap(Plugin):
         param["slow_motor_points"] = self.input.get("slow_scan", 1)
         param["offset"] = 0
         param["output_file"] = dest
-        param["input_data"] =  [(i, None, None) for i in files]
+        param["input_data"] = [(i, None, None) for i in files]
         with open(config, "w") as w:
             w.write(json.dumps(param, indent=2))
         results["config"] = config
