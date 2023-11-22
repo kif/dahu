@@ -29,6 +29,11 @@ try:
 except ImportError:
     crysalis = None
 
+try:
+    from pyicat_plus.client.main import IcatClient
+except ImportError:
+    print("iCat connection will no work")
+    IcatClient = None
 
 
 def crysalis_config(calibration_path, calibration_name, number_of_frames,
@@ -607,3 +612,26 @@ class DiffMap(Plugin):
         results["processing"] = unpack_processed(subprocess.run(command, capture_output=True, check=False))
         self.output["output_filename"] = dest
         self.output["diffmap"] = results
+
+
+def send_icat(raw_dir, processed_dir, beamline="id27", proposal="", dataset="", metadata=None):
+    "Function that sends to icat the processed data"
+    icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
+    metadata = metadata or {}
+    l = raw_dir.split("/")
+    if not proposal:
+        visitor_idx = l.find("visitor")
+        proposal = l[visitor_idx+1]
+    if not dataset:
+        dataset = l[-1]
+    kwargs = {"beamline":beamline, 
+              "proposal":proposal, 
+              "dataset":dataset, 
+              "path":processed_dir, 
+              "metadata":metadata, 
+              "raw":[raw_dir]}
+    icat_client.store_processed_data(**kwargs)
+    
+    
+    
+    
