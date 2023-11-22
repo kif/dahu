@@ -631,6 +631,7 @@ def send_icat(raw_dir, processed_dir, beamline="id27", proposal="", dataset="", 
               "metadata":metadata, 
               "raw":[raw_dir]}
     icat_client.store_processed_data(**kwargs)
+    return kwargs
     
     
     
