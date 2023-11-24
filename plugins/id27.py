@@ -11,11 +11,11 @@ import re
 import glob
 import subprocess
 import json
+from threading import Semaphore
 import fabio
 import pyFAI
 from dahu.plugin import Plugin
 from dahu.factory import register
-from threading import Semaphore
 lock = Semaphore()
 logger = logging.getLogger("id27")
 
@@ -327,8 +327,10 @@ def fabio_conversion(file_path,
         splitted.append(scan_number)
         splitted.insert(0, "/")
         dest_dir = os.path.join(*splitted)    
+        sample_name = splitted[raw_pos + 1]
     else:
         dest_dir = os.path.join(file_path, scan_number)
+        sample_name = "unknown sample"
 
     if len(files) == 0:
         raise RuntimeError(f"No such file {filename}")
@@ -351,10 +353,14 @@ def fabio_conversion(file_path,
             conv.write(output)
             results.append(output)
     if export_icat:
+        metadata = {"definition": "conversion",
+                    "Sample_name": sample_name}
         try:
-            send_icat(file_path, dest_dir2)
+            send_icat(file_path, dest_dir2, metadata=metadata)
         except Exception as err:
+            import traceback
             print(f"Error {type(err)}: {err}")
+            traceback.print_exc(err, file=sys.stdout)
     return results
 
 ##########################
@@ -493,7 +499,7 @@ class Average(Plugin):
 
         if len(filenames) == 0:
             raise RuntimeError(f"File does not exist {filename}")
-
+        sample_name = "undefined sample"
         for idx_h5, filename in enumerate(filenames):
             if output_directory:
                 dest_dir = output_directory
@@ -509,7 +515,8 @@ class Average(Plugin):
                     splitted.append(scan_number)
                     splitted.append(tmpname)
                     splitted.insert(0, "/")
-                    dest_dir = os.path.join(*splitted)    
+                    dest_dir = os.path.join(*splitted)
+                    sample_name = splitted[raw_pos+1]
                 else:
                     dest_dir = os.path.join(file_path, scan_number, tmpname)
             if not os.path.exists(dest_dir):
@@ -524,7 +531,15 @@ class Average(Plugin):
             outputs.append(output)
         self.output["output_filename"] = outputs
         self.output["conversion"] = results
-        #todo: send to icat
+        #send to icat
+        metadata = {"definition": "sum",
+                    "Sample_name": sample_name}
+        try:
+            send_icat(file_path, dest_dir, metadata=metadata)
+        except Exception as err:
+            import traceback
+            print(f"Error {type(err)}: {err}")
+            traceback.print_exc(err, file=sys.stdout)
 
 
 @register
@@ -600,7 +615,7 @@ class DiffMap(Plugin):
         ai["error_model"] = "poisson"
         ai["application"] = "pyfai-integrate"
         ai["version"] = 3
-        ai["method"] = ["full", "csr", "opencl"]
+        ai["method"] = ["bbox", "csr", "opencl"]
         ai["opencl_device"] = "gpu"
         ai["nbpt_rad"] = self.input.get("npt", 1)
         ai["nbpt_azim"] = 1
@@ -622,17 +637,33 @@ class DiffMap(Plugin):
         results["processing"] = unpack_processed(subprocess.run(command, capture_output=True, check=False))
         self.output["output_filename"] = dest
         self.output["diffmap"] = results
-        #TODO: send to icat
+        #send to icat
+        if RAW in file_path:
+            l = file_path.split("/")
+            i = l.index(RAW)
+            sample_name = l[i+1]
+        metadata = {"definition": "diffmap",
+                    "Sample_name": sample_name}
+        try:
+            send_icat(file_path, dest_dir, metadata=metadata)
+        except Exception as err:
+            import traceback
+            print(f"Error {type(err)}: {err}")
+            traceback.print_exc(err, file=sys.stdout)
 
 
 def send_icat(raw_dir, processed_dir, beamline="id27", proposal="", dataset="", metadata=None):
     "Function that sends to icat the processed data"
     icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
-    metadata = metadata or {}
+    metadata = metadata or {"definition": "dummy processing", "Sample_name": "unknown sample"}
     l = raw_dir.split("/")
     if not proposal:
-        visitor_idx = l.find("visitor")
-        proposal = l[visitor_idx+1]
+        try:
+            visitor_idx = l.index("visitor")
+        except:
+            proposal = "undefined"
+        else:
+            proposal = l[visitor_idx+1]
     if not dataset:
         dataset = l[-1]
     kwargs = {"beamline":beamline, 
