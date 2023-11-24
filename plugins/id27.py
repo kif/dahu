@@ -311,7 +311,8 @@ def fabio_conversion(file_path,
                      scan_number,
                      folder="xdi",
                      fabioimage="tifimage",
-                     extension="tif"):
+                     extension="tif",
+                     export_icat=False):
     "Convert a set of eiger files to cbf or tiff"
     results = []
     filename = os.path.join(file_path, scan_number, 'eiger_????.h5')
@@ -349,7 +350,11 @@ def fabio_conversion(file_path,
             output = os.path.join(dest_dir2, f"{dset_name}_{i+1:04d}.{extension}")
             conv.write(output)
             results.append(output)
-
+    if export_icat:
+        try:
+            send_icat(file_path, dest_dir2)
+        except Exception as err:
+            print(f"Error {type(err)}: {err}")
     return results
 
 ##########################
@@ -392,6 +397,7 @@ class CrysalisConversion(Plugin):
         script = create_rsync_file(self.input["file_source_path"], None)
         sync_results = subprocess.run([script], capture_output=True, check=False)
         self.output["sync"] = unpack_processed(sync_results)
+        #TODO: send to icat
 
 
 @register
@@ -426,6 +432,7 @@ class CrysalisConversionFscannd(Plugin):
         script = create_rsync_file(random_filename, None)
         sync_results = subprocess.run([script], capture_output=True, check=False)
         self.output["sync"] = unpack_processed(sync_results)
+        #TODO: send to icat
 
 
 @register
@@ -451,7 +458,8 @@ class XdiConversion(Plugin):
                                    scan_number,
                                    folder="xdi",
                                    fabioimage="tifimage",
-                                   extension="tif")
+                                   extension="tif",
+                                   export_icat=True)
         self.output["output"] = results
 
 
@@ -516,6 +524,7 @@ class Average(Plugin):
             outputs.append(output)
         self.output["output_filename"] = outputs
         self.output["conversion"] = results
+        #todo: send to icat
 
 
 @register
@@ -541,7 +550,8 @@ class XdsConversion(Plugin):
                                    scan_number,
                                    folder="cbf",
                                    fabioimage="cbfimage",
-                                   extension="cbf")
+                                   extension="cbf",
+                                   export_icat=True)
         self.output["output"] = results
 
 @register
@@ -612,6 +622,7 @@ class DiffMap(Plugin):
         results["processing"] = unpack_processed(subprocess.run(command, capture_output=True, check=False))
         self.output["output_filename"] = dest
         self.output["diffmap"] = results
+        #TODO: send to icat
 
 
 def send_icat(raw_dir, processed_dir, beamline="id27", proposal="", dataset="", metadata=None):
