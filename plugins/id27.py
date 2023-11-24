@@ -32,7 +32,7 @@ except ImportError:
 try:
     from pyicat_plus.client.main import IcatClient
 except ImportError:
-    print("iCat connection will no work")
+    print("iCat connection will not work")
     IcatClient = None
 
 
