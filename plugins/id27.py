@@ -4,6 +4,7 @@
 import os
 import sys
 import shutil
+import shlex
 import collections
 import io
 import logging
@@ -11,7 +12,6 @@ import re
 import glob
 import subprocess
 import json
-import shlex
 from threading import Semaphore
 import fabio
 import pyFAI
@@ -194,7 +194,7 @@ def create_rsync_file(filename, folder="esp"):
 
     if os.path.exists(script):
         with open(script, "a") as source:
-            source.write(os.linesep.join([f'rsync -avx {os.path.join(shlex.quote(dest_dir, folder))} {shlex.quote(os.path.dirname(destname))}', ""]))
+            source.write(os.linesep.join([f'rsync -avx {shlex.quote(os.path.join(dest_dir, folder))} {shlex.quote(os.path.dirname(destname))}', ""]))
     else:
         with open(script, "w") as source:
             source.write(os.linesep.join(['#!/bin/sh', f'rsync -avx {shlex.quote(os.path.join(dest_dir, folder))} {shlex.quote(os.path.dirname(destname))}', '']))
