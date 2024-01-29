@@ -1,10 +1,10 @@
 """Module for writing HDF5 in the Nexus style"""
 
-__author__ = "Jerome Kieffer"
+__author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/02/2020"
+__date__ = "29/01/2024"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
@@ -85,13 +85,14 @@ class Nexus(object):
     TODO: make it thread-safe !!!
     """
 
-    def __init__(self, filename, mode=None, creator=None):
+    def __init__(self, filename, mode=None, creator=None, start_time=None):
         """
         Constructor
 
         :param filename: name of the hdf5 file containing the nexus
         :param mode: can be 'r', 'a', 'w', '+' ....
         :param creator: set as attr of the NXroot
+        :param start_time: set as attr of the NXroot
         """
         self.filename = os.path.abspath(filename)
         self.mode = mode
@@ -105,12 +106,18 @@ class Nexus(object):
                 self.mode = "r"
             else:
                 self.mode = "a"
-        self.h5 = h5py.File(self.filename, mode=self.mode)
+
+        if self.mode == "r" and h5py.version.version_tuple >= (2, 9):
+            self.file_handle = open(self.filename, mode=self.mode + "b")
+            self.h5 = h5py.File(self.file_handle, mode=self.mode)
+        else:
+            self.file_handle = None
+            self.h5 = h5py.File(self.filename, mode=self.mode)
         self.to_close = []
 
-        if not pre_existing:
+        if not pre_existing or "w" in mode:
             self.h5.attrs["NX_class"] = "NXroot"
-            self.h5.attrs["file_time"] = get_isotime()
+            self.h5.attrs["file_time"] = get_isotime(start_time)
             self.h5.attrs["file_name"] = self.filename
             self.h5.attrs["HDF5_Version"] = h5py.version.hdf5_version
             self.h5.attrs["creator"] = creator or self.__class__.__name__
@@ -125,6 +132,8 @@ class Nexus(object):
                 entry["end_time"] = end_time
             self.h5.attrs["file_update_time"] = get_isotime()
         self.h5.close()
+        if self.file_handle:
+            self.file_handle.close()
 
     # Context manager for "with" statement compatibility
     def __enter__(self, *arg, **kwarg):
@@ -132,6 +141,10 @@ class Nexus(object):
 
     def __exit__(self, *arg, **kwarg):
         self.close()
+
+    def flush(self):
+        if self.h5:
+            self.h5.flush()
 
     def get_entry(self, name):
         """
