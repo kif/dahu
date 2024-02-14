@@ -8,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "12/04/2022"
+__date__ = "14/02/2024"
 __status__ = "development"
 __version__ = "0.9.3"
 
@@ -709,26 +709,30 @@ Possible values for to_save:
                 grp.visititems(grpdeepcopy)
 
             shape = self.in_shape[:]
-            if self.npt1_rad is None and "npt1_rad" in self.input:
-                self.npt1_rad = int(self.input["npt1_rad"])
-            else:
-                qmax = self.ai.qArray(self.in_shape[-2:]).max()
-                dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
-                self.npt1_rad = int(qmax / dqmin)
-
-            if ext == "azim":
-                if "npt2_rad" in self.input:
-                    self.npt2_rad = int(self.input["npt2_rad"])
+            #self.log_warning(f"in create HDF5 self.npt1_rad={self.npt1_rad} and self.input={self.input.get('npt1_rad')}")
+            if self.npt1_rad is None:
+                if "npt1_rad" in self.input:
+                    self.npt1_rad = int(self.input["npt1_rad"])
                 else:
                     qmax = self.ai.qArray(self.in_shape[-2:]).max()
                     dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
-                    self.npt2_rad = int(qmax / dqmin)
+                    self.npt1_rad = int(qmax / dqmin)
 
-                if "npt2_azim" in self.input:
-                    self.npt2_azim = int(self.input["npt2_azim"])
-                else:
-                    chi = self.ai.chiArray(self.in_shape[-2:])
-                    self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
+            if ext == "azim":
+                if self.npt2_rad is None:
+                    if "npt2_rad" in self.input:
+                        self.npt2_rad = int(self.input["npt2_rad"])
+                    else:
+                        qmax = self.ai.qArray(self.in_shape[-2:]).max()
+                        dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
+                        self.npt2_rad = int(qmax / dqmin)
+
+                if self.npt2_azim is None:
+                    if "npt2_azim" in self.input:
+                        self.npt2_azim = int(self.input["npt2_azim"])
+                    else:
+                        chi = self.ai.chiArray(self.in_shape[-2:])
+                        self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
                 shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
 
                 ai = self.ai.__copy__()
