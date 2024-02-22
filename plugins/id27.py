@@ -610,14 +610,15 @@ class DiffMap(Plugin):
         fast_scan = self.input.get("fast_scan", 1)
         slow_scan = self.input.get("slow_scan", 1)
         
+        # handle the special case of fscan3d -> each file is reduced prior to integration
         if len(files)>1 and fast_scan*slow_scan == len(files): 
-            # handle the special case of fscan3d -> each file is reduced prior to integration
+            
             reduced_files = []
             for inputname in files:
                 output = os.path.join(dest_dir, os.path.basename(inputname).replace(".h5",".sum.h5"))
                 # print(inputname, output)
                 command = [os.path.join(PREFIX, 'pyFAI-average'), "--quiet",
-                           '-m', 'sum', '-F', 'lima', '-o', output, filename]
+                           '-m', 'sum', '-F', 'lima', '-o', output, inputname]
                 results[inputname] = unpack_processed(subprocess.run(command, capture_output=True, check=False))
                 reduced_files.append(output)
             files = reduced_files
@@ -664,6 +665,8 @@ class DiffMap(Plugin):
             l = file_path.split("/")
             i = l.index(RAW)
             sample_name = l[i+1]
+        else:
+            sample_name = "unknown"
         metadata = {"definition": "diffmap",
                     "Sample_name": sample_name}
         try:
