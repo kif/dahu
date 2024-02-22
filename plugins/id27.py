@@ -593,6 +593,7 @@ class DiffMap(Plugin):
     """
     def process(self):
         Plugin.process(self)
+        results = {}
         if not self.input:
             logger.error("input is empty")
 
@@ -605,9 +606,24 @@ class DiffMap(Plugin):
             with lock:
                 if not os.path.isdir(dest_dir):
                     os.makedirs(dest_dir)
+                    
+        fast_scan = self.input.get("fast_scan", 1)
+        slow_scan = self.input.get("slow_scan", 1)
+        
+        if len(files)>1 and fast_scan*slow_scan == len(files): 
+            # handle the special case of fscan3d -> each file is reduced prior to integration
+            reduced_files = []
+            for inputname in files:
+                output = os.path.join(dest_dir, os.path.basename(inputname))
+                command = [os.path.join(PREFIX, 'pyFAI-average'), 
+                           '-m', 'sum', '-F', 'lima', '-o', output, filename]
+                results[inputname] = unpack_processed(subprocess.run(command, capture_output=True, check=False))
+                reduced_files.append(output)
+            files = reduced_files
+
         config = os.path.join(dest_dir, "diff_map.json")
         dest = os.path.join(dest_dir, "diff_map.h5")
-        results = {}
+        
         param = {}
         ai = pyFAI.load(self.input.get("ponifile")).get_config()
         if "maskfile" in self.input:
@@ -630,8 +646,8 @@ class DiffMap(Plugin):
         param["experiment_title"] = os.path.join(os.path.basename(file_path), scan_number)
         param["fast_motor_name"] = "fast"
         param["slow_motor_name"] = "slow"
-        param["fast_motor_points"] = self.input.get("fast_scan", 1)
-        param["slow_motor_points"] = self.input.get("slow_scan", 1)
+        param["fast_motor_points"] = fast_scan
+        param["slow_motor_points"] = slow_scan
         param["offset"] = 0
         param["output_file"] = dest
         param["input_data"] = [(i, None, None) for i in files]
