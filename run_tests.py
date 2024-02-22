@@ -86,7 +86,7 @@ logger.setLevel(logging.WARNING)
 
 logger.info("Python %s %s", sys.version, tuple.__itemsize__ * 8)
 if sys.version_info.major < 3:
-    logger.error("pyFAI no more support Python2")
+    logger.error("dahu no more support Python2")
 
 try:
     import resource
@@ -189,7 +189,7 @@ def report_uncovered_files(cov, build_dir, inject_xml=None):
     :param str build_dir: Build directory
     :return: Text report
     """
-    if build_dir.endswith("pyFAI"):
+    if build_dir.endswith("dahu"):
         build_dir = os.path.dirname(build_dir)
     import fnmatch
 
@@ -475,8 +475,8 @@ result = runner.run(test_suite)
 
 if result.wasSuccessful():
     exit_status = 0
-    import pyFAI.test.utilstest
-    pyFAI.test.utilstest.UtilsTest.clean_up()
+    import dahu.test.utilstest
+    dahu.test.utilstest.UtilsTest.clean_up()
 else:
     exit_status = 1
 
