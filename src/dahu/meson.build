@@ -1,0 +1,11 @@
+py.install_sources(
+[
+'cache.py',
+'__init__.py',
+'job.py',
+'utils.py',
+'factory.py',
+'server.py',
+'plugin.py'
+]
+)

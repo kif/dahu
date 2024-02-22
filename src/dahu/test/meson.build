@@ -1,0 +1,10 @@
+py.install_sources(
+[
+'__init__.py',
+'utilstest.py',
+'test_all.py',
+'test_plugin.py',
+'test_job.py',
+'test_cache.py'
+]
+)
