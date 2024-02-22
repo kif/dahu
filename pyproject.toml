@@ -57,9 +57,9 @@ download = 'https://github.com/kif/dahu/releases'
 tracker = 'https://github.com/kif/dahu/issues'
 
 [project.scripts]
-dahu_server = 'dahu.app.server:main'
+dahu_server = 'dahu.app.tango_server:main'
 dahu-reprocess = 'dahu.app.reprocess:main'
-
+dahu-register = 'dahu.app.tango_register:main'
 
 [tool.cibuildwheel]
 # Skip 32-bit builds and PyPy
