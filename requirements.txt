@@ -1,3 +1,5 @@
 numpy
 six
 meson-python
+meson
+ninja
