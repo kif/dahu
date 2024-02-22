@@ -40,7 +40,9 @@ if logger.getEffectiveLevel() > logging.INFO:
 from argparse import ArgumentParser
 import PyTango
 
-def main():
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv
     logger.info("Starting Dahu Tango Device Server")
     description = """Data Analysis Tango device server 
 """
@@ -65,9 +67,9 @@ def main():
     dahu.utils.get_workdir(options.dahu_log)
     tangoParam = ["DahuDS"] + options.tango
     if options.tango_verbose:
-        tangoParam += ["-v%s" % options.tango_verbose]
+        tangoParam.append(f"-v{options.tango_verbose}"
     if options.tango_file:
-        tangoParam += ["-file=%s" % options.tango_file]
+        tangoParam.append(f"-file={options.tango_file}"
 
     # Analyse arguments and options
     if options.debug:
@@ -84,11 +86,12 @@ def main():
         U.server_run()
     except PyTango.DevFailed as err:
         logger.error('PyTango --> Received a DevFailed exception: %s' % err)
-        sys.exit(-1)
+        return -1
     except Exception as err:
         logger.error('PyTango --> An unforeseen exception occurred....%s' % err)
-        sys.exit(-1)
+        return -1
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())
