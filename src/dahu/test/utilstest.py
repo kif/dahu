@@ -27,7 +27,7 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "jerome.kieffer@esrf.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "07/02/2020"
+__date__ = "22/02/2024"
 
 PACKAGE = "dahu"
 DATA_KEY = "DAHU_DATA"
@@ -36,12 +36,10 @@ if __name__ == "__main__":
     __name__ = "dahu.test"
 
 import os
-import imp
 import sys
 import getpass
 import subprocess
 import threading
-import distutils.util
 import unittest
 import logging
 try:  # Python3
