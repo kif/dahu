@@ -40,7 +40,7 @@ if logger.getEffectiveLevel() > logging.INFO:
 from argparse import ArgumentParser
 import PyTango
 
-if __name__ == '__main__':
+def main():
     logger.info("Starting Dahu Tango Device Server")
     description = """Data Analysis Tango device server 
 """
@@ -88,3 +88,7 @@ if __name__ == '__main__':
     except Exception as err:
         logger.error('PyTango --> An unforeseen exception occurred....%s' % err)
         sys.exit(-1)
+
+
+if __name__ == '__main__':
+    main()

@@ -109,6 +109,11 @@ def process(args):
         with open(basename + ".inp", "w") as fp:
             json.dump(plugin.input, fp, indent=4, cls=NumpyEncoder)
 
-if __name__ == "__main__":
+
+def main():
     args = parse()
     process(args)
+
+
+if __name__ == "__main__":
+    main()

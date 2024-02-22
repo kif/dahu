@@ -1,0 +1,66 @@
+[project]
+name = 'dahu'
+dynamic = ['version',]
+license = {file = 'copyright'}
+requires-python = '>=3.7'
+readme = 'README.rst'
+description = '"Python lightweight, plugin based, data analysis engine"'
+authors = [
+  { name = 'Jérôme Kieffer', email = 'jerome.kieffer@esrf.fr'},
+]
+
+# double check classifiers on https://pypi.python.org/pypi?%3Aaction=list_classifiers
+classifiers = ["Development Status :: 3 - Alpha",
+               "Environment :: Console",
+               "Environment :: MacOS X",
+               "Environment :: Win32 (MS Windows)",
+               "Environment :: X11 Applications :: Qt",
+               "Intended Audience :: Education",
+               "Intended Audience :: Science/Research",
+               "License :: OSI Approved :: MIT License",
+               "License :: OSI Approved :: GNU Lesser General Public License v2 or later (LGPLv2+)",
+               "Natural Language :: English",
+               "Operating System :: MacOS",
+               "Operating System :: Microsoft :: Windows",
+               "Operating System :: POSIX",
+               "Programming Language :: Cython",
+               "Programming Language :: Python :: 3.6",
+               "Programming Language :: Python :: 3.7",
+               "Programming Language :: Python :: 3.8",
+               "Programming Language :: Python :: Implementation :: CPython",
+               "Topic :: Scientific/Engineering :: Physics",
+               "Topic :: Software Development :: Libraries :: Python Modules",
+               ]
+
+dependencies = [
+   'numpy>=1.10',
+]
+
+[build-system]
+build-backend = 'mesonpy'
+requires = [
+    'meson-python>=0.11',
+    "meson>=0.64; platform_system=='Windows'",
+    "meson>=0.60; platform_system!='Windows'",
+    'ninja',
+    'wheel',
+    'oldest-supported-numpy',
+    'pyproject-metadata>=0.5.0',
+    "tomli>=1.0.0; python_version < '3.12'"
+]
+
+[project.urls]
+homepage = 'http://www.silx.org'
+documentation = 'http://www.silx.org/doc/dahu/latest/'
+source = 'https://github.com/kif/dahu'
+download = 'https://github.com/kif/dahu/releases'
+tracker = 'https://github.com/kif/dahu/issues'
+
+[project.scripts]
+dahu_server = 'dahu.app.server:main'
+dahu-reprocess = 'dahu.app.reprocess:main'
+
+
+[tool.cibuildwheel]
+# Skip 32-bit builds and PyPy
+skip = ["*-win32", "*-manylinux_i686", "pp*", "*musllinux*"]
