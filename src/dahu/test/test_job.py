@@ -31,7 +31,7 @@ class TestJob(unittest.TestCase):
             logger.error(os.linesep.join(j.output_data["error"]))
 
         logger.info(j.input_data)
-        self.assert_(self.called)
+        self.assertTrue(self.called)
         print(j.output_data)
         self.assertEqual(j.output_data["result"], 25, "result OK")
 
