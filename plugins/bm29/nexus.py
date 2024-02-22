@@ -4,7 +4,7 @@ __author__ = "Jerome Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "12/10/2020"
+__date__ = "21/04/2022"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
@@ -45,7 +45,7 @@ def from_isotime(text, use_tz=False):
         text = str(text)
     if len(text) < 19:
         logger.warning("Not a iso-time string: %s", text)
-        return
+        return None
     base = text[:19]
     if use_tz and len(text) == 25:
         sgn = 1 if text[:19] == "+" else -1
@@ -70,7 +70,7 @@ def is_hdf5(filename):
     return sig == signature
 
 
-class Nexus(object):
+class Nexus:
     """
     Writer class to handle Nexus/HDF5 data
 
@@ -85,13 +85,14 @@ class Nexus(object):
     TODO: make it thread-safe !!!
     """
 
-    def __init__(self, filename, mode=None, creator=None):
+    def __init__(self, filename, mode=None, creator=None, timeout=None):
         """
         Constructor
 
         :param filename: name of the hdf5 file containing the nexus
         :param mode: can be 'r', 'a', 'w', '+' ....
         :param creator: set as attr of the NXroot
+        :param timeout: retry for that amount of time (in seconds)
         """
         self.filename = os.path.abspath(filename)
         self.mode = mode
@@ -106,12 +107,30 @@ class Nexus(object):
             else:
                 self.mode = "a"
 
-        if self.mode == "r":
-            self.file_handle = open(self.filename, mode=self.mode + "b")
-            self.h5 = h5py.File(self.file_handle, mode=self.mode)
+        if timeout:
+            end = time.perf_counter() + timeout
+            while time.perf_counter() < end :
+                try:
+                    if self.mode == "r":
+                        self.file_handle = open(self.filename, mode="rb")
+                        self.h5 = h5py.File(self.file_handle, mode="r")
+                    else:
+                        self.file_handle = None
+                        self.h5 = h5py.File(self.filename, mode=self.mode)
+                except OSError:
+                    os.stat(os.path.dirname(self.filename))
+                    time.sleep(1)
+                else:
+                    break
+            else:
+                raise OSError(f"Unable to open HDF5 file {self.filename}")
         else:
-            self.file_handle = None
-            self.h5 = h5py.File(self.filename, mode=self.mode)
+            if self.mode == "r":
+                self.file_handle = open(self.filename, mode=self.mode + "b")
+                self.h5 = h5py.File(self.file_handle, mode=self.mode)
+            else:
+                self.file_handle = None
+                self.h5 = h5py.File(self.filename, mode=self.mode)
         self.to_close = []
 
         if not pre_existing:
@@ -142,6 +161,7 @@ class Nexus(object):
         self.close()
 
     def flush(self):
+        "write to disk"
         if self.h5:
             self.h5.flush()
 
@@ -158,7 +178,8 @@ class Nexus(object):
                 if isinstance(grp, h5py.Group) and \
                    ("start_time" in grp) and  \
                    self.get_attr(grp, "NX_class") == "NXentry":
-                        return grp
+                    return grp
+        return None
 
     def get_entries(self):
         """
@@ -228,9 +249,11 @@ class Nexus(object):
 #        howto external link
         # myfile['ext link'] = h5py.ExternalLink("otherfile.hdf5", "/path/to/resource")
 
-    def new_class(self, grp, name, class_type="NXcollection"):
+    @staticmethod
+    def new_class(grp, name, class_type="NXcollection"):
         """
         create a new sub-group with  type class_type
+        
         :param grp: parent group
         :param name: name of the sub-group
         :param class_type: NeXus class name
@@ -282,7 +305,7 @@ class Nexus(object):
 
     def get_default_NXdata(self):
         """Return the default plot configured in the nexus structure.
-        
+
         :return: the group with the default plot or None if not found
         """
         entry_name = self.h5.attrs.get("default")
@@ -292,8 +315,8 @@ class Nexus(object):
             if nxdata_name:
                 if nxdata_name.startswith("/"):
                     return self.h5.get(nxdata_name)
-                else:
-                    return entry_grp.get(nxdata_name)
+                return entry_grp.get(nxdata_name)
+        return None
 
     def deep_copy(self, name, obj, where="/", toplevel=None, excluded=None, overwrite=False):
         """
@@ -313,7 +336,7 @@ class Nexus(object):
             if name not in toplevel:
                 grp = toplevel.require_group(name)
                 for k, v in obj.attrs.items():
-                        grp.attrs[k] = v
+                    grp.attrs[k] = v
         elif isinstance(obj, h5py.Dataset):
             if name in toplevel:
                 if overwrite:

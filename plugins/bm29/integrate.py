@@ -3,52 +3,57 @@
 
 """Data Analysis plugin for BM29: BioSaxs
 
-* IntegrateMultiframe: perform the integration of many frames contained in a HDF5 file and average them  
- 
+* IntegrateMultiframe: perform the integration of many frames contained in a HDF5 file and average them
+
 """
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/09/2021"
+__date__ = "03/10/2022"
 __status__ = "development"
-__version__ = "0.2.3"
+__version__ = "0.3.0"
 
 import os
 import time
 import json
-from urllib3.util import parse_url
+import logging
 from collections import namedtuple
+from urllib3.util import parse_url
 from dahu.plugin import Plugin
 from dahu.factory import register
 from dahu.utils import fully_qualified_name
-import logging
-logger = logging.getLogger("bm29.integrate")
-import numpy
-try:
-    import numexpr
-except ImportError:
-    logger.error("Numexpr is not installed, falling back on numpy's implementations")
-    numexpr = None
-import h5py
-import fabio
-import pyFAI, pyFAI.azimuthalIntegrator
-import freesas, freesas.cormap
-try:
-    import memcache
-except (ImportError, ModuleNotFoundError):
-    memcache = None
 
-# from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
+import numpy
+import h5py
+import pyFAI
+import pyFAI.azimuthalIntegrator
+import freesas
+import freesas.cormap
+
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, get_integrator, KeyCache, \
                     method, polarization_factor, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     create_nexus_sample
 from .ispyb import IspybConnector, NumpyEncoder
 
+
+logger = logging.getLogger("bm29.integrate")
+try:
+    import numexpr
+except ImportError:
+    logger.error("Numexpr is not installed, falling back on numpy's implementations")
+    numexpr = None
+
+try:
+    import memcache
+except (ImportError, ModuleNotFoundError):
+    memcache = None
+
+
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
 CormapResult = namedtuple("CormapResult", "probability count tomerge")
-AverageResult = namedtuple("AverageResult", "average deviation")
+AverageResult = namedtuple("AverageResult", "average deviation normalization")
 
 
 @register
@@ -67,7 +72,7 @@ class IntegrateMultiframe(Plugin):
       "timestamps": [1580985678.47, 1580985678.58],
       "monitor_values": [1, 1.1],
       "storage_ring_current": [199.6, 199.5]
-      "exposure_time": 0.1, 
+      "exposure_time": 0.1,
       "normalisation_factor": 1.0,
       "poni_file": "/tmp/example.poni",
       "mask_file": "/tmp/mask.edf",
@@ -76,6 +81,7 @@ class IntegrateMultiframe(Plugin):
       "fidelity_abs": 1e-5,
       "fidelity_rel": 1e-3,
       "hplc_mode": 0,
+      "timeout": 10,
       "sample": {
         "name": "bsa",
         "description": "protein description like Bovine Serum Albumin",
@@ -88,7 +94,7 @@ class IntegrateMultiframe(Plugin):
         "url": "http://ispyb.esrf.fr:1234",
         "login": "mx1234",
         "passwd": "secret",
-        "pyarch": "/data/pyarch/mx1234/sample", 
+        "pyarch": "/data/pyarch/mx1234/sample",
         "measurement_id": -1,
         "collection_id": -1
        }
@@ -110,6 +116,7 @@ class IntegrateMultiframe(Plugin):
         self.nb_frames = None
         self.ai = None
         self.npt = 1000
+        self.timeout = 10
         self.unit = pyFAI.units.to_unit("q_nm^-1")
         # self.polarization_factor = 0.9 --> constant
         self.poni = self.mask = None
@@ -125,14 +132,14 @@ class IntegrateMultiframe(Plugin):
         logger.debug("IntegrateMultiframe.setup")
         Plugin.setup(self, kwargs)
 
-        self.ispyb = Ispyb._fromdict(self.input.get("ispyb", {}))
         self.sample = Sample._fromdict(self.input.get("sample", {}))
         if not self.sample.name:
             self.sample = Sample("Unknown sample", *self.sample[1:])
 
+        self.timeout = self.input.get("timeout", self.timeout)
         self.input_file = self.input.get("input_file")
         if self.input_file is not None:
-            self.wait_file(self.input_file)
+            self.wait_file(self.input_file, timeout=self.timeout)
         else:
             self.log_error(f"No valid input file provided {self.input_file}")
 
@@ -143,8 +150,30 @@ class IntegrateMultiframe(Plugin):
         if self.output_file is None:
             lst = list(os.path.splitext(self.input_file))
             lst.insert(1, "-integrate")
-            self.output_file = "".join(lst)
+            dirname, basename = os.path.split("".join(lst))
+            dirname = os.path.dirname(dirname)
+            dirname = os.path.join(dirname, "processed")
+            dirname = os.path.join(dirname, "integrate")
+            self.output_file = os.path.join(dirname, basename)
+            if not os.path.isdir(dirname):
+                try:
+                    os.makedirs(dirname)
+                except Exception as err:
+                    self.log_warning(f"Unable to create dir {dirname}. {type(err)}: {err}")
+
             self.log_warning(f"No output file provided, using: {self.output_file}")
+        #Manage gallery here
+        dirname = os.path.dirname(self.output_file)
+        gallery = os.path.join(dirname, "gallery")
+        if not os.path.isdir(gallery):
+            try:
+                os.makedirs(gallery)
+            except Exception as err:
+                self.log_warning(f"Unable to create dir {gallery}. {type(err)}: {err}")
+        ispydict = self.input.get("ispyb", {})
+        ispydict["gallery"] = gallery
+        self.ispyb = Ispyb._fromdict(ispydict)
+
         self.nb_frames = len(self.input.get("frame_ids", []))
         self.npt = self.input.get("npt", self.npt)
         self.unit = pyFAI.units.to_unit(self.input.get("unit", self.unit))
@@ -182,7 +211,7 @@ class IntegrateMultiframe(Plugin):
         "For performance reasons, all frames are read in one bloc and cached, this returns a 3D numpy array"
         if self._input_frames is None:
             try:
-                with Nexus(self.input_file, "r") as nxs:
+                with Nexus(self.input_file, "r", timeout=self.timeout) as nxs:
                     entry = nxs.get_entries()[0]
                     if "measurement" in entry:
                         measurement = entry["measurement"]
@@ -204,41 +233,42 @@ class IntegrateMultiframe(Plugin):
         self.ai = get_integrator(KeyCache(self.npt, self.unit, self.poni, self.mask, self.energy))
         self.create_nexus()
         self.output["memcached"] = self.send_to_memcached()
-        if not self.input.get("hplc_mode"):
-            self.send_to_ispyb()
+        self.send_to_ispyb()
 
-    def wait_file(self, filename, timeout=10):
+    def wait_file(self, filename, timeout=None):
         """Wait for a file to appear on a filesystem
 
- 	:param filename: name of the file
+        :param filename: name of the file
         :param timeout: time-out in seconds
-        
+
         Raises an exception and ends the processing in case of missing file!
 	"""
-        end_time = time.time() + timeout
+        timeout = self.timeout if timeout is None else timeout
+        end_time = time.perf_counter() + timeout
         dirname = os.path.dirname(filename)
         while not os.path.isdir(dirname):
-            if time.time() > end_time:
+            if time.perf_counter() > end_time:
                 self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
             time.sleep(0.1)
             os.stat(os.path.dirname(dirname))
 
         while not os.path.exists(filename):
-            if time.time() > end_time:
+            if time.perf_counter() > end_time:
                 self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
             time.sleep(0.1)
             os.stat(dirname)
 
         while not os.stat(filename).st_size:
-            if time.time() > end_time:
+            if time.perf_counter() > end_time:
                 self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
             time.sleep(0.1)
             os.stat(dirname)
-        appear_time = time.time() - end_time + timeout
+        appear_time = time.perf_counter() - end_time + timeout
         if appear_time > 1.0:
             self.log_warning(f"Filename {filename} took {appear_time:.3f}s to appear on filesystem!")
 
     def create_nexus(self):
+        "create the nexus result file with basic structure"
         if not os.path.isdir(os.path.dirname(self.output_file)):
             os.makedirs(os.path.dirname(self.output_file))
         creation_time = os.stat(self.input_file).st_ctime
@@ -281,7 +311,7 @@ class IntegrateMultiframe(Plugin):
         nrj_ds.attrs["units"] = "keV"
         nrj_ds.attrs["resolution"] = 0.014
 
-        detector_grp = nxs.new_class(instrument_grp, str(self.ai.detector), "NXdetector")
+        detector_grp = nxs.new_class(instrument_grp, self.ai.detector.name, "NXdetector")
         dist_ds = detector_grp.create_dataset("distance", data=self.ai.dist)
         dist_ds.attrs["units"] = "m"
         xpix_ds = detector_grp.create_dataset("x_pixel_size", data=self.ai.pixel2)
@@ -323,7 +353,7 @@ class IntegrateMultiframe(Plugin):
             frames_ds.attrs["interpretation"] = "image"
             measurement_grp["images"] = frames_ds
         else:  # use external links
-            with Nexus(self.input_file, "r") as nxsr:
+            with Nexus(self.input_file, "r", timeout=self.timeout) as nxsr:
                 entry = nxsr.get_entries()[0]
                 if "measurement" in entry:
                     measurement = entry["measurement"]
@@ -404,10 +434,9 @@ class IntegrateMultiframe(Plugin):
         if self.input.get("hplc_mode"):
             entry_grp.attrs["default"] = entry_grp.attrs["default"] = integration_grp.attrs["default"] = hplc_data.name
             self.log_warning("HPLC mode detected, stopping after frame per frame integration")
-
             return
-        else:
-            integration_grp.attrs["default"] = integration_data.name
+
+        integration_grp.attrs["default"] = integration_data.name
 
     # Process 2: Freesas cormap
         cormap_grp = nxs.new_class(entry_grp, "2_correlation_mapping", "NXprocess")
@@ -455,6 +484,7 @@ class IntegrateMultiframe(Plugin):
 
         Iavg = numpy.ascontiguousarray(res3.average, dtype=numpy.float32)
         sigma_avg = numpy.ascontiguousarray(res3.deviation, dtype=numpy.float32)
+        norm = numpy.ascontiguousarray(res3.normalization, dtype=numpy.float32)
 
         int_avg_ds = average_data.create_dataset("intensity_normed",
                                                   data=Iavg,
@@ -465,8 +495,12 @@ class IntegrateMultiframe(Plugin):
                                                    data=sigma_avg,
                                                    **cmp_float)
         int_std_ds.attrs["interpretation"] = "image"
-        int_std_ds.attrs["formula"] = "sqrt(sum_i(variance_i))/sum(normalization_i)"
+        int_std_ds.attrs["formula"] = "sqrt(sum_i(variance_i)/sum_i(normalization_i))"
         int_std_ds.attrs["method"] = "Propagated error from weighted mean assuming poissonian behavour of every data-point"
+        
+        int_nrm_ds = average_data.create_dataset("normalization", data=norm)
+        int_nrm_ds.attrs["formula"] = "sum_i(normalization_i))"
+        
         average_grp.attrs["default"] = average_data.name
 
     # Process 4: Azimuthal integration of the time average image
@@ -521,9 +555,9 @@ class IntegrateMultiframe(Plugin):
         entry_grp.attrs["default"] = ai2_data.name
 
         # Export this to the output JSON
-        self.output["q"] = res2.radial
-        self.output["I"] = res2.intensity
-        self.output["std"] = res2.sigma
+        # self.output["q"] = res2.radial
+        # self.output["I"] = res2.intensity
+        # self.output["std"] = res2.sigma
 
     def process1_integration(self, data):
         "First step of the processing, integrate all frames, return a IntegrationResult namedtuple"
@@ -567,23 +601,45 @@ class IntegrateMultiframe(Plugin):
         valid_slice = slice(*tomerge)
         mask = self.ai.detector.mask
         sum_data = (self.input_frames[valid_slice]).sum(axis=0)
-        sum_norm = (numpy.array(self.monitor_values)[valid_slice]).sum() * self.scale_factor
+        sum_norm = self.scale_factor * sum(self.monitor_values[valid_slice])    
         if numexpr is not None:
             # Numexpr is many-times faster than numpy when it comes to element-wise operations
             intensity_avg = numexpr.evaluate("where(mask==0, sum_data/sum_norm, 0.0)")
-            intensity_std = numexpr.evaluate("where(mask==0, sqrt(sum_data)/sum_norm, 0.0)")
+            intensity_std = numexpr.evaluate("where(mask==0, sqrt(sum_data)/sum_norm, 0.0)") # Assuming Poisson, no uncertainties on the diode
         else:
-            intensity_avg = sum_data / sum_norm
-            intensity_std = numpy.sqrt(sum_data) / sum_norm
+            with numpy.errstate(divide='ignore'):
+                intensity_avg = sum_data / sum_norm
+                intensity_std = numpy.sqrt(sum_data)/sum_norm
             wmask = numpy.where(mask)
             intensity_avg[wmask] = 0.0
             intensity_std[wmask] = 0.0
-        return AverageResult(intensity_avg, intensity_std)
+        return AverageResult(intensity_avg, intensity_std, sum_norm)
 
     def send_to_ispyb(self):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
-            ispyb.send_averaged(self.to_pyarch)
+            if self.input.get("hplc_mode"):
+                self.to_pyarch["experiment_type"]="hplc"
+            else:
+                ispyb.send_averaged(self.to_pyarch)
+                self.to_pyarch["experiment_type"]="sample-changer"
+            #Some more metadata for iCat, as strings:
+            self.to_pyarch["sample"] = self.sample
+            self.to_pyarch["SAXS_maskFile"] = self.mask
+            self.to_pyarch["SAXS_waveLength"] = str(self.ai.wavelength)
+            self.to_pyarch["SAXS_normalisation"] = str(self.normalization_factor)
+            self.to_pyarch["SAXS_diode_currents"] = str(self.monitor_values)
+            self.to_pyarch["SAXS_numberFrames"] = str(self.nb_frames)
+            self.to_pyarch["SAXS_timePerFrame"] = self.input.get("exposure_time", "?")
+            self.to_pyarch["SAXS_detector_distance"] = str(self.ai.dist)
+            self.to_pyarch["SAXS_pixelSizeX"] = str(self.ai.detector.pixel2)
+            self.to_pyarch["SAXS_pixelSizeY"] = str(self.ai.detector.pixel1)
+            f2d = self.ai.getFit2D()
+            self.to_pyarch["SAXS_beam_center_x"] = str(f2d["centerX"])
+            self.to_pyarch["SAXS_beam_center_y"] = str(f2d["centerY"])
+
+            icat = ispyb.send_icat(data=self.to_pyarch)
+            #self.log_warning("Sent to icat: " + str(icat))
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
 
@@ -599,7 +655,5 @@ class IntegrateMultiframe(Plugin):
                 keys[k] = key
                 value = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
                 rc[k] = mc.set(key, value)
-                # self.log_warning(f"key {k} dtype {self.to_memcached[k].dtype}, shape {self.to_memcached[k].shape}, nbytes {self.to_memcached[k].nbytes}") 
         self.log_warning(f"Return codes for memcached {rc}")
         return keys
-

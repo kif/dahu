@@ -2,7 +2,6 @@
 
 wheel
 numpy
-cython
 pillow
 lxml
 unittest2
@@ -11,4 +10,3 @@ fabio
 scipy
 matplotlib
 numexpr
-silx
