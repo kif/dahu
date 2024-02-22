@@ -1,7 +1,24 @@
+#!/usr/bin/env python3
 # coding: utf-8
-# Simple module to handle versions
-
-"""
+#
+#  Permission is hereby granted, free of charge, to any person obtaining a copy
+#  of this software and associated documentation files (the "Software"), to deal
+#  in the Software without restriction, including without limitation the rights
+#  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+#  copies of the Software, and to permit persons to whom the Software is
+#  furnished to do so, subject to the following conditions:
+#  .
+#  The above copyright notice and this permission notice shall be included in
+#  all copies or substantial portions of the Software.
+#  .
+#  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+#  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+#  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+#  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+#  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+#  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+#  THE SOFTWARE.
+"""Unique place where the version number is defined.
 
 Module for version handling:
 
@@ -27,11 +44,11 @@ Thus 2.1.0a3 is hexversion 0x020100a3.
 
 """
 
-__author__ = "Jerome Kieffer"
+__author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/01/2022"
+__date__ = "22/02/2024"
 __status__ = "producton"
 __docformat__ = 'restructuredtext'
 RELEASE_LEVEL_VALUE = {"dev": 0,
@@ -41,9 +58,9 @@ RELEASE_LEVEL_VALUE = {"dev": 0,
                        "rc": 12,
                        "final": 15}
 
-MAJOR = 1
-MINOR = 0
-MICRO = 2
+MAJOR = 2024
+MINOR = 2
+MICRO = 0
 RELEV = "final"  # <16
 SERIAL = 0  # <16
 
@@ -54,17 +71,73 @@ _version_info = namedtuple("version_info", ["major", "minor", "micro", "releasel
 
 version_info = _version_info(MAJOR, MINOR, MICRO, RELEV, SERIAL)
 
-strictversion = version = "%d.%d.%d" % version_info[:3]
+debianversion = strictversion = version = "%d.%d.%d" % version_info[:3]
 
 if version_info.releaselevel != "final":
     version += "-%s%s" % version_info[-2:]
+    debianversion += "~adev%i" % version_info[-1] if RELEV == "dev" else "~%s%i" % version_info[-2:]
     prerel = "a" if RELEASE_LEVEL_VALUE.get(version_info[3], 0) < 10 else "b"
     if prerel not in "ab":
         prerel = "a"
     strictversion += prerel + str(version_info[-1])
 
-hexversion = version_info[4]
-hexversion |= RELEASE_LEVEL_VALUE.get(version_info[3], 0) * 1 << 4
-hexversion |= version_info[2] * 1 << 8
-hexversion |= version_info[1] * 1 << 16
-hexversion |= version_info[0] * 1 << 24
+_PATTERN = None
+
+
+def calc_hexversion(major=0, minor=0, micro=0, releaselevel="dev", serial=0, string=None):
+    """Calculate the hexadecimal version number from the tuple version_info:
+
+    :param major: integer
+    :param minor: integer
+    :param micro: integer
+    :param relev: integer or string
+    :param serial: integer
+    :param string: version number as a string
+    :return: integer always increasing with revision numbers
+    """
+    if string is not None:
+        global _PATTERN
+        if _PATTERN is None:
+            import re
+            _PATTERN = re.compile(r"(\d+)\.(\d+)\.(\d+)(\w+)?$")
+        result = _PATTERN.match(string)
+        if result is None:
+            raise ValueError("'%s' is not a valid version" % string)
+        result = result.groups()
+        major, minor, micro = int(result[0]), int(result[1]), int(result[2])
+        releaselevel = result[3]
+        if releaselevel is None:
+            releaselevel = 0
+
+    try:
+        releaselevel = int(releaselevel)
+    except ValueError:
+        releaselevel = RELEASE_LEVEL_VALUE.get(releaselevel, 0)
+
+    hex_version = int(serial)
+    hex_version |= releaselevel * 1 << 4
+    hex_version |= int(micro) * 1 << 8
+    hex_version |= int(minor) * 1 << 16
+    hex_version |= int(major) * 1 << 24
+    return hex_version
+
+
+hexversion = calc_hexversion(*version_info)
+
+citation = "https://doi.org/10.1107/S1600577522007238"
+
+if __name__ == "__main__":
+    from argparse import ArgumentParser
+
+    parser = ArgumentParser(usage="print the version of the software")
+    parser.add_argument("--wheel", action="store_true", dest="wheel", default=None,
+                        help="print version formated for wheel")
+    parser.add_argument("--debian", action="store_true", dest="debian", default=None,
+                        help="print version formated for debian")
+    options = parser.parse_args()
+    if options.debian:
+        print(debianversion)
+    elif options.wheel:
+        print(strictversion)
+    else:
+        print(version)

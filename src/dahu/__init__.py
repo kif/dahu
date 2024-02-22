@@ -1,7 +1,7 @@
 # coding: utf-8
 # /*##########################################################################
 #
-# Copyright (c) 2013-2016 European Synchrotron Radiation Facility
+# Copyright (c) 2013-2024 European Synchrotron Radiation Facility
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -33,16 +33,14 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/03/2020"
+__date__ = "22/02/2024"
 __status__ = "production"
-
-from ._version import version, version_info, hexversion, date
 
 import os
 project = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
 try:
-    from ._version import __date__ as date  # noqa
-    from ._version import version, version_info, hexversion, strictversion  # noqa
+    from .version import __date__ as date  # noqa
+    from .version import version, version_info, hexversion, strictversion, citation  # noqa
 except ImportError:
     raise RuntimeError("Do NOT use %s from its sources: build it and use the built version" % project)
 
