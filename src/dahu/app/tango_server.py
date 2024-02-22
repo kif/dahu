@@ -14,7 +14,7 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/12/2021"
+__date__ = "22/02/2024"
 __status__ = "beta"
 __docformat__ = 'restructuredtext'
 
@@ -67,15 +67,15 @@ def main(argv=None):
     dahu.utils.get_workdir(options.dahu_log)
     tangoParam = ["DahuDS"] + options.tango
     if options.tango_verbose:
-        tangoParam.append(f"-v{options.tango_verbose}"
+        tangoParam.append(f"-v{options.tango_verbose}")
     if options.tango_file:
-        tangoParam.append(f"-file={options.tango_file}"
+        tangoParam.append(f"-file={options.tango_file}")
 
     # Analyse arguments and options
     if options.debug:
         logger.debug("Switch logger to debug level")
         logger.setLevel(logging.DEBUG)
-        logging.root.etLevel(logging.DEBUG)
+        logging.root.setLevel(logging.DEBUG)
 
     try:
         print(tangoParam)

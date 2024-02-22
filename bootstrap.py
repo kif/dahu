@@ -10,7 +10,7 @@ example: ./bootstrap.py ipython
 __authors__ = ["Frédéric-Emmanuel Picca", "Jérôme Kieffer"]
 __contact__ = "jerome.kieffer@esrf.eu"
 __license__ = "MIT"
-__date__ = "03/03/2023"
+__date__ = "22/02/2024"
 
 import sys
 import os
@@ -30,8 +30,9 @@ def get_project_name(root_dir):
     :param str root_dir: Directory where to run the command.
     :return: The name of the project stored in root_dir
     """
-    logger.debug("Getting project name in %s", root_dir)
-    with open("pyproject.toml") as f:
+    print(f"Getting project name in {root_dir}")
+    
+    with open(os.path.join(root_dir, "pyproject.toml")) as f:
         pyproject = tomli.loads(f.read())
     return pyproject.get("project", {}).get("name")
 
