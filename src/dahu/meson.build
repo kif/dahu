@@ -1,3 +1,6 @@
+subdir('app')
+subdir('test')
+
 py.install_sources(
 [
 'cache.py',
