@@ -614,8 +614,9 @@ class DiffMap(Plugin):
             # handle the special case of fscan3d -> each file is reduced prior to integration
             reduced_files = []
             for inputname in files:
-                output = os.path.join(dest_dir, os.path.basename(inputname))
-                command = [os.path.join(PREFIX, 'pyFAI-average'), 
+                output = os.path.join(dest_dir, os.path.basename(inputname).replace(".h5",".sum.h5"))
+                # print(inputname, output)
+                command = [os.path.join(PREFIX, 'pyFAI-average'), "--quiet",
                            '-m', 'sum', '-F', 'lima', '-o', output, filename]
                 results[inputname] = unpack_processed(subprocess.run(command, capture_output=True, check=False))
                 reduced_files.append(output)
