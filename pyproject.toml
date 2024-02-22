@@ -1,0 +1,8 @@
+[build-system]
+requires = [
+    "wheel",
+    "setuptools<60.0.0",
+    "oldest-supported-numpy",
+    "sphinx",
+    "nbsphinx",
+]

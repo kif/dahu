@@ -1,5 +1,6 @@
 """
-Distortion correction and azimuthal integration for a single detector 
+
+Distortion correction and azimuthal integration for a single detector
 
 """
 
@@ -7,9 +8,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "26/08/2021"
+__date__ = "14/02/2024"
 __status__ = "development"
-__version__ = "0.9.2"
+__version__ = "0.9.3"
 
 import os
 import threading
@@ -18,14 +19,9 @@ import posixpath
 from collections import namedtuple
 import json
 import logging
-logger = logging.getLogger("id02.single_detector")
 import numpy
 import numexpr
 import h5py
-from dahu import version as dahu_version
-from dahu.plugin import Plugin
-from dahu.utils import get_isotime, fully_qualified_name
-from dahu.cache import DataCache
 import fabio
 import pyFAI, pyFAI.utils
 from pyFAI.worker import Worker, DistortionWorker, PixelwiseWorker
@@ -37,10 +33,29 @@ except ImportError:
     COMPRESSION = {}
 else:
     COMPRESSION = hdf5plugin.Bitshuffle()
+from dahu import version as dahu_version
+from dahu.plugin import Plugin
+from dahu.utils import get_isotime, fully_qualified_name
+from dahu.cache import DataCache
 
+logger = logging.getLogger("id02.single_detector")
 numexpr.set_num_threads(8)
 
 CacheKey = namedtuple("CacheKey", ["ai", "shape"])
+
+
+class CacheValues:
+    __slots__ = 'array', 'engine'
+
+    def __init__(self, array):
+        self.array = array
+        self.engine = {}
+
+    def update(self, array=None, engine=None):
+        if array:
+            self.array.update(array)
+        if engine:
+            self.engine.update(engine)
 
 
 class SingleDetector(Plugin):
@@ -97,6 +112,7 @@ Optional parameters:
 "correct_I1": True by default, set to false to deactivate scaling by Exposure time / transmitted intensity
 "unit": "q_nm^-1" can be changed to "log(q)_m" for log(q) units
 "variance_formula": calculate the variance from a formula like '0.1*(data-dark)+1.0' "
+"force__gpu": set to enforce the usage of the GPU
 
 Unused and automatically generated:
 "plugin_name':"id02.singledetector',
@@ -126,7 +142,7 @@ Possible values for to_save:
                 "Dummy": float,
                 "PSize": float,
                 "SampleDistance": float,
-                "Wavelength": float, # both are possible ?
+                "Wavelength": float,  # both are possible ?
                 "WaveLength": float,
                 "Rot": float
                 }
@@ -136,12 +152,13 @@ Possible values for to_save:
             "Rot_1", "Rot_2", "Rot_3",
             "RasterOrientation", "SampleDistance", "SaxsDataVersion", "Title", "WaveLength")
     TIMEOUT = 10
-    cache = DataCache(5)
+    cache = DataCache(6)
     REPROCESS_IGNORE = ["metadata_job"]
-    
+
     def __init__(self):
         Plugin.__init__(self)
         self.ai = None
+        self.distortion_detector = None
         self.distortion = None
         self.workers = {}
         self.output_ds = {}  # output datasets
@@ -181,6 +198,8 @@ Possible values for to_save:
         self.cache_dis = None
         self.variance_formula = None
         self.variance_function = lambda data, dark: None
+        self.image_file = None
+        self.entry = None
 
     def setup(self, kwargs=None):
         """
@@ -252,11 +271,10 @@ Possible values for to_save:
                                                           ("dark", numpy.float64)])
 
     def process(self):
-        dummy=None
-        self.metadata = self.parse_image_file()        
+        dummy = None
+        self.metadata = self.parse_image_file()
         shape = self.in_shape[-2:]
-        
-        
+
         if self.I1 is None:
             self.I1 = numpy.ones(shape, dtype=float)
         elif self.I1.size < self.in_shape[0]:
@@ -274,7 +292,8 @@ Possible values for to_save:
             forai[key] = self.metadata.get(key)
 
         self.dist = self.metadata.get("SampleDistance")
-
+        self.distortion_filename = self.input.get("distortion_filename") or None
+        forai["splineFile"] = self.distortion_filename
         # Some safety checks, use-input are sometimes False !
         if self.dist < 0:
             # which is impossible
@@ -286,11 +305,9 @@ Possible values for to_save:
             forai["WaveLength"] = abs(self.metadata.get("WaveLength"))
         self.dummy = self.metadata.get("Dummy", self.dummy)
         self.delta_dummy = self.metadata.get("DDummy", self.delta_dummy)
-
         self.ai = AzimuthalIntegrator()
         self.ai.setSPD(**forai)
 
-        self.distortion_filename = self.input.get("distortion_filename") or None
         if type(self.distortion_filename) in StringTypes:
             detector = pyFAI.detector_factory("Frelon", {"splineFile": self.distortion_filename})
             if tuple(detector.shape) != shape:
@@ -299,13 +316,15 @@ Possible values for to_save:
             self.ai.detector = detector
         else:
             self.ai.detector.shape = self.in_shape[-2:]
-
-        self.log_warning("AI:%s" % self.ai)
+        self.distortion_detector = self.ai.detector.__copy__()
+        self.log_warning(f"AI: {self.ai}")
 
         self.cache_ai = CacheKey(str(self.ai), shape)
 
         if self.cache_ai in self.cache:
-            self.ai._cached_array.update(self.cache.get(self.cache_ai))
+            cached_ai = self.cache.get(self.cache_ai)
+            self.ai._cached_array.update(cached_ai.array)
+            self.ai.engines.update(cached_ai.engine)
         else:
             # Initialize geometry:
             self.ai.qArray(shape)
@@ -313,17 +332,18 @@ Possible values for to_save:
             self.ai.deltaQ(shape)
             self.ai.deltaChi(shape)
             self.ai.solidAngleArray(shape)
-            self.cache.get(self.cache_ai, {}).update(self.ai._cached_array)
+            # Store cached array in cache
+            self.cache.get(self.cache_ai, CacheValues({})).update(array=self.ai._cached_array)
 
         if self.input.get("do_polarization"):
             self.polarization = self.ai.polarization(factor=self.input.get("polarization_factor"),
                                                      axis_offset=self.input.get("polarization_axis_offset", 0))
-        
-        #Static mask is used for distortion correction
-        static_mask = self.ai.detector.mask
-        if static_mask is None:
-            static_mask = numpy.zeros(shape, dtype=bool)
-        
+
+        # Static mask is used for distortion correction
+        self.distortion_mask = self.distortion_detector.mask
+        if self.distortion_mask is None:
+            self.distortion_mask = numpy.zeros(shape, dtype=bool)
+
         # Read and Process dark
         if isinstance(self.dark_filename, StringTypes) and os.path.exists(self.dark_filename):
             dark = self.read_data(self.dark_filename)
@@ -383,14 +403,13 @@ Possible values for to_save:
             if numpy.isscalar(self.flat):
                 self.flat = numpy.ones(shape) * self.flat
             self.ai.detector.set_flatfield(self.flat)
-            #extend the static mask with dummy pixels from the flat-field image
+            # extend the static mask with dummy pixels from the flat-field image
             if dummy:
                 if ddummy:
-                    numpy.logical_or(static_mask, abs(self.flat - dummy) <= ddummy, out=static_mask)
+                    numpy.logical_or(self.distortion_mask, abs(self.flat - dummy) <= ddummy, out=self.distortion_mask)
                 else:
-                    numpy.logical_or(static_mask, self.flat == dummy, out=static_mask)
-            self.distortion_mask = static_mask
-        self.ai.detector.mask = self.distortion_mask
+                    numpy.logical_or(self.distortion_mask, self.flat == dummy, out=self.distortion_mask)
+        self.distortion_detector.mask = self.distortion_mask
 
         # Read and Process mask for integration
         self.mask_filename = self.input.get("regrouping_mask_filename")
@@ -431,7 +450,7 @@ Possible values for to_save:
                         binning = [i // j for i, j in zip(shape, local_mask.shape)]
                         local_mask = pyFAI.utils.unBinning(local_mask, binsize=binning, norm=False) > 0
             self.regrouping_mask = numpy.logical_or(self.distortion_mask, local_mask)
-            self.log_warning("found %s pixel masked out" % (local_mask.sum()))
+            # self.log_warning("found %s pixel masked out" % (local_mask.sum()))
         self.ai.detector.mask = self.regrouping_mask
         # bug specific to ID02, dummy=0 means no dummy !
         if self.dummy == 0:
@@ -453,7 +472,7 @@ Possible values for to_save:
         @param correct_shutter_closing_time: set to true for integrating detector (CCD) and false for counting detector (Pilatus)
         @return: 2-tuple of array with I1 and t
         """
-        if ("I1" in self.input):
+        if "I1" in self.input:
             return numpy.array(self.input["I1"]), None
 
         if not os.path.exists(mfile):
@@ -484,16 +503,18 @@ Possible values for to_save:
         return I1, t
 
     def parse_image_file(self):
+        "select the proper Lima parser"
         self.input_nxs = Nexus(self.image_file, "r")
         creator = self.input_nxs.h5.attrs.get("creator")
         if creator is None:
             return self.parse_image_file_old()
-        elif creator.startswith("LIMA-"):
+        if creator.startswith("LIMA-"):
             version = creator.split("-")[1]
-            #test on version of lima
-            if version<"1.":
-                self.log_warning("Suspicious version of LIMA: %s"%creator)
+            # test on version of lima
+            if version < "1.":
+                self.log_warning("Suspicious version of LIMA: %s" % creator)
             return self.parse_image_file_lima()
+        raise RuntimeError("Unsupported Lima fileformat")
 
     def parse_image_file_old(self):
         """Historical version, works with former LIMA version
@@ -688,57 +709,65 @@ Possible values for to_save:
                 grp.visititems(grpdeepcopy)
 
             shape = self.in_shape[:]
-            if self.npt1_rad is None and "npt1_rad" in self.input:
-                self.npt1_rad = int(self.input["npt1_rad"])
-            else:
-                qmax = self.ai.qArray(self.in_shape[-2:]).max()
-                dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
-                self.npt1_rad = int(qmax / dqmin)
-
-            if ext == "azim":
-                if "npt2_rad" in self.input:
-                    self.npt2_rad = int(self.input["npt2_rad"])
+            #self.log_warning(f"in create HDF5 self.npt1_rad={self.npt1_rad} and self.input={self.input.get('npt1_rad')}")
+            if self.npt1_rad is None:
+                if "npt1_rad" in self.input:
+                    self.npt1_rad = int(self.input["npt1_rad"])
                 else:
                     qmax = self.ai.qArray(self.in_shape[-2:]).max()
                     dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
-                    self.npt2_rad = int(qmax / dqmin)
+                    self.npt1_rad = int(qmax / dqmin)
 
-                if "npt2_azim" in self.input:
-                    self.npt2_azim = int(self.input["npt2_azim"])
-                else:
-                    chi = self.ai.chiArray(self.in_shape[-2:])
-                    self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
+            if ext == "azim":
+                if self.npt2_rad is None:
+                    if "npt2_rad" in self.input:
+                        self.npt2_rad = int(self.input["npt2_rad"])
+                    else:
+                        qmax = self.ai.qArray(self.in_shape[-2:]).max()
+                        dqmin = self.ai.deltaQ(self.in_shape[-2:]).min() * 2.0
+                        self.npt2_rad = int(qmax / dqmin)
+
+                if self.npt2_azim is None:
+                    if "npt2_azim" in self.input:
+                        self.npt2_azim = int(self.input["npt2_azim"])
+                    else:
+                        chi = self.ai.chiArray(self.in_shape[-2:])
+                        self.npt2_azim = int(numpy.degrees(chi.max() - chi.min()))
                 shape = (self.in_shape[0], self.npt2_azim, self.npt2_rad)
 
                 ai = self.ai.__copy__()
+                ai.engines.update(self.ai.engines)  # copy engines as well
+
                 worker = Worker(ai, self.in_shape[-2:], (self.npt2_azim, self.npt2_rad), self.unit)
                 if self.flat is not None:
                     worker.ai.set_flatfield(self.flat)
                 if self.dark is not None:
                     worker.ai.set_darkcurrent(self.dark)
                 worker.output = "numpy"
-                if self.in_shape[0] < 5:
-                    worker.method = "splitbbox"
+                if ai.engines or self.in_shape[0] > 3 or self.input.get("force_gpu"):
+                    worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
                 else:
-                    worker.method = "ocl_csr_gpu"
+                    worker.method = ("full", "histogram", "cython")  # "splitbbox"
+
                 if self.correct_solid_angle:
                     worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
                 else:
                     worker.set_normalization_factor(1.0)
                     worker.correct_solid_angle = self.correct_solid_angle
-                self.log_warning("Normalization factor: %s" % worker.normalization_factor)
+                # self.log_warning("Normalization factor: %s" % worker.normalization_factor)
 
                 worker.dummy = self.dummy
                 worker.delta_dummy = self.delta_dummy
                 if self.input.get("do_polarization"):
                     worker.polarization_factor = self.input.get("polarization_factor")
-
+                worker.update_processor()
                 self.workers[ext] = worker
             elif ext.startswith("ave"):
                 if "_" in ext:
                     unit = ext.split("_", 1)[1]
                     npt1_rad = self.input.get("npt1_rad_" + unit, self.npt1_rad)
                     ai = self.ai.__copy__()
+                    ai.engines.update(self.ai.engines)  # copy engines as well
                 else:
                     unit = self.unit
                     npt1_rad = self.npt1_rad
@@ -746,10 +775,10 @@ Possible values for to_save:
                 shape = (self.in_shape[0], npt1_rad)
                 worker = Worker(ai, self.in_shape[-2:], (1, npt1_rad), unit=unit)
                 worker.output = "numpy"
-                if self.in_shape[0] < 5:
-                    worker.method = "splitbbox"
+                if ai.engines or self.in_shape[0] > 3 or self.input.get("force_gpu"):
+                    worker.method = ("full", "csr", "opencl")  # "ocl_csr_gpu"
                 else:
-                    worker.method = "ocl_csr_gpu"
+                    worker.method = ("full", "histogram", "cython")  # "splitbbox"
                 if self.correct_solid_angle:
                     worker.set_normalization_factor(self.ai.pixel1 * self.ai.pixel2 / self.ai.dist / self.ai.dist)
                 else:
@@ -759,6 +788,7 @@ Possible values for to_save:
                 worker.delta_dummy = self.delta_dummy
                 if self.input.get("do_polarization"):
                     worker.polarization_factor = True
+                worker.update_processor()
                 self.workers[ext] = worker
             elif ext == "sub":
                 worker = PixelwiseWorker(dark=self.dark,
@@ -788,12 +818,14 @@ Possible values for to_save:
                                           dummy=self.dummy,
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
-                                          detector=self.ai.detector,
+                                          detector=self.distortion_detector,
+                                          device="gpu",
+                                          method="csr"
                                           )
                 self.workers[ext] = worker
                 if self.distortion is None:
                     self.distortion = worker.distortion
-                    self.cache_dis = str(self.ai.detector)
+                    self.cache_dis = str(self.distortion_detector)
                     if self.cache_dis in self.cache:
                         self.distortion.lut = self.cache[self.cache_dis]
                     else:
@@ -809,15 +841,14 @@ Possible values for to_save:
                                           dummy=self.dummy,
                                           delta_dummy=self.delta_dummy,
                                           polarization=self.polarization,
-                                          detector=self.ai.detector,
-                                          mask=self.distortion_mask, 
+                                          detector=self.distortion_detector,
                                           device="gpu",
                                           method="csr"
                                           )
                 self.workers[ext] = worker
                 if self.distortion is None and worker.distortion is not None:
                     self.distortion = worker.distortion
-                    self.cache_dis = str(self.ai.detector)
+                    self.cache_dis = str(self.distortion_detector)
                     if self.cache_dis in self.cache:
                         self.distortion.lut = self.cache[self.cache_dis]
                     else:
@@ -828,8 +859,8 @@ Possible values for to_save:
             else:
                 self.log_warning("unknown treatment %s" % ext)
 
-            if (len(shape) >= 3):
-                compression = {k: v for k, v in COMPRESSION.items()}
+            if len(shape) >= 3:
+                compression = COMPRESSION
             else:
                 compression = {}
             output_ds = nxdata.create_dataset("data",
@@ -909,9 +940,8 @@ Possible values for to_save:
                 elif meth == "azim":
                     res = self.workers[meth].process(data, variance=variance,
                                                      normalization_factor=I1_corrected)
-                    if (variance is not None):
+                    if variance is not None:
                         if len(res) == 2:
-                            # TODO, disabled for now, fix in pyFAI.AzimuthalIntegrator.integrat2d where variance is not yet used
                             res, err = res
                         else:
                             err = numpy.zeros_like(res)
@@ -930,7 +960,6 @@ Possible values for to_save:
                 elif meth.startswith("ave"):
                     res = self.workers[meth].process(data, variance=variance,
                                                      normalization_factor=I1_corrected)
-
                     # TODO: add other units
                     if i == 0 and "q" not in ds.parent:
                         if "log(1+q.nm)" in meth:
@@ -991,15 +1020,19 @@ Possible values for to_save:
         """Method for cleaning up stuff
         """
         # Finally update the cache:
-        to_cache = {}
+        to_cache_array = {}
+        to_cache_engine = {}
         for worker in self.workers.values():
             if "ai" in dir(worker):
-                to_cache.update(worker.ai._cached_array)
+                to_cache_array.update(worker.ai._cached_array)
+                to_cache_engine.update(worker.ai.engines)
 
-        self.cache.get(self.cache_ai, {}).update(to_cache)
+        cache_value = self.cache.get(self.cache_ai, CacheValues({}))
+        cache_value.update(array=to_cache_array)
+        cache_value.update(engine=to_cache_engine)
 
-        to_close = {}
         # close also the source
+        to_close = {}
         self.output_ds["source"] = self.images_ds
         for key, ds in self.output_ds.items():
             if not bool(ds):
@@ -1019,6 +1052,7 @@ Possible values for to_save:
                 self.log_warning(f"Issue in closing file {filename} {type(err)}: {err}")
 
         self.ai = None
+        self.distortion_detector = None
         self.polarization = None
         self.output["files"] = self.output_hdf5
         Plugin.teardown(self)
