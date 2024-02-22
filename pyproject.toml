@@ -1,7 +1,7 @@
 [project]
 name = 'dahu'
 dynamic = ['version',]
-license = {file = 'copyright'}
+license = {file = 'LICENSE'}
 requires-python = '>=3.7'
 readme = 'README.rst'
 description = '"Python lightweight, plugin based, data analysis engine"'
