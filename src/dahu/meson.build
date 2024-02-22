@@ -7,5 +7,8 @@ py.install_sources(
 'factory.py',
 'server.py',
 'plugin.py'
-]
+],
+  pure: false,    # Will be installed next to binaries
+  subdir: 'dahu'  # Folder relative to site-packages to install to
+
 )

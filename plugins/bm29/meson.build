@@ -6,4 +6,7 @@ py.install_sources( [
    'ispyb.py',  
    'nexus.py',  
    'subtracte.py'
-    ])
+    ],
+  pure: false,    # Will be installed next to binaries
+  subdir: 'dahu/plugins/bm29'  # Folder relative to site-packages to install to
+)

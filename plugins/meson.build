@@ -9,4 +9,7 @@ py.install_sources(
     'id15v2.py',
     'id27.py',
     'pyfai.py'
-    ]
+    ],
+  pure: false,    # Will be installed next to binaries
+  subdir: 'dahu/plugins'  # Folder relative to site-packages to install to
+)
