@@ -105,7 +105,7 @@ def process(args):
         print(result)
         basename = os.path.join(working_dir, "%05i_%s" % (idx, plugin.get_name()))
         with open(basename + ".out", "w") as fp:
-	        fp.write(result)
+            fp.write(result)
         with open(basename + ".inp", "w") as fp:
             json.dump(plugin.input, fp, indent=4, cls=NumpyEncoder)
 
