@@ -131,7 +131,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-from dahu._version import strictversion, version, __date__ as _date
+from dahu.version import strictversion, version, __date__ as _date
 year = _date.split("/")[-1]
 copyright = u'2014-%s, Data analysis unit, European Synchrotron Radiation Facility, Grenoble' % year
 
