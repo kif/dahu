@@ -4,7 +4,7 @@
 Reprocess a job using the current
 """
 
-import os, json, sys, logging, time
+import os, json, logging, time
 from argparse import ArgumentParser
 import dahu.factory
 from dahu.job import Job
