@@ -313,10 +313,11 @@ def fabio_conversion(file_path,
                      folder="xdi",
                      fabioimage="tifimage",
                      extension="tif",
-                     export_icat=False):
+                     export_icat=False,
+                     detector="eiger"):
     "Convert a set of eiger files to cbf or tiff"
     results = []
-    filename = os.path.join(file_path, scan_number, 'eiger_????.h5')
+    filename = os.path.join(file_path, scan_number, f'{detector}_????.h5')
     files = {f:fabio.open(f).nframes for f in sorted(glob.glob(filename))} #since python 3.7 dict are ordered !
     all_single = max(files.values())==1
     file_path = file_path.rstrip("/")
@@ -452,8 +453,9 @@ class XdiConversion(Plugin):
     This is the plugin to convert an HDF5 to a stack of TIFF files
        
     Typical JSON file:
-    {"file_path": "/data/id27/inhouse/some/file.h5",
-     "scan_number": "0001"
+    {"file_path": "/data/id27/inhouse/some/", #skip scan & detector
+     "scan_number": "0001",
+     "detector": "eiger" #optionnal
     }
     
     """
@@ -465,12 +467,14 @@ class XdiConversion(Plugin):
 
         file_path = self.input["file_path"]
         scan_number = self.input["scan_number"]
+        detector = self.input.get("detector", "eiger")
         results = fabio_conversion(file_path,
                                    scan_number,
                                    folder="xdi",
                                    fabioimage="tifimage",
                                    extension="tif",
-                                   export_icat=False)
+                                   export_icat=False,
+                                   detector=detector)
         self.output["output"] = results
 
 
