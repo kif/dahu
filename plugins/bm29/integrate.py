@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/10/2022"
+__date__ = "25/11/2024"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -578,7 +578,12 @@ class IntegrateMultiframe(Plugin):
             if self.ispyb.url:
                 self.to_pyarch[idx] = res
             idx += 1
-        return IntegrationResult(res.radial, intensity, sigma)
+        if idx == 0:
+            self.log_error(f"No frame iterated over in process1_integration! len(frames): {len(data)} len(monitor): {len(self.monitor_values)}", do_raise=False)
+            radial = numpy.zeros(self.npt, dtype=numpy.float32)
+        else:
+            radial = res.radial
+        return IntegrationResult(radial, intensity, sigma)
 
     def process2_cormap(self, curves, fidelity_abs, fidelity_rel):
         "Take the integrated data as input, returns a CormapResult namedtuple"
