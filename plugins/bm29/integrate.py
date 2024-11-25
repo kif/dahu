@@ -151,8 +151,9 @@ class IntegrateMultiframe(Plugin):
             lst = list(os.path.splitext(self.input_file))
             lst.insert(1, "-integrate")
             dirname, basename = os.path.split("".join(lst))
+            dirname = dirname.replace("RAW_DATA", "PROCESSED_DATA")
             dirname = os.path.dirname(dirname)
-            dirname = os.path.join(dirname, "processed")
+            # dirname = os.path.join(dirname, "processed")
             dirname = os.path.join(dirname, "integrate")
             self.output_file = os.path.join(dirname, basename)
             if not os.path.isdir(dirname):
