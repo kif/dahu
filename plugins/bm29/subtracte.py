@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/11/2022"
+__date__ = "25/11/2024"
 __status__ = "development"
 __version__ = "0.2.1"
 
@@ -166,8 +166,7 @@ class SubtractBuffer(Plugin):
                     self.send_to_ispyb()
                 except Exception as err2:
                     import traceback
-                    self.log_warning("Processing failed and unable to send remaining data to ISPyB: %s %s\n%s" %
-                                     (type(err2), err2, "\n".join(traceback.format_exc(limit=10))))
+                    self.log_warning(f"Processing failed and unable to send remaining data to ISPyB: {type(err2)} {err2}\n{traceback.format_exc(limit=10)}")
                 raise(err)
         else:
             self.send_to_ispyb()        
