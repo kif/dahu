@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "29/10/2020"
+__date__ = "26/11/2024"
 __status__ = "development"
 version = "0.0.2"
 
@@ -143,6 +143,8 @@ def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
     res = []
     sizes = []
     size = len(proba)
+    if size<2:
+        return (0,1)
     ext_diag = numpy.zeros(size + 1, dtype=numpy.int16)
     delta = numpy.zeros(size + 1, dtype=numpy.int16)
     ext_diag[1:-1] = numpy.diagonal(proba, 1) >= relative
