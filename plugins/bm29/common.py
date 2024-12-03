@@ -68,12 +68,15 @@ def get_integrator(keycache):
     if keycache in shared_cache:
         ai = shared_cache[keycache]
     else:
+        import sys
+        sys.stderr.write(f"keycache.poni {keycache.poni} type: {type(keycache.poni)}\n")
         ai = pyFAI.load(keycache.poni)
         ai.wavelength = 1e-10 * pyFAI.units.hc / keycache.energy
         if keycache.mask:
             mask = numpy.logical_or(fabio.open(keycache.mask).data, ai.detector.mask).astype("int8")
             ai.detector.mask = mask
         shared_cache[keycache] = ai
+        sys.stderr.write(f"ai {ai}\n")
     return ai
 
 def _fromdict(cls, dico):

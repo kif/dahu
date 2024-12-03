@@ -699,7 +699,12 @@ class SubtractBuffer(Plugin):
             npt = len(q)
             unit = pyFAI.units.to_unit(axis + "_" + nxdata_grp[axis].attrs["units"])
             integration_grp = nxdata_grp.parent
-            poni = str(integration_grp["configuration/file_name"][()]).strip()
+            poni = integration_grp["configuration/file_name"][()]
+            if isinstance(poni, bytes):
+                poni = poni.decode()
+            else:
+                poni = str(poni)
+            poni = poni.strip()
             if not os.path.exists(poni):
                 poni = str(integration_grp["configuration/data"][()]).strip()
             polarization = integration_grp["configuration/polarization_factor"][()]
