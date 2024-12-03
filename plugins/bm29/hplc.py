@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/09/2022"
+__date__ = "03/12/2024" 
 __status__ = "development"
 __version__ = "0.2.0"
 
