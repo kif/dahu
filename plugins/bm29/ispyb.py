@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/11/2022"
+__date__ = "03/12/2024"
 __status__ = "development"
-version = "0.2.1"
+version = "0.2.2"
 
 import logging
 logger = logging.getLogger("bm29.ispyb")
@@ -36,7 +36,7 @@ except ImportError:
 
 import matplotlib.pyplot
 matplotlib.use("Agg")
-from freesas.collections import RG_RESULT, RT_RESULT, StatsResult
+from freesas.containers import RG_RESULT, RT_RESULT, StatsResult
 from freesas.plot import kratky_plot, guinier_plot, scatter_plot, density_plot, hplc_plot
 
 

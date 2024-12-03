@@ -117,7 +117,7 @@ def build_background(I, std=None, keep=0.3):
     """
     U, S, V = numpy.linalg.svd(I.T, full_matrices=False)
     bg1 = numpy.median(V[0]) * S[0] * U[:, 0]
-    Pscore = [freesas.cormap.measure_longest(numpy.ascontiguousarray(bg1 - i, dtype=numpy.float)) for i in I]
+    Pscore = [freesas.cormap.measure_longest(numpy.ascontiguousarray(bg1 - i, dtype=numpy.float64)) for i in I]
     orderd = numpy.argsort(Pscore)
     nkeep = int(math.ceil(keep * I.shape[0]))
     to_keep = numpy.sort(orderd[:nkeep])
