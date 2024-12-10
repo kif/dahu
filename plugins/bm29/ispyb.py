@@ -107,10 +107,8 @@ class IspybConnector:
         :param data: dict with all data sent to ISpyB
         
         """
-        logger.warning(f"proposal:{proposal}, beamline:{beamline}, sample:{sample}, dataset:{dataset}, path:{path}, raw:{raw}")
         tmp = self.gallery.strip("/").split("/")
         idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")][-1]
-        logger.warning(f"tmp: {' '.join(tmp)}, {idx_process}")
         if tmp[idx_process] == "process":
             assert idx_process>5
             if proposal is None:
@@ -138,7 +136,8 @@ class IspybConnector:
                 path = os.path.dirname(self.gallery)
             if raw is None:            
                 raw = os.path.dirname(os.path.dirname(os.path.abspath(self.gallery.replace("PROCESSED_DATA", "RAW_DATA"))))
-            logger.warning(f"proposal:{proposal}, beamline:{beamline}, sample:{sample}, dataset:{dataset}, path:{path}, raw:{raw}")
+        else:
+            logger.error("Unrecognized path layout")
         
         metadata = {"definition": "SAXS",
                     "Sample_name": sample}
