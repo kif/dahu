@@ -107,7 +107,7 @@ class IspybConnector:
         :param data: dict with all data sent to ISpyB
         
         """
-        logger.warning(f"proposal:{proposal}, beamline:{beamline}, sample:{sample}, dataset:{dataset}, path:{path}, raw:{raw}, data:{data}, ")
+        logger.warning(f"proposal:{proposal}, beamline:{beamline}, sample:{sample}, dataset:{dataset}, path:{path}, raw:{raw}")
         tmp = self.gallery.strip("/").split("/")
         idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")][-1]
         logger.warning(f"tmp: {' '.join(tmp)}, {idx_process}")
@@ -126,7 +126,19 @@ class IspybConnector:
             if raw is None:            
                 raw = os.path.abspath(self.gallery[:self.gallery.lower().index("process")])
         elif tmp[idx_process] == "PROCESSED_DATA":           
-            pass 
+            if proposal is None:
+                proposal = tmp[idx_process-3]
+            if beamline is None:
+                beamline = tmp[idx_process-2]
+            if sample is None:
+                sample = tmp[idx_process+1]
+            if dataset is None:
+                dataset = tmp[idx_process+2]
+            if path is None:
+                path = os.path.dirname(self.gallery)
+            if raw is None:            
+                raw = os.path.dirname(os.path.dirname(os.path.abspath(self.gallery.replace("PROCESSED_DATA", "RAW_DATA"))))
+            logger.warning(f"proposal:{proposal}, beamline:{beamline}, sample:{sample}, dataset:{dataset}, path:{path}, raw:{raw}")
         
         metadata = {"definition": "SAXS",
                     "Sample_name": sample}
