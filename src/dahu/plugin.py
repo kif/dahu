@@ -12,7 +12,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "01/09/2020"
+__date__ = "25/11/2024"
 __status__ = "production"
 
 import os
@@ -127,10 +127,11 @@ class Plugin(object):
         :return: the job object
         """
         from .job import Job
-        assert isinstance(job_id, int)
+        if not isinstance(job_id, int):
+            self.log_warning(f"Unable to synchronize on {job_id} job, invalid type: {type(job_id)}, expected an int !")
         TIMEOUT = getattr(self, 'TIMEOUT', 10.0) #default timeout to 10s
         if job_id>Job._id_class:
-            self.log_warning("Not synchronizing job, invalid id: %s" % job_id)
+            self.log_warning(f"Not synchronizing job, invalid id: {job_id}")
         else:
             status = Job.synchronize_job(job_id, TIMEOUT)
             abort_time = time.time() + TIMEOUT
@@ -142,7 +143,7 @@ class Plugin(object):
                     self.log_error("Timeout while waiting other job to finish")
                     break
             if status != Job.STATE_SUCCESS:
-                self.log_error("Other job ended in %s: aborting myself" % status)
+                self.log_error(f"Other job {job_id} ended in {status}: aborting myself")
             return Job.getJobFromId(job_id)
 
 

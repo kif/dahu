@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/11/2022"
+__date__ = "10/12/2024" 
 __status__ = "development"
-version = "0.2.1"
+version = "0.2.3"
 
 import logging
 logger = logging.getLogger("bm29.ispyb")
@@ -36,7 +36,7 @@ except ImportError:
 
 import matplotlib.pyplot
 matplotlib.use("Agg")
-from freesas.collections import RG_RESULT, RT_RESULT, StatsResult
+from freesas.containers import RG_RESULT, RT_RESULT, StatsResult
 from freesas.plot import kratky_plot, guinier_plot, scatter_plot, density_plot, hplc_plot
 
 
@@ -78,7 +78,7 @@ class IspybConnector:
             self.gallery = os.path.abspath(gallery)
             if not os.path.isdir(self.gallery):
                 try:
-                   os.makedirs(self.gallery)
+                    os.makedirs(self.gallery)
                 except Exception as err:
                     logger.warning(f"Unable to create dir {self.gallery}. {type(err)}: {err}")
         else:
@@ -105,22 +105,39 @@ class IspybConnector:
         :param path: directory name where processed data are staying
         :param raw: directory name of the raw data (not the processed ones)
         :param data: dict with all data sent to ISpyB
+        
         """
         tmp = self.gallery.strip("/").split("/")
         idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")][-1]
-        assert idx_process>5
-        if proposal is None:
-            proposal = tmp[idx_process-5]
-        if beamline is None:
-            beamline = tmp[idx_process-4]
-        if sample is None:
-            sample = tmp[idx_process-2]
-        if dataset is None:
-            dataset = tmp[idx_process+1]
-        if path is None:
-            path = os.path.dirname(self.gallery)
-        if raw is None:            
-            raw = os.path.abspath(self.gallery[:self.gallery.lower().index("process")])            
+        if tmp[idx_process] == "process":
+            assert idx_process>5
+            if proposal is None:
+                proposal = tmp[idx_process-5]
+            if beamline is None:
+                beamline = tmp[idx_process-4]
+            if sample is None:
+                sample = tmp[idx_process-2]
+            if dataset is None:
+                dataset = tmp[idx_process+1]
+            if path is None:
+                path = os.path.dirname(self.gallery)
+            if raw is None:            
+                raw = os.path.abspath(self.gallery[:self.gallery.lower().index("process")])
+        elif tmp[idx_process] == "PROCESSED_DATA":           
+            if proposal is None:
+                proposal = tmp[idx_process-3]
+            if beamline is None:
+                beamline = tmp[idx_process-2]
+            if sample is None:
+                sample = tmp[idx_process+1]
+            if dataset is None:
+                dataset = tmp[idx_process+2]
+            if path is None:
+                path = os.path.dirname(self.gallery)
+            if raw is None:            
+                raw = os.path.dirname(os.path.dirname(os.path.abspath(self.gallery.replace("PROCESSED_DATA", "RAW_DATA"))))
+        else:
+            logger.error("Unrecognized path layout")
         
         metadata = {"definition": "SAXS",
                     "Sample_name": sample}
@@ -157,7 +174,7 @@ class IspybConnector:
         if volume:
             metadata["SAXS_porod_volume"] = str(volume) 
         #Other metadata one may collect ...
-        metadata["SAXS_experimentType"]= data.get("experiment_type", "")         
+        metadata["SAXS_experiment_type"]= data.get("experiment_type", "UNKNOWN")
         metadata["datasetName"] = dataset
         icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
         kwargs = {"beamline":beamline, 

@@ -1,9 +1,11 @@
 #!/bin/sh
-rm -rf deb_dist
-export PYBUILD_DISABLE_python2=test
-export PYBUILD_DISABLE_python3=test
-python3 setup.py --command-packages=stdeb.command  bdist_deb
-if [ -z $1 ]
-then
-  sudo dpkg -i deb_dist/python3-*.deb
-fi
+export PATH=$PATH:/opt/bliss/conda/venv/dahu/bin
+rm -rf deb_dist/
+/usr/bin/python3 -m pip wheel .
+wheel2deb --output-dir deb_dist  --exclude numpy* 
+cd deb_dist/python3-dahu*_amd64
+dpkg-buildpackage -r -uc -us
+cd ..
+sudo dpkg -i python3-dahu*.deb
+cd ..
+

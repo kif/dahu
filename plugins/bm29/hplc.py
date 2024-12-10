@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/09/2022"
+__date__ = "03/12/2024" 
 __status__ = "development"
 __version__ = "0.2.0"
 
@@ -117,7 +117,7 @@ def build_background(I, std=None, keep=0.3):
     """
     U, S, V = numpy.linalg.svd(I.T, full_matrices=False)
     bg1 = numpy.median(V[0]) * S[0] * U[:, 0]
-    Pscore = [freesas.cormap.measure_longest(numpy.ascontiguousarray(bg1 - i, dtype=numpy.float)) for i in I]
+    Pscore = [freesas.cormap.measure_longest(numpy.ascontiguousarray(bg1 - i, dtype=numpy.float64)) for i in I]
     orderd = numpy.argsort(Pscore)
     nkeep = int(math.ceil(keep * I.shape[0]))
     to_keep = numpy.sort(orderd[:nkeep])

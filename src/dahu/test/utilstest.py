@@ -27,7 +27,7 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "jerome.kieffer@esrf.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22/02/2024"
+__date__ = "04/12/2024"
 
 PACKAGE = "dahu"
 DATA_KEY = "DAHU_DATA"
@@ -132,11 +132,12 @@ class UtilsTest(object):
             """
             if imagename is None:
                 imagename = "2252/testimages.tar.bz2 unzip it "
-            raise RuntimeError("Could not automatically \
-                download test images!\n \ If you are behind a firewall, \
-                please set both environment variable http_proxy and https_proxy.\
-                This even works under windows ! \n \
-                Otherwise please try to download the images manually from \n %s/%s and put it in in test/testimages." % (cls.url_base, imagename))
+            raise RuntimeError(f"""Could not automatically download test images!
+If you are behind a firewall, please set both environment variable http_proxy and https_proxy.
+This even works under windows ! 
+Otherwise please try to download the images manually from: 
+{cls.url_base}/{imagename} 
+and put it in in test/testimages.""")
 
     @classmethod
     def getimage(cls, imagename):
@@ -193,11 +194,11 @@ class UtilsTest(object):
                     data to disk at %s" % cls.image_home)
 
             if not os.path.isfile(fullimagename):
-                raise RuntimeError("Could not automatically \
-                download test images %s!\n \ If you are behind a firewall, \
-                please set both environment variable http_proxy and https_proxy.\
-                This even works under windows ! \n \
-                Otherwise please try to download the images manually from \n%s/%s" % (imagename, cls.url_base, imagename))
+                raise RuntimeError(f"""Could not automatically download test images {imagename}!
+If you are behind a firewall, please set both environment variable http_proxy and https_proxy.
+This even works under windows !
+Otherwise, please try to download the images manually from:
+{cls.url_base}/{imagename}""")
 
         return fullimagename
 
@@ -275,7 +276,7 @@ class UtilsTest(object):
 
 
 def Rwp(obt, ref, comment="Rwp"):
-    """          ___________________________
+    r"""          ___________________________
     Calculate  \/     4 ( obt - ref)²
                V Sum( --------------- )
                         (obt + ref)²
