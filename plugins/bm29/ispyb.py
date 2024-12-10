@@ -107,23 +107,26 @@ class IspybConnector:
         :param data: dict with all data sent to ISpyB
         
         """
-        print(f"proposal:{proposal}, beamline:{beamline}, sample:{sample}, dataset:{dataset}, path:{path}, raw:{raw}, data:{data}, ")
+        logger.warning(f"proposal:{proposal}, beamline:{beamline}, sample:{sample}, dataset:{dataset}, path:{path}, raw:{raw}, data:{data}, ")
         tmp = self.gallery.strip("/").split("/")
         idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")][-1]
-        print(tmp, idx_process)
-        assert idx_process>5
-        if proposal is None:
-            proposal = tmp[idx_process-5]
-        if beamline is None:
-            beamline = tmp[idx_process-4]
-        if sample is None:
-            sample = tmp[idx_process-2]
-        if dataset is None:
-            dataset = tmp[idx_process+1]
-        if path is None:
-            path = os.path.dirname(self.gallery)
-        if raw is None:            
-            raw = os.path.abspath(self.gallery[:self.gallery.lower().index("process")])            
+        logger.warning(f"tmp: {' '.join(tmp)}, {idx_process}")
+        if tmp[idx_process] == "process":
+            assert idx_process>5
+            if proposal is None:
+                proposal = tmp[idx_process-5]
+            if beamline is None:
+                beamline = tmp[idx_process-4]
+            if sample is None:
+                sample = tmp[idx_process-2]
+            if dataset is None:
+                dataset = tmp[idx_process+1]
+            if path is None:
+                path = os.path.dirname(self.gallery)
+            if raw is None:            
+                raw = os.path.abspath(self.gallery[:self.gallery.lower().index("process")])
+        elif tmp[idx_process] == "PROCESSED_DATA":           
+            pass 
         
         metadata = {"definition": "SAXS",
                     "Sample_name": sample}
