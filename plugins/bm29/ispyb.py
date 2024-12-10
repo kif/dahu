@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/12/2024" 
+__date__ = "10/12/2024" 
 __status__ = "development"
-version = "0.2.2"
+version = "0.2.3"
 
 import logging
 logger = logging.getLogger("bm29.ispyb")
@@ -78,7 +78,7 @@ class IspybConnector:
             self.gallery = os.path.abspath(gallery)
             if not os.path.isdir(self.gallery):
                 try:
-                   os.makedirs(self.gallery)
+                    os.makedirs(self.gallery)
                 except Exception as err:
                     logger.warning(f"Unable to create dir {self.gallery}. {type(err)}: {err}")
         else:
@@ -105,9 +105,12 @@ class IspybConnector:
         :param path: directory name where processed data are staying
         :param raw: directory name of the raw data (not the processed ones)
         :param data: dict with all data sent to ISpyB
+        
         """
+        print(f"proposal:{proposal}, beamline:{beamline}, sample:{sample}, dataset:{dataset}, path:{path}, raw:{raw}, data:{data}, ")
         tmp = self.gallery.strip("/").split("/")
         idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")][-1]
+        print(tmp, idx_process)
         assert idx_process>5
         if proposal is None:
             proposal = tmp[idx_process-5]
