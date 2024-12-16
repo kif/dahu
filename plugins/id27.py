@@ -315,7 +315,17 @@ def fabio_conversion(file_path,
                      extension="tif",
                      export_icat=False,
                      detector="eiger"):
-    "Convert a set of eiger files to cbf or tiff"
+    """Convert a set of eiger files to cbf or tiff
+    
+    :param file_path: First par of the input filename, typically /
+    :param scan_number: last part of the path, typically "scan0001". 
+        The actual filename is actually guessed since there can be several of them, all will be processed
+    :param folder: name of the output folder for writing (in PROCESSED_DATA, not in RAW_DATA folder)
+    :param fabioimage: type of file to write, name of the Fabio class name.
+    :param export_icat: set to True to export to icat the result.
+    :param detector: name of the detector, used to determine the input filename
+    :return: the logs of the conversion.
+    """
     results = []
     filename = os.path.join(file_path, scan_number, f'{detector}_????.h5')
     files = {f:fabio.open(f).nframes for f in sorted(glob.glob(filename))} #since python 3.7 dict are ordered !
@@ -453,8 +463,8 @@ class XdiConversion(Plugin):
     This is the plugin to convert an HDF5 to a stack of TIFF files
        
     Typical JSON file:
-    {"file_path": "/data/id27/inhouse/some/", #skip scan & detector
-     "scan_number": "0001",
+    {"file_path": "/data/id27/inhouse/some/path", #excluding the scan-number and the filename
+     "scan_number": "scan0001"
      "detector": "eiger" #optionnal
     }
     
@@ -557,8 +567,8 @@ class XdsConversion(Plugin):
     This is the plugin to convert an HDF5 to a stack of CBF files for XDS
        
     Typical JSON file:
-    {"file_path": "/data/id27/inhouse/some/file.h5",
-     "scan_number": "0001"
+    {"file_path": "/data/id27/inhouse/some/path", #excluding the scan-number and the filename
+     "scan_number": "scan0001"
     }
     
     """
@@ -704,6 +714,59 @@ def send_icat(raw_dir, processed_dir, beamline="id27", proposal="", dataset="", 
     icat_client.store_processed_data(**kwargs)
     return kwargs
     
+@register
+class XdsProcessing(Plugin):
+    """
+    This is the plugin to convert an HDF5-lima file into a Neggia-compatible and processes it using XDS.
+       
+    Typical JSON file:
+    {"file_path": "/data/id27/inhouse/some/path", #excluding the scan-number and the filename
+     "scan_number": "scan0001",
+     "ponifile": "/tmp/geometry.poni",
+     "detector": "eiger" #optionnal
+    }
     
+    """
+
+    def process(self):
+        Plugin.process(self)
+        if not self.input:
+            logger.error("input is empty")
+
+        script_name = "hdf2neggia"
+        file_path = self.input["file_path"]
+        scan_number = self.input["scan_number"]
+        ponifile = self.input["ponifile"]
+        detector = self.input.get("detector", "eiger")
+        
+        filename = os.path.join(file_path, scan_number, f'{detector}_????.h5')
+        files = {f:fabio.open(f).nframes for f in sorted(glob.glob(filename))} #since python 3.7 dict are ordered !
+        file_path = file_path.rstrip("/")
+
+        splitted = file_path.split("/")
+        if RAW in splitted:
+            raw_pos = splitted.index(RAW)
+            splitted[raw_pos] = PROCESSED
+            splitted.append(scan_number)
+            splitted.insert(0, "/")
+            dest_dir = os.path.join(*splitted)    
+            sample_name = splitted[raw_pos + 1]
+        else:
+            dest_dir = os.path.join(file_path.replace(RAW,PROCESSED), scan_number)
+            sample_name = "unknown sample"
+        dest_dir = os.path.join(dest_dir, "xsd")
+        if len(files) == 0:
+            raise RuntimeError(f"No such file {filename}")
+
+        if not os.path.exists(dest_dir):
+            os.makedirs(dest_dir, exist_ok=True)
+
+        script_name = os.path.join(PREFIX, script_name)
+        parameters = [script_name,
+                      "--geometry", ponifile,
+                      "--output",  os.path.join(dest_dir, "master.h5")] + files
+        logger.info('starts with parameters: %s', parameters)
+        res = subprocess.run(parameters, capture_output=True, check=False)
+        
     
     
