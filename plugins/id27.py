@@ -19,9 +19,9 @@ from dahu.plugin import Plugin
 from dahu.factory import register
 
 # This is a security hole ... but I was told to use modules
-exec(open(os.environ["MODULESHOME"] + "/init/python.py").read())
+# exec(open(os.environ["MODULESHOME"] + "/init/python.py").read())
 # Shame should go to the people who enforce the usage of modules
-module("load", "xds")
+# module("load", "xds")
 
 lock = Semaphore()
 logger = logging.getLogger("id27")
