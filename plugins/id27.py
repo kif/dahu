@@ -24,6 +24,8 @@ RAW = "RAW_DATA"
 PROCESSED = "PROCESSED_DATA"
 WORKDIR = "/scratch/shared"
 PREFIX = os.path.dirname(sys.executable) #where there scripts are
+NEGGIA_PLUGIN = "/mnt/data/ID11/Sucrose/Eiger/sucrose_sx_0/XDS/dectris-neggia.so" #TODO fix
+XDS_EXE = "/opt/XDS/xds_par" #TODO fix
 
 try:
     from cryio import crysalis
@@ -720,7 +722,8 @@ class XdsProcessing(Plugin):
     This is the plugin to convert an HDF5-lima file into a Neggia-compatible and processes it using XDS.
        
     Typical JSON file:
-    {"file_path": "/data/id27/inhouse/some/path", #excluding the scan-number and the filename
+    {"plugin_name": "id27.xdsprocessing",
+     "file_path": "/data/id27/inhouse/some/path", #excluding the scan-number and the filename
      "scan_number": "scan0001",
      "ponifile": "/tmp/geometry.poni",
      "detector": "eiger" #optionnal
@@ -740,7 +743,7 @@ class XdsProcessing(Plugin):
         detector = self.input.get("detector", "eiger")
         
         filename = os.path.join(file_path, scan_number, f'{detector}_????.h5')
-        files = {f:fabio.open(f).nframes for f in sorted(glob.glob(filename))} #since python 3.7 dict are ordered !
+        files = sorted(glob.glob(filename))
         file_path = file_path.rstrip("/")
 
         splitted = file_path.split("/")
@@ -750,10 +753,10 @@ class XdsProcessing(Plugin):
             splitted.append(scan_number)
             splitted.insert(0, "/")
             dest_dir = os.path.join(*splitted)    
-            sample_name = splitted[raw_pos + 1]
+            # sample_name = splitted[raw_pos + 1]
         else:
             dest_dir = os.path.join(file_path.replace(RAW,PROCESSED), scan_number)
-            sample_name = "unknown sample"
+            # sample_name = "unknown sample"
         dest_dir = os.path.join(dest_dir, "xsd")
         if len(files) == 0:
             raise RuntimeError(f"No such file {filename}")
@@ -764,9 +767,16 @@ class XdsProcessing(Plugin):
         script_name = os.path.join(PREFIX, script_name)
         parameters = [script_name,
                       "--geometry", ponifile,
-                      "--output",  os.path.join(dest_dir, "master.h5")] + files
-        logger.info('starts with parameters: %s', parameters)
+                      "--output",  dest_dir,
+                      "--neggia", NEGGIA_PLUGIN,
+                      "--CdTe"] + files
+        self.log_warning(f'start script with parameters: `{" ".join(parameters)}`')
         res = subprocess.run(parameters, capture_output=True, check=False)
+        self.output["convert"] = unpack_processed(res)
+        if res.returncode == 0:
+            # Implement the tuning of the XDS.INP file here...
+            res = subprocess.run(XDS_EXE, cwd=dest_dir, capture_output=True, check=False)
+            self.output["xds"] = unpack_processed(res)
         
     
     
