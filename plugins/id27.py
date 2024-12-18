@@ -686,8 +686,8 @@ class DiffMap(Plugin):
         try:
             send_icat(file_path, dest_dir, metadata=metadata)
         except Exception as err:
+            self.log_error(f"Error in send_icat {type(err)}: {err}", do_raise=False)
             import traceback
-            print(f"Error {type(err)}: {err}")
             traceback.print_exc(file=sys.stdout)
 
 
