@@ -688,7 +688,7 @@ class DiffMap(Plugin):
         except Exception as err:
             import traceback
             print(f"Error {type(err)}: {err}")
-            traceback.print_exc(err, file=sys.stdout)
+            traceback.print_exc(file=sys.stdout)
 
 
 def send_icat(raw_dir, processed_dir, beamline="id27", proposal="", dataset="", metadata=None):
