@@ -24,8 +24,8 @@ RAW = "RAW_DATA"
 PROCESSED = "PROCESSED_DATA"
 WORKDIR = "/scratch/shared"
 PREFIX = os.path.dirname(sys.executable) #where there scripts are
-NEGGIA_PLUGIN = "/mnt/data/ID11/Sucrose/Eiger/sucrose_sx_0/XDS/dectris-neggia.so" #TODO fix
-XDS_EXE = "/opt/XDS/xds_par" #TODO fix
+NEGGIA_PLUGIN = os.path.join(os.environ["HOME"], "lib", "dectris-neggia.so")
+XDS_EXE = "xds_par"
 
 try:
     from cryio import crysalis
@@ -775,8 +775,8 @@ class XdsProcessing(Plugin):
         self.output["convert"] = unpack_processed(res)
         if res.returncode == 0:
             # Implement the tuning of the XDS.INP file here...
+            res = subprocess.run(["module","load","xds"],capture_output=True, check=True)
+            self.output["module"] = unpack_processed(res)
             res = subprocess.run(XDS_EXE, cwd=dest_dir, capture_output=True, check=False)
             self.output["xds"] = unpack_processed(res)
         
-    
-    
