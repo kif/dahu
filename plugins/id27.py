@@ -17,6 +17,12 @@ import fabio
 import pyFAI
 from dahu.plugin import Plugin
 from dahu.factory import register
+
+# This is a security hole ... but I was told to use modules
+exec(open(os.environ["MODULESHOME"] + "/init/python.py").read())
+# Shame should go to the people who enforce the usage of modules
+module("load", "xds")
+
 lock = Semaphore()
 logger = logging.getLogger("id27")
 
@@ -774,9 +780,7 @@ class XdsProcessing(Plugin):
         res = subprocess.run(parameters, capture_output=True, check=False)
         self.output["convert"] = unpack_processed(res)
         if res.returncode == 0:
-            # Implement the tuning of the XDS.INP file here...
-            res = subprocess.run(["module","load","xds"],capture_output=True, check=True)
-            self.output["module"] = unpack_processed(res)
+            # Implement the tuning of the XDS.INP file here...            
             res = subprocess.run(XDS_EXE, cwd=dest_dir, capture_output=True, check=False)
             self.output["xds"] = unpack_processed(res)
         
