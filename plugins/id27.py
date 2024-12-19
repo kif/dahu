@@ -655,7 +655,7 @@ class DiffMap(Plugin):
         ai["error_model"] = "poisson"
         ai["application"] = "pyfai-integrate"
         ai["version"] = 3
-        ai["method"] = ["bbox", "csr", "opencl"]
+        ai["method"] = ["full", "csr", "opencl"]
         ai["opencl_device"] = "gpu"
         ai["nbpt_rad"] = self.input.get("npt", 1)
         ai["nbpt_azim"] = 1
@@ -696,6 +696,9 @@ class DiffMap(Plugin):
 
 def send_icat(raw_dir, processed_dir, beamline="id27", proposal="", dataset="", metadata=None):
     "Function that sends to icat the processed data"
+    if IcatClient is None:
+        logger.warning("pyicat_plus is not installed, skipping")
+        return
     icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
     metadata = metadata or {"definition": "dummy processing", "Sample_name": "unknown sample"}
     l = raw_dir.split("/")
