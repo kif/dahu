@@ -665,8 +665,8 @@ class DiffMap(Plugin):
         param["experiment_title"] = os.path.join(os.path.basename(file_path), scan_number)
         param["fast_motor_name"] = "fast"
         param["slow_motor_name"] = "slow"
-        param["fast_motor_points"] = fast_scan
-        param["slow_motor_points"] = slow_scan
+        param["nbpt_fast"] = fast_scan
+        param["nbpt_slow"] = slow_scan
         param["offset"] = 0
         param["output_file"] = dest
         param["input_data"] = [(i, None, None) for i in files]
