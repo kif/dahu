@@ -728,6 +728,20 @@ class XdsProcessing(Plugin):
      "scan_number": "scan0001",
      "ponifile": "/tmp/geometry.poni",
      "detector": "eiger" #optionnal
+     "xds_extra": ["",
+                   "!UNIT_CELL_CONSTANTS= 10.317 10.317 7.3378 90 90 120 ! put correct values if known",
+                   ...]
+MINIMUM_NUMBER_OF_PIXELS_IN_A_SPOT=4 ! default of 6 is sometimes too high
+MAXIMUM_NUMBER_OF_STRONG_PIXELS=18000 ! total number of strong pixels 
+used for indexation
+BACKGROUND_PIXEL=2.0 ! used by COLSPOT and INTEGRATE
+SIGNAL_PIXEL=3.0 ! needs to be lager than BACKGROUND_PIXEL, specifies 
+standard deviation, used in COLSPOT and INTEGRATE
+
+!EXCLUDE_RESOLUTION_RANGE= 3.93 3.87 !ice-ring at 3.897 Angstrom
+!INCLUDE_RESOLUTION_RANGE=40 1.75  ! after CORRECT, insert high resol 
+limit; re-run CORRECT
+
     }
     
     """
@@ -742,6 +756,17 @@ class XdsProcessing(Plugin):
         scan_number = self.input["scan_number"]
         ponifile = self.input["ponifile"]
         detector = self.input.get("detector", "eiger")
+        xds_extra = self.input.get("xds_extra")
+        if xds_extra is None:
+                xds_extra = ["",
+                             "!UNIT_CELL_CONSTANTS= 10.317 10.317 7.3378 90 90 120 ! put correct values if known",
+                             "MINIMUM_NUMBER_OF_PIXELS_IN_A_SPOT=4 ! default of 6 is sometimes too high",
+                             "MAXIMUM_NUMBER_OF_STRONG_PIXELS=18000 ! total number of strong pixels used for indexation",
+                             "BACKGROUND_PIXEL=2.0 ! used by COLSPOT and INTEGRATE",
+                             "SIGNAL_PIXEL=3.0 ! needs to be lager than BACKGROUND_PIXEL, specifies standard deviation, used in COLSPOT and INTEGRATE",
+                             "!EXCLUDE_RESOLUTION_RANGE= 3.93 3.87 !ice-ring at 3.897 Angstrom",
+                             "!INCLUDE_RESOLUTION_RANGE=40 1.75  ! after CORRECT, insert high resol limit; re-run CORRECT",
+                             ""]  
         
         filename = os.path.join(file_path, scan_number, f'{detector}_????.h5')
         files = sorted(glob.glob(filename))
@@ -775,7 +800,13 @@ class XdsProcessing(Plugin):
         res = subprocess.run(parameters, capture_output=True, check=False)
         self.output["convert"] = unpack_processed(res)
         if res.returncode == 0:
-            # Implement the tuning of the XDS.INP file here...            
+            # Implement the tuning of the XDS.INP file here...
+            xdsinp = os.path.join(dest_dir, "XDS.INP")
+            with open(xdsinp, "a") as xdsfile:
+                xdsfile.write(os.linesep)
+                for line in xds_extra:
+                    xdsfile.write(line+os.linesep)
+                    
             res = subprocess.run(XDS_EXE, cwd=dest_dir, capture_output=True, check=False)
             self.output["xds"] = unpack_processed(res)
         
