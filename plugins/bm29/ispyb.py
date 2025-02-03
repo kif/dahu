@@ -105,16 +105,15 @@ class IspybConnector:
         :param path: directory name where processed data are staying
         :param raw: directory name of the raw data (not the processed ones)
         :param data: dict with all data sent to ISpyB
-        
         """
         tmp = self.gallery.strip("/").split("/")
         idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")][-1]
-        if tmp[idx_process] == "process":
-            assert idx_process>5
+        if tmp[idx_process] == "processed":
+            assert idx_process>=6
             if proposal is None:
-                proposal = tmp[idx_process-5]
+                proposal = tmp[idx_process-6]
             if beamline is None:
-                beamline = tmp[idx_process-4]
+                beamline = tmp[idx_process-5]
             if sample is None:
                 sample = tmp[idx_process-2]
             if dataset is None:
