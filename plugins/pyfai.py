@@ -9,7 +9,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/09/2020"
+__date__ = "20/02/2025"
 __status__ = "development"
 version = "0.3.0"
 
@@ -30,11 +30,10 @@ try:
 except ImportError:
     logger.error("Failed to import Fabio: download and install it from pypi")
 
-import pyFAI, fabio
 def integrate_simple(poni_file, image_file, curve_file):
     ai = pyFAI.load(poni_file)
-    img = fabio.open(image_file).data
-    ai.integrate1d(img, 1000, filename=curve_file, unit="2th_deg")
+    with fabio.open(image_file) as fimg:
+        ai.integrate1d(fimg.data, 1000, filename=curve_file, unit="2th_deg")
     return {"out_file":curve_file}
     
 from dahu.plugin import plugin_from_function
