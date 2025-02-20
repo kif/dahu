@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/11/2022"
+__date__ = "03/12/2024"
 __status__ = "development"
-__version__ = "0.2.1"
+__version__ = "0.2.1" 
 
 import os
 import json
@@ -166,8 +166,7 @@ class SubtractBuffer(Plugin):
                     self.send_to_ispyb()
                 except Exception as err2:
                     import traceback
-                    self.log_warning("Processing failed and unable to send remaining data to ISPyB: %s %s\n%s" %
-                                     (type(err2), err2, "\n".join(traceback.format_exc(limit=10))))
+                    self.log_warning(f"Processing failed and unable to send remaining data to ISPyB: {type(err2)} {err2}\n{traceback.format_exc(limit=10)}")
                 raise(err)
         else:
             self.send_to_ispyb()        
@@ -700,7 +699,12 @@ class SubtractBuffer(Plugin):
             npt = len(q)
             unit = pyFAI.units.to_unit(axis + "_" + nxdata_grp[axis].attrs["units"])
             integration_grp = nxdata_grp.parent
-            poni = str(integration_grp["configuration/file_name"][()]).strip()
+            poni = integration_grp["configuration/file_name"][()]
+            if isinstance(poni, bytes):
+                poni = poni.decode()
+            else:
+                poni = str(poni)
+            poni = poni.strip()
             if not os.path.exists(poni):
                 poni = str(integration_grp["configuration/data"][()]).strip()
             polarization = integration_grp["configuration/polarization_factor"][()]
@@ -732,7 +736,7 @@ class SubtractBuffer(Plugin):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
             ispyb.send_subtracted(self.to_pyarch)
-            self.to_pyarch["experiment_type"]="sample-changer"
+            self.to_pyarch["experiment_type"]="sampleChanger"
             self.to_pyarch["sample"] = self.sample_juice.sample
             ispyb.send_icat(data=self.to_pyarch)
         else:

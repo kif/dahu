@@ -6,6 +6,10 @@ pyFAI
 h5py
 hdf5plugin
 freesas
-suds-jurko
-memcache
+suds
+python-memcached
 pyicat-plus
+urllib3
+siphash24
+pyopencl
+stompest
