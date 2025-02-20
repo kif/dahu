@@ -12,7 +12,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "06/02/2020"
+__date__ = "20/02/2025"
 __status__ = "development"
 version = "0.1.0"
 
@@ -48,7 +48,8 @@ def integrate_simple(poni_file, image_file, curve_file, nbins=1000):
     :param nbins: number of output bins
     """
     ai = pyFAI.load(poni_file)
-    img = fabio.open(image_file).data
+    with fabio.open(image_file) as fimg:
+        img = fimg.data
     ai.integrate1d(img, nbins, filename=curve_file, unit="2th_deg", method="splitpixel")
     return {"out_file": curve_file}
 plugin_from_function(integrate_simple)
@@ -109,7 +110,8 @@ class Integrate(Plugin):
         json_path = self.input.get("json", "")
         if not os.path.exists(json_path):
             self.log_error("Integration setup file (JSON): %s does not exist" % json_path, do_raise=True)
-        self.json_data = json.load(open(json_path))
+        with open(json_path) as fp:
+            self.json_data = json.load(fp)
 
         ai = make_ai(self.json_data)
         stored = self._ais.get(str(ai), ai)
@@ -140,21 +142,21 @@ class Integrate(Plugin):
                 continue
             basename = os.path.splitext(os.path.basename(fname))[0]
             destination = os.path.join(self.dest_dir, basename + ".dat")
-            fimg = fabio.open(fname)
-            if self.wavelength is not None:
-                monitor = self.getMon(fimg.header, self.wavelength) / self.norm
-            else:
-                monitor = 1.0
-            self.ai.integrate1d(fimg.data, npt=self.npt, method=self.method,
-                                safe=False,
-                                filename=destination,
-                                normalization_factor=monitor,
-                                unit=self.unit,
-                                dummy=self.dummy,
-                                delta_dummy=self.delta_dummy,
-                                polarization_factor=self.polarization_factor,
-                                correctSolidAngle=self.do_SA
-                                )
+            with fabio.open(fname) as fimg:
+                if self.wavelength is not None:
+                    monitor = self.getMon(fimg.header, self.wavelength) / self.norm
+                else:
+                    monitor = 1.0
+                self.ai.integrate1d(fimg.data, npt=self.npt, method=self.method,
+                                    safe=False,
+                                    filename=destination,
+                                    normalization_factor=monitor,
+                                    unit=self.unit,
+                                    dummy=self.dummy,
+                                    delta_dummy=self.delta_dummy,
+                                    polarization_factor=self.polarization_factor,
+                                    correctSolidAngle=self.do_SA
+                                    )
             self.output_files.append(destination)
 
     def teardown(self):

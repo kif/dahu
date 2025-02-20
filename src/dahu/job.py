@@ -12,7 +12,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "08/10/2020"
+__date__ = "20/02/2025"
 __status__ = "production"
 
 from threading import Thread, Semaphore
@@ -336,7 +336,8 @@ class Job(Thread):
         """
         with self._sem:
             if self.data_on_disk:
-                return json.load(open(self.data_on_disk + ".inp"))
+                with open(self.data_on_disk + ".inp") as fp:
+                    return json.load(fp)
             else:
                 return self._input_data
 
@@ -350,7 +351,8 @@ class Job(Thread):
         with self._sem:
             if self._status in [self.STATE_SUCCESS, self.STATE_FAILURE, self.STATE_ABORTED]:
                 if self.data_on_disk:
-                    return json.load(open(self.data_on_disk + ".out"))
+                    with open(self.data_on_disk + ".out") as fp:
+                        return json.load(fp)
                 else:
                     return self._output_data
             else:
@@ -483,7 +485,8 @@ class Job(Thread):
             if job is not None:
                 with job._sem:
                     if job.data_on_disk:
-                        data = open(job.data_on_disk + ".out").read()
+                        with open(job.data_on_disk + ".out") as fp:
+                            data = fp.read()
                         if as_JSON:
                             output = data
                         else:
@@ -518,7 +521,8 @@ class Job(Thread):
             if job is not None:
                 with job._sem:
                     if job.data_on_disk:
-                        data = open(job.data_on_disk + ".inp").read()
+                        with open(job.data_on_disk + ".inp") as fp:
+                            data = fp.read()
                         if as_JSON:
                             output = data
                         else:

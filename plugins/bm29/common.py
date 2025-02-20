@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/12/2024"
+__date__ = "20/02/2025"
 __status__ = "development"
 version = "0.0.2"
 
@@ -71,7 +71,9 @@ def get_integrator(keycache):
         ai = pyFAI.load(keycache.poni)
         ai.wavelength = 1e-10 * pyFAI.units.hc / keycache.energy
         if keycache.mask:
-            mask = numpy.logical_or(fabio.open(keycache.mask).data, ai.detector.mask).astype("int8")
+            with fabio.open(keycache.mask) as fimg:
+                fabio_mask =  fimg.data
+            mask = numpy.logical_or(fabio_mask, ai.detector.mask).astype("int8")
             ai.detector.mask = mask
         shared_cache[keycache] = ai
     return ai

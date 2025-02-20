@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/09/2020"
+__date__ = "20/02/2025"
 __status__ = "development"
 version = "0.4.0"
 
@@ -226,7 +226,8 @@ class IntegrateManyFrames(Plugin):
         self.unit = self.input.get("unit", self.unit)
         self.wavelength = self.input.get("wavelength", self.wavelength)
         if os.path.exists(self.input.get("mask", "")):
-            self.mask = fabio.open(self.input["mask"]).data
+            with fabio.open(self.input["mask"]) as fimg:
+                self.mask = fimg.data
         self.dummy = self.input.get("dummy", self.dummy)
         self.delta_dummy = self.input.get("delta_dummy", self.delta_dummy)
         if self.input.get("do_polarziation"):
@@ -329,36 +330,36 @@ class IntegrateManyFrames(Plugin):
             kwfilter = {"compression": 32008, "compression_opts": (0, 2)}  # enforce lz4 compression
 
         first_image = self.input_files[0]
-        fimg = fabio.open(first_image)
-        shape = fimg.data.shape
-        stack_shape = (len(self.input_files),) + shape
-        first_frame_timestamp = os.stat(first_image).st_ctime
-
-        try:
-            self.raw_nxs = pyFAI.io.Nexus(self.save_raw, "a")
-        except IOError as error:
-            self.log_warning("invalid HDF5 file %s: remove and re-create!\n%s" % (self.save_raw, error))
-            os.unlink(self.save_raw)
-            self.raw_nxs = pyFAI.io.Nexus(self.save_raw)
-        entry = self.raw_nxs.new_entry("entry",
-                                       program_name="dahu",
-                                       title="ID15.raw_data",
-                                       force_time=first_frame_timestamp,
-                                       force_name=True)
-        entry["program_name"].attrs["version"] = dahu_version
-        entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
-        entry["plugin_name"].attrs["version"] = version
-        coll = self.raw_nxs.new_class(entry, "data", class_type="NXdata")
-        try:
-            self.raw_ds = coll.require_dataset(name="data", shape=stack_shape,
-                                               dtype=fimg.data.dtype,
-                                               chunks=(1,) + shape,
-                                               **kwfilter)
-        except Exception as error:
-            logger.error("Error in creating dataset, disabling compression:%s", error)
-            self.raw_ds = coll.require_dataset(name="data", shape=stack_shape,
-                                               dtype=fimg.data.dtype,
-                                               chunks=(1,) + shape)
+        with fabio.open(first_image) as fimg:
+            shape = fimg.data.shape
+            stack_shape = (len(self.input_files),) + shape
+            first_frame_timestamp = os.stat(first_image).st_ctime
+    
+            try:
+                self.raw_nxs = pyFAI.io.Nexus(self.save_raw, "a")
+            except IOError as error:
+                self.log_warning("invalid HDF5 file %s: remove and re-create!\n%s" % (self.save_raw, error))
+                os.unlink(self.save_raw)
+                self.raw_nxs = pyFAI.io.Nexus(self.save_raw)
+            entry = self.raw_nxs.new_entry("entry",
+                                           program_name="dahu",
+                                           title="ID15.raw_data",
+                                           force_time=first_frame_timestamp,
+                                           force_name=True)
+            entry["program_name"].attrs["version"] = dahu_version
+            entry["plugin_name"] = numpy.string_(".".join((os.path.splitext(os.path.basename(__file__))[0], self.__class__.__name__)))
+            entry["plugin_name"].attrs["version"] = version
+            coll = self.raw_nxs.new_class(entry, "data", class_type="NXdata")
+            try:
+                self.raw_ds = coll.require_dataset(name="data", shape=stack_shape,
+                                                   dtype=fimg.data.dtype,
+                                                   chunks=(1,) + shape,
+                                                   **kwfilter)
+            except Exception as error:
+                logger.error("Error in creating dataset, disabling compression:%s", error)
+                self.raw_ds = coll.require_dataset(name="data", shape=stack_shape,
+                                                   dtype=fimg.data.dtype,
+                                                   chunks=(1,) + shape)
         return self.raw_ds
 
     def save_result(self, out, I, sigma=None):

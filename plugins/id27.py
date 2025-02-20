@@ -331,7 +331,10 @@ def fabio_conversion(file_path,
     """
     results = []
     filename = os.path.join(file_path, scan_number, f'{detector}_????.h5')
-    files = {f:fabio.open(f).nframes for f in sorted(glob.glob(filename))} #since python 3.7 dict are ordered !
+    files = {} #since python 3.7 dict are ordered !
+    for f in sorted(glob.glob(filename)):
+        with fabio.open(f) as fimg:
+            files[f] = fimg.nframes 
     all_single = max(files.values())==1
     file_path = file_path.rstrip("/")
 
@@ -353,24 +356,24 @@ def fabio_conversion(file_path,
 
     cnt = 0
     for idx_file, filename in enumerate(files):
-        img_data_fabio = fabio.open(filename)
-        basename = folder if (len(files) == 1 or all_single) else f"{folder}_{idx_file+1:04d}"
-
-        dest_dir2 = os.path.join(dest_dir, basename)
-        if not os.path.exists(dest_dir2):
-            with lock:
-                if not os.path.exists(dest_dir2):
-                    os.makedirs(dest_dir2)
-        for i in range(img_data_fabio.nframes):
-            cnt += 1
-            frame = img_data_fabio.getframe(i)
-            conv = frame.convert(fabioimage)
-            data = conv.data.astype('int32')
-            data[data < 0] = 0
-            conv.data = data
-            output = os.path.join(dest_dir2, f"{dset_name}_{cnt if all_single else i+1:04d}.{extension}")
-            conv.write(output)
-            results.append(output)
+        with fabio.open(filename) as img_data_fabio: 
+            basename = folder if (len(files) == 1 or all_single) else f"{folder}_{idx_file+1:04d}"
+    
+            dest_dir2 = os.path.join(dest_dir, basename)
+            if not os.path.exists(dest_dir2):
+                with lock:
+                    if not os.path.exists(dest_dir2):
+                        os.makedirs(dest_dir2)
+            for i in range(img_data_fabio.nframes):
+                cnt += 1
+                frame = img_data_fabio.getframe(i)
+                conv = frame.convert(fabioimage)
+                data = conv.data.astype('int32')
+                data[data < 0] = 0
+                conv.data = data
+                output = os.path.join(dest_dir2, f"{dset_name}_{cnt if all_single else i+1:04d}.{extension}")
+                conv.write(output)
+                results.append(output)
     if export_icat:
         metadata = {"definition": "conversion",
                     "Sample_name": sample_name}

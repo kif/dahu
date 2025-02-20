@@ -9,7 +9,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/09/2020"
+__date__ = "20/02/2025"
 __status__ = "development"
 version = "0.5.0"
 
@@ -137,7 +137,8 @@ class IntegrateManyFrames(Plugin):
         self.unit = self.input.get("unit", self.unit)
         self.wavelength = self.input.get("wavelength", self.wavelength)
         if os.path.exists(self.input.get("mask", "")):
-            self.mask = fabio.open(self.input["mask"]).data
+            with fabio.open(self.input["mask"]) as fimg:
+                self.mask = fimg.data
         self.dummy = self.input.get("dummy", self.dummy)
         self.delta_dummy = self.input.get("delta_dummy", self.delta_dummy)
         if self.input.get("do_polarziation"):
@@ -210,7 +211,8 @@ class IntegrateManyFrames(Plugin):
                 raw = cbf.read(fname, only_raw=True)
                 data = bo(raw, as_float=False).get().reshape(shape)
             else:
-                data = fabio.open(fname).data
+                with fabio.open(fname) as fimg:
+                    data = fimg.data
             if data is None:
                 self.log_error("Failed reading file: %s" % self.input_files[idx],
                                do_raise=False)
