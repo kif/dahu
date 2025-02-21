@@ -132,6 +132,7 @@ def build_background(I, std=None, keep=0.3):
     return bg_avg, bg_std, to_keep
 
 
+
 class HPLC(Plugin):
     """ Rebuild the complete chromatogram and perform basic analysis on it.
     
@@ -213,6 +214,7 @@ class HPLC(Plugin):
         self.to_pyarch["sample_name"] = self.juices[0].sample.name
         if not self.input.get("no_ispyb"):
             self.send_to_ispyb()
+        self.output["icat"] = self.send_to_icat()
 
     def teardown(self):
         Plugin.teardown(self)
@@ -939,22 +941,35 @@ class HPLC(Plugin):
         else:
             self.log_warning(f"Not sending to ISPyB: no valid URL in {self.ispyb}")
 
-
-
-            self.to_pyarch["sample"] = self.juices[0].sample
-            ispyb.send_icat(data=self.to_pyarch)
-
-
     def send_to_icat(self): 
         to_icat = copy.copy(self.to_pyarch)
         to_icat["experiment_type"] = "hplc"
         to_icat["sample"] = self.juices[0].sample
-        if "volume" in to_icat:
-                to_icat.pop("volume")
+        # if "volume" in to_icat:
+        #         to_icat.pop("volume")
         metadata = {"scanType": "hplc"}
+        gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery")
+        self.save_csv(os.path.join(gallery, "chromatogram.csv"), to_icat.get("sum_I"), to_icat.get("Rg"))
         return send_icat(sample=self.juices[0].sample,
                          raw=os.path.dirname(os.path.abspath(self.input_files[0])),
                          path=os.path.dirname(os.path.abspath(self.output_file)),
                          data=to_icat, 
-                         gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"), 
+                         gallery=gallery, 
                          metadata=metadata)
+
+    def save_csv(self, filename, sum_I, Rg):
+        dirname = os.path.dirname(filename)
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname, exist_ok=True)
+        lines = ["id,ΣI,Rg"]
+        idx = 0
+        for I,rg in zip(sum_I, Rg):
+            lines.append(f"{idx},{I},{rg}")
+            idx+=1
+        lines.append("")
+        with open(filename, "w") as csv:
+            csv.write(os.linesep.join(lines))
+            
+            
+            
+        
