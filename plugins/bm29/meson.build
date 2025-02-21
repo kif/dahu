@@ -5,7 +5,8 @@ py.install_sources( [
    'integrate.py',  
    'ispyb.py',  
    'nexus.py',  
-   'subtracte.py'
+   'subtracte.py',
+   'memcached.py',
     ],
   pure: false,    # Will be installed next to binaries
   subdir: 'dahu/plugins/bm29'  # Folder relative to site-packages to install to

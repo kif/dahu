@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/12/2024"
+__date__ = "21/02/2025"
 __status__ = "development"
-__version__ = "0.2.1" 
+__version__ = "0.3.0" 
 
 import os
 import json
@@ -42,11 +42,7 @@ from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integra
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     Sample, create_nexus_sample
 from .ispyb import IspybConnector, NumpyEncoder
-
-try:
-    import memcache
-except (ImportError, ModuleNotFoundError):
-    memcache = None
+from .memcached import to_memcached
 
 NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I sigma poni mask energy polarization method signal2d error2d normalization sample")
 
@@ -736,7 +732,7 @@ class SubtractBuffer(Plugin):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
             ispyb.send_subtracted(self.to_pyarch)
-            self.to_pyarch["experiment_type"]="sampleChanger"
+            self.to_pyarch["experiment_type"] = "sampleChanger"
             self.to_pyarch["sample"] = self.sample_juice.sample
             ispyb.send_icat(data=self.to_pyarch)
         else:
@@ -745,16 +741,11 @@ class SubtractBuffer(Plugin):
 
     def send_to_memcached(self):
         "Send the content of self.to_memcached to the storage"
-        keys = {}
-        rc = {}
-        if memcache is not None:
-            mc = memcache.Client([('stanza', 11211)])
-            key_base = self.output_file
-            for k in sorted(self.to_memcached.keys(), key=lambda i:self.to_memcached[i].nbytes):
-                key = key_base + "_" + k
-                keys[k] = key
-                value = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
-                rc[k] = mc.set(key, value)
-        self.log_warning(f"Return codes for memcached {rc}")
-        return keys
+        dico = {}
+        key_base = self.output_file
+        for k in sorted(self.to_memcached.keys(), key=lambda i:self.to_memcached[i].nbytes):
+            key = key_base + "_" + k
+            dico[key] = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
+
+        return to_memcached(dico) 
 

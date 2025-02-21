@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/12/2024" 
+__date__ = "21/02/2025" 
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -36,6 +36,7 @@ from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, ge
                     method, polarization_factor, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     create_nexus_sample
 from .ispyb import IspybConnector, NumpyEncoder
+from .memcached import to_memcached
 
 
 logger = logging.getLogger("bm29.integrate")
@@ -44,12 +45,6 @@ try:
 except ImportError:
     logger.error("Numexpr is not installed, falling back on numpy's implementations")
     numexpr = None
-
-try:
-    import memcache
-except (ImportError, ModuleNotFoundError):
-    memcache = None
-
 
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
 CormapResult = namedtuple("CormapResult", "probability count tomerge")
@@ -651,15 +646,10 @@ class IntegrateMultiframe(Plugin):
 
     def send_to_memcached(self):
         "Send the content of self.to_memcached to the storage"
-        keys = {}
-        rc = {}
-        if memcache is not None:
-            mc = memcache.Client([('stanza', 11211)])
-            key_base = self.output_file
-            for k in sorted(self.to_memcached.keys(), key=lambda i:self.to_memcached[i].nbytes):
-                key = key_base + "_" + k
-                keys[k] = key
-                value = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
-                rc[k] = mc.set(key, value)
-        self.log_warning(f"Return codes for memcached {rc}")
-        return keys
+        dico={}
+        key_base = self.output_file
+        for k in sorted(self.to_memcached.keys(), key=lambda i:self.to_memcached[i].nbytes):
+            key = f"{key_base}_{k}"
+            dico[key] = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
+        return to_memcached(dico) 
+
