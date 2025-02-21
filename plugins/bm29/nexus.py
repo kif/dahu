@@ -4,7 +4,7 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/02/2025"
+__date__ = "21/02/2025"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
@@ -13,7 +13,6 @@ import sys
 import time
 import logging
 import h5py
-import atexit
 logger = logging.getLogger(__name__)
 
 
@@ -137,7 +136,6 @@ class Nexus:
                 self.file_handle = None
                 self.h5 = h5py.File(self.filename, mode=self.mode)
         self.to_close = []
-        atexit.register(self.close)
         if not pre_existing:
             self.h5.attrs["NX_class"] = "NXroot"
             self.h5.attrs["file_time"] = get_isotime(start_time)
@@ -145,18 +143,31 @@ class Nexus:
             self.h5.attrs["HDF5_Version"] = h5py.version.hdf5_version
             self.h5.attrs["creator"] = creator or self.__class__.__name__
 
+    def __del__(self):
+        self.close()
+
     def close(self, end_time=None):
         """
-        close the filename and update all entries
+        Close the file and update all entries.
         """
-        if self.mode != "r":
-            end_time = get_isotime(end_time)
-            for entry in self.to_close:
-                entry["end_time"] = end_time
-            self.h5.attrs["file_update_time"] = get_isotime()
-        self.h5.close()
-        if self.file_handle:
-            self.file_handle.close()
+        try:
+            if self.mode != "r":
+                if self.h5:
+                    end_time = get_isotime(end_time)
+                    while self.to_close:
+                        entry = self.to_close.pop()
+                        entry["end_time"] = end_time
+                    self.h5.attrs["file_update_time"] = get_isotime()
+        except Exception as error:
+            sys.stderr.write(f"{type(error)}: {error},\nwhile finalizing Nexus file\n")
+
+        try:
+            if self.h5:
+                self.h5.close()
+            if self.file_handle:
+                self.file_handle.close()
+        except Exception as error:
+            sys.stderr.write(f"Error closing file: {error}\n")
 
     # Context manager for "with" statement compatibility
     def __enter__(self, *arg, **kwarg):

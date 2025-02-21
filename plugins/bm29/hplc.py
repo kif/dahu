@@ -945,8 +945,8 @@ class HPLC(Plugin):
         to_icat = copy.copy(self.to_pyarch)
         to_icat["experiment_type"] = "hplc"
         to_icat["sample"] = self.juices[0].sample
-        # if "volume" in to_icat:
-        #         to_icat.pop("volume")
+        if "volume" in to_icat:
+                to_icat.pop("volume")
         metadata = {"scanType": "hplc"}
         gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery")
         self.save_csv(os.path.join(gallery, "chromatogram.csv"), to_icat.get("sum_I"), to_icat.get("Rg"))
