@@ -214,7 +214,8 @@ class HPLC(Plugin):
         self.to_pyarch["sample_name"] = self.juices[0].sample.name
         if not self.input.get("no_ispyb"):
             self.send_to_ispyb()
-        self.output["icat"] = self.send_to_icat()
+        # self.output["icat"] = 
+        self.send_to_icat()
 
     def teardown(self):
         Plugin.teardown(self)
