@@ -17,6 +17,7 @@ __version__ = "0.3.0"
 
 import os
 import json
+import copy
 from math import log, pi
 from collections import namedtuple
 from urllib3.util import parse_url
@@ -43,6 +44,7 @@ from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integra
                     Sample, create_nexus_sample
 from .ispyb import IspybConnector, NumpyEncoder
 from .memcached import to_memcached
+from .icat import send_icat
 
 NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I sigma poni mask energy polarization method signal2d error2d normalization sample")
 
@@ -139,6 +141,7 @@ class SubtractBuffer(Plugin):
         self.output["Vc"] = self.Vc
         self.output["mass"] = self.mass
         self.output["memcached"] = self.send_to_memcached()
+        self.output["icat"] = self.send_to_icat()
         #teardown everything else:
         if self.nxs is not None:
             self.nxs.close()
@@ -732,12 +735,20 @@ class SubtractBuffer(Plugin):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
             ispyb.send_subtracted(self.to_pyarch)
-            self.to_pyarch["experiment_type"] = "sampleChanger"
-            self.to_pyarch["sample"] = self.sample_juice.sample
-            ispyb.send_icat(data=self.to_pyarch)
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
 
+    def send_to_icat(self): 
+        to_icat = copy.copy(self.to_pyarch)
+        to_icat["experiment_type"] = "sample-changer"
+        to_icat["sample"] = self.sample_juice.sample
+        metadata = {"scanType": "subtraction"}
+        return send_icat(sample=self.sample_juice.sample,
+                         raw=os.path.dirname(os.path.abspath(self.sample_file)),
+                         path=os.path.dirname(os.path.abspath(self.output_file)),
+                         data=to_icat, 
+                         gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"), 
+                         metadata=metadata)
 
     def send_to_memcached(self):
         "Send the content of self.to_memcached to the storage"

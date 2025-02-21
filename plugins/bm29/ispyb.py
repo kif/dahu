@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/12/2024" 
+__date__ = "21/02/2025" 
 __status__ = "development"
 version = "0.2.3"
 
@@ -98,6 +98,8 @@ class IspybConnector:
 
     def send_icat(self, proposal=None, beamline=None, sample=None, dataset=None, path=None, raw=None,  data=None):
         """
+        DEPRECATED CODE !
+        
         :param proposal: mx1324
         :param beamline: name of the beamline
         :param sample: sample name as registered in icat
