@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/02/2025" 
+__date__ = "24/02/2025" 
 __status__ = "development"
 version = "0.2.3"
 
@@ -108,6 +108,7 @@ class IspybConnector:
         :param raw: directory name of the raw data (not the processed ones)
         :param data: dict with all data sent to ISpyB
         """
+        logger.error("Deprecated code `ispyb.IspybConnector.send_icat()` Switch to `icat.send_icat()`")
         tmp = self.gallery.strip("/").split("/")
         idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")][-1]
         if tmp[idx_process] == "processed":
@@ -309,7 +310,6 @@ class IspybConnector:
 
         :param data: a dict with all information to be saved in Ispyb
         """
-        run_number = list(self.run_number)
         guinier = data.get("guinier")
         gnom = data.get("bift")
         subtracted = data.get("subtracted")
@@ -338,7 +338,7 @@ class IspybConnector:
             densityPlot = ""
 
         self.client.service.addSubtraction(str(self.experiment_id),
-                                           str(run_number),
+                                           str(self.run_number),
                                            str(guinier.Rg if guinier else -1),
                                            str(guinier.sigma_Rg if guinier else -1),
                                            str(guinier.I0 if guinier else -1),
