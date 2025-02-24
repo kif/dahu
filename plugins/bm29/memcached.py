@@ -28,6 +28,6 @@ def to_memcached(dico):
     if memcache is not None:
         mc = memcache.Client([(SERVER, 11211)])
         rc["server"] = socket.getfqdn()+":11211"
-        for k, v in dico.items:
+        for k, v in dico.items():
             rc[k] = mc.set(k, v)    
     return rc

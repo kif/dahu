@@ -140,8 +140,10 @@ class SubtractBuffer(Plugin):
         self.output["Dmax"] = self.Dmax
         self.output["Vc"] = self.Vc
         self.output["mass"] = self.mass
-        self.output["memcached"] = self.send_to_memcached()
-        self.output["icat"] = self.send_to_icat()
+        #self.output["memcached"] = 
+        self.send_to_memcached()
+        #self.output["icat"] = 
+        self.send_to_icat()
         #teardown everything else:
         if self.nxs is not None:
             self.nxs.close()

@@ -37,6 +37,7 @@ from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, ge
                     method, polarization_factor, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     create_nexus_sample
 from .ispyb import IspybConnector, NumpyEncoder
+from .icat import send_icat
 from .memcached import to_memcached
 
 
@@ -231,7 +232,8 @@ class IntegrateMultiframe(Plugin):
         self.create_nexus()
         self.output["memcached"] = self.send_to_memcached()
         self.send_to_ispyb()
-        self.output["icat"] = self.send_to_icat()
+        #self.output["icat"] = 
+        self.send_to_icat()
 
     def wait_file(self, filename, timeout=None):
         """Wait for a file to appear on a filesystem
@@ -630,7 +632,7 @@ class IntegrateMultiframe(Plugin):
         #Some more metadata for iCat, as strings: 
         to_icat = copy.copy(self.to_pyarch)
         to_icat["experiment_type"] = "hplc" if self.input.get("hplc_mode") else "sample-changer"  
-        to_icat["sample"] = self.sample.name
+        to_icat["sample"] = self.sample
         to_icat["SAXS_maskFile"] = self.mask
         to_icat["SAXS_waveLength"] = str(self.ai.wavelength)
         to_icat["SAXS_normalisation"] = str(self.normalization_factor)

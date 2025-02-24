@@ -1,7 +1,0 @@
-{
-    "output_hdf5_dataset": "/testout/data", 
-    "distortion_spline": "/nobackup/lid02gpu11/FReLoN_1024_1024.spline", 
-    "input_hdf5_dataset": "/lima_test_hdf5_0000_0000/Data/Image", 
-    "output_hdf5_filename": "/nobackup/lid02gpu12/dahu.h5", 
-    "input_hdf5_filename": "/nobackup/lid02gpu11/lima_test_0000.h5"
-}
