@@ -310,6 +310,10 @@ class IspybConnector:
 
         :param data: a dict with all information to be saved in Ispyb
         """
+        try:
+            run_number = list(self.run_number)
+        except TypeError:
+            run_number = [self.run_number]
         guinier = data.get("guinier")
         gnom = data.get("bift")
         subtracted = data.get("subtracted")
@@ -336,9 +340,9 @@ class IspybConnector:
             densityPlot = self.density_plot(gnom, basename)
         else:
             densityPlot = ""
-
+        print(run_number)
         self.client.service.addSubtraction(str(self.experiment_id),
-                                           [str(self.run_number)],
+                                           str(run_number),
                                            str(guinier.Rg if guinier else -1),
                                            str(guinier.sigma_Rg if guinier else -1),
                                            str(guinier.I0 if guinier else -1),
