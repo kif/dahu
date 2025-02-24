@@ -338,7 +338,7 @@ class IspybConnector:
             densityPlot = ""
 
         self.client.service.addSubtraction(str(self.experiment_id),
-                                           str(self.run_number),
+                                           str([self.run_number]),
                                            str(guinier.Rg if guinier else -1),
                                            str(guinier.sigma_Rg if guinier else -1),
                                            str(guinier.I0 if guinier else -1),
