@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/02/2025"
+__date__ = "24/02/2025"
 __status__ = "development"
 __version__ = "0.3.0" 
 
@@ -140,10 +140,7 @@ class SubtractBuffer(Plugin):
         self.output["Dmax"] = self.Dmax
         self.output["Vc"] = self.Vc
         self.output["mass"] = self.mass
-        #self.output["memcached"] = 
-        self.send_to_memcached()
-        #self.output["icat"] = 
-        self.send_to_icat()
+        
         #teardown everything else:
         if self.nxs is not None:
             self.nxs.close()
@@ -170,8 +167,9 @@ class SubtractBuffer(Plugin):
                     self.log_warning(f"Processing failed and unable to send remaining data to ISPyB: {type(err2)} {err2}\n{traceback.format_exc(limit=10)}")
                 raise(err)
         else:
-            self.send_to_ispyb()        
-        
+            self.send_to_ispyb()
+            self.send_to_icat()        
+        self.output["memcached"] = self.send_to_memcached()
 
 
     def validate_buffer(self, buffer_file):
@@ -743,6 +741,9 @@ class SubtractBuffer(Plugin):
     def send_to_icat(self): 
         to_icat = copy.copy(self.to_pyarch)
         to_icat["experiment_type"] = "sample-changer"
+        if self.sample_juice is None:
+            self.log_warning("Sample_juice is None in send_to_icat. Not sending garbage")
+            return
         to_icat["sample"] = self.sample_juice.sample
         metadata = {"scanType": "subtraction"}
         return send_icat(sample=self.sample_juice.sample,
