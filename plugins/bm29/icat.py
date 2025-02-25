@@ -90,18 +90,18 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     if metadata is None:
         metadata = {}
     metadata["definition"] = "SAXS",
-    metadata["Sample_name"] = sample
+   # metadata["Sample_name"] = sample
     
     for k,v in data.items():
         if isinstance(k, str) and k.startswith("SAXS_"):
             metadata[k] = v
-    sample = data.get("sample")
+    sample = data.get("sample", sample)
     if sample is not None:
         if  isinstance(sample, str):
-            metadata["SAXS_code"] = sample
+            metadata["Sample_name"] = metadata["SAXS_code"] = sample
         else:
             metadata["SAXS_concentration"] = str(sample.concentration)
-            metadata["SAXS_code"] = sample.name
+            metadata["Sample_name"] = metadata["SAXS_code"] = sample.name
             metadata["SAXS_comments"] = sample.description
             metadata["SAXS_storage_temperature"] = str(sample.temperature_env)
             metadata["SAXS_exposure_temperature"] = str(sample.temperature)
