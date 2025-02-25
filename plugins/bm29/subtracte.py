@@ -16,6 +16,7 @@ __status__ = "development"
 __version__ = "0.3.0" 
 
 import os
+import posixpath
 import json
 import copy
 from math import log, pi
@@ -719,7 +720,7 @@ class SubtractBuffer(Plugin):
             norm =  img_grp["normalization"][()] if "normalization" in img_grp else None
             # Read the sample description:
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
-            sample_name = sample_grp.name
+            sample_name = posixpath.basename(sample_grp.name)
 
             buffer = sample_grp["buffer"][()] if "buffer" in sample_grp else ""
             concentration = sample_grp["concentration"][()] if "concentration" in sample_grp else ""
@@ -746,8 +747,10 @@ class SubtractBuffer(Plugin):
             return
         to_icat["sample"] = self.sample_juice.sample
         metadata = {"scanType": "subtraction"}
+        raw = [os.path.dirname(os.path.abspath(i)) for i in self.buffer_files]
+        raw.append(os.path.dirname(os.path.abspath(self.sample_file)))
         return send_icat(sample=self.sample_juice.sample,
-                         raw=os.path.dirname(os.path.abspath(self.sample_file)),
+                         raw=raw,
                          path=os.path.dirname(os.path.abspath(self.output_file)),
                          data=to_icat, 
                          gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"), 
