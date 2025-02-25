@@ -48,7 +48,7 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     :param sample: sample name as registered in icat
     :param dataset: name given by BLISS
     :param path: directory name where processed data are staying
-    :param raw: directory name of the raw data (not the processed ones)
+    :param raw: list of directory name of the raw data (not the processed ones)
     :param data: dict with all data sent to iCat
     :param gallery: path with the gallery directory
     :param metadata: dict with additionnal metadata (could be overwritten by this function
@@ -127,6 +127,8 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     volume = data.get("volume")
     if volume:
         metadata["SAXS_porod_volume"] = str(volume) 
+    if not isinstance(raw, list):
+        raw = [raw]
     #Other metadata one may collect ...
     metadata["SAXS_experiment_type"]= data.get("experiment_type", "UNKNOWN")
     metadata["datasetName"] = dataset
@@ -136,6 +138,7 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
               "dataset":dataset, 
               "path":path, 
               "metadata":metadata, 
-              "raw":[raw]}
+              "raw":raw}
+    #print(kwargs)
     icat_client.store_processed_data(**kwargs)
     return kwargs

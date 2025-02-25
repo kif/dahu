@@ -648,7 +648,7 @@ class IntegrateMultiframe(Plugin):
         
         metadata = {"scanType": "integration"}
         return send_icat(sample=self.sample.name,
-                         raw=os.path.dirname(os.path.abspath(self.input_file)),
+                         raw=os.path.dirname(os.path.dirname(os.path.abspath(self.input_file))),
                          path=os.path.dirname(os.path.abspath(self.output_file)),
                          data=to_icat, 
                          gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"), 
