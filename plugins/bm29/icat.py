@@ -119,6 +119,8 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     if bift:
         metadata["SAXS_rg"] =  f"{bift.Rg_avg:.1f}±{bift.Rg_std:.1f}"
         metadata["SAXS_d_max"] = f"{bift.Dmax_avg:.1f}±{bift.Dmax_std:.1f}"
+        metadata["SAXS_chi2r"] = str(bift.chi2r_avg)
+        metadata["SAXS_chi2r_error"] = str(bift.chi2r_std)
 
     tomerge = data.get("merged")
     if tomerge:
@@ -127,6 +129,14 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     volume = data.get("volume")
     if volume:
         metadata["SAXS_porod_volume"] = str(volume) 
+    rti = data.get("rti")
+    if rti:
+        "Vc sigma_Vc Qr sigma_Qr mass sigma_mass"
+        metadata["SAXS_vc"] = str(rti.Vc)
+        metadata["SAXS_vc_error"] = str(rti.sigma_Vc)
+        metadata["SAXS_mass"] = str(rti.mass)
+        metadata["SAXS_mass_error"] = str(rti.sigma_mass)
+        
     if not isinstance(raw, list):
         raw = [raw]
     #Other metadata one may collect ...
