@@ -15,18 +15,19 @@ __status__ = "development"
 __version__ = "0.1.0"
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, fields, asdict
+from dahu.plugin import Plugin
 
 @dataclass(slots=True)
 class Scan:
     """Class describing 2D mesh-scan"""
     fast_motor_name: str = "fast"
     fast_motor_start: float = 0.0
-    fast_motor_stop: float = 0.0
+    fast_motor_stop: float = 1.0
     fast_motor_step: int = 0  # bliss-like steps, actually step+1 points
     slow_motor_name: str = "slow"
     slow_motor_start: float = 0.0
-    slow_motor_stop: float = 0.0
+    slow_motor_stop: float = 1.0
     slow_motor_step: int = 0  # bliss-like steps, actually step+1 points
     backnforth: bool = False
 
