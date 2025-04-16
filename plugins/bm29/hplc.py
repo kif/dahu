@@ -10,9 +10,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/12/2024" 
+__date__ = "21/02/2025" 
 __status__ = "development"
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 import time
 import os
@@ -20,6 +20,7 @@ import json
 import math
 from math import log, pi
 import posixpath
+import copy
 from collections import namedtuple
 from urllib3.util import parse_url
 from dahu.plugin import Plugin
@@ -42,6 +43,8 @@ from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integra
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     Sample, create_nexus_sample
 from .ispyb import IspybConnector
+from .icat import send_icat
+
 
 NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps")
 
@@ -129,6 +132,7 @@ def build_background(I, std=None, keep=0.3):
     return bg_avg, bg_std, to_keep
 
 
+
 class HPLC(Plugin):
     """ Rebuild the complete chromatogram and perform basic analysis on it.
     
@@ -210,6 +214,8 @@ class HPLC(Plugin):
         self.to_pyarch["sample_name"] = self.juices[0].sample.name
         if not self.input.get("no_ispyb"):
             self.send_to_ispyb()
+        # self.output["icat"] = 
+        self.send_to_icat()
 
     def teardown(self):
         Plugin.teardown(self)
@@ -933,10 +939,38 @@ class HPLC(Plugin):
         if self.ispyb and self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
             ispyb.send_hplc(self.to_pyarch)
-            self.to_pyarch["experiment_type"]="hplc"
-            if "volume" in self.to_pyarch:
-                self.to_pyarch.pop("volume")
-            self.to_pyarch["sample"] = self.juices[0].sample
-            ispyb.send_icat(data=self.to_pyarch)
         else:
             self.log_warning(f"Not sending to ISPyB: no valid URL in {self.ispyb}")
+
+    def send_to_icat(self): 
+        to_icat = copy.copy(self.to_pyarch)
+        to_icat["experiment_type"] = "hplc"
+        to_icat["sample"] = self.juices[0].sample
+        if "volume" in to_icat:
+                to_icat.pop("volume")
+        metadata = {"scanType": "hplc"}
+        gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery")
+        self.save_csv(os.path.join(gallery, "chromatogram.csv"), to_icat.get("sum_I"), to_icat.get("Rg"))
+        return send_icat(sample=self.juices[0].sample,
+                         raw=os.path.dirname(os.path.abspath(self.input_files[0])),
+                         path=os.path.dirname(os.path.abspath(self.output_file)),
+                         data=to_icat, 
+                         gallery=gallery, 
+                         metadata=metadata)
+
+    def save_csv(self, filename, sum_I, Rg):
+        dirname = os.path.dirname(filename)
+        if not os.path.isdir(dirname):
+            os.makedirs(dirname, exist_ok=True)
+        lines = ["id,ΣI,Rg"]
+        idx = 0
+        for I,rg in zip(sum_I, Rg):
+            lines.append(f"{idx},{I},{rg}")
+            idx+=1
+        lines.append("")
+        with open(filename, "w") as csv:
+            csv.write(os.linesep.join(lines))
+            
+            
+            
+        

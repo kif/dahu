@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/12/2024" 
+__date__ = "24/02/2025" 
 __status__ = "development"
 version = "0.2.3"
 
@@ -98,6 +98,8 @@ class IspybConnector:
 
     def send_icat(self, proposal=None, beamline=None, sample=None, dataset=None, path=None, raw=None,  data=None):
         """
+        DEPRECATED CODE !
+        
         :param proposal: mx1324
         :param beamline: name of the beamline
         :param sample: sample name as registered in icat
@@ -106,6 +108,7 @@ class IspybConnector:
         :param raw: directory name of the raw data (not the processed ones)
         :param data: dict with all data sent to ISpyB
         """
+        logger.error("Deprecated code `ispyb.IspybConnector.send_icat()` Switch to `icat.send_icat()`")
         tmp = self.gallery.strip("/").split("/")
         idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")][-1]
         if tmp[idx_process] == "processed":
@@ -307,7 +310,10 @@ class IspybConnector:
 
         :param data: a dict with all information to be saved in Ispyb
         """
-        run_number = list(self.run_number)
+        try:
+            run_number = list(self.run_number)
+        except TypeError:
+            run_number = [self.run_number]
         guinier = data.get("guinier")
         gnom = data.get("bift")
         subtracted = data.get("subtracted")
@@ -334,7 +340,6 @@ class IspybConnector:
             densityPlot = self.density_plot(gnom, basename)
         else:
             densityPlot = ""
-
         self.client.service.addSubtraction(str(self.experiment_id),
                                            str(run_number),
                                            str(guinier.Rg if guinier else -1),

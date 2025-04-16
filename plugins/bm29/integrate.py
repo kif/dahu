@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/12/2024" 
+__date__ = "21/02/2025" 
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -19,6 +19,7 @@ import os
 import time
 import json
 import logging
+import copy
 from collections import namedtuple
 from urllib3.util import parse_url
 from dahu.plugin import Plugin
@@ -36,6 +37,8 @@ from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, ge
                     method, polarization_factor, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     create_nexus_sample
 from .ispyb import IspybConnector, NumpyEncoder
+from .icat import send_icat
+from .memcached import to_memcached
 
 
 logger = logging.getLogger("bm29.integrate")
@@ -44,12 +47,6 @@ try:
 except ImportError:
     logger.error("Numexpr is not installed, falling back on numpy's implementations")
     numexpr = None
-
-try:
-    import memcache
-except (ImportError, ModuleNotFoundError):
-    memcache = None
-
 
 IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
 CormapResult = namedtuple("CormapResult", "probability count tomerge")
@@ -235,6 +232,8 @@ class IntegrateMultiframe(Plugin):
         self.create_nexus()
         self.output["memcached"] = self.send_to_memcached()
         self.send_to_ispyb()
+        #self.output["icat"] = 
+        self.send_to_icat()
 
     def wait_file(self, filename, timeout=None):
         """Wait for a file to appear on a filesystem
@@ -622,44 +621,45 @@ class IntegrateMultiframe(Plugin):
         return AverageResult(intensity_avg, intensity_std, sum_norm)
 
     def send_to_ispyb(self):
-        if self.ispyb.url and parse_url(self.ispyb.url).host:
-            ispyb = IspybConnector(*self.ispyb)
-            if self.input.get("hplc_mode"):
-                self.to_pyarch["experiment_type"]="hplc"
-            else:
+        if self.input.get("hplc_mode") == 0:
+            if self.ispyb.url and parse_url(self.ispyb.url).host:
+                ispyb = IspybConnector(*self.ispyb)
                 ispyb.send_averaged(self.to_pyarch)
-                self.to_pyarch["experiment_type"]="sample-changer"
-            #Some more metadata for iCat, as strings:
-            self.to_pyarch["sample"] = self.sample
-            self.to_pyarch["SAXS_maskFile"] = self.mask
-            self.to_pyarch["SAXS_waveLength"] = str(self.ai.wavelength)
-            self.to_pyarch["SAXS_normalisation"] = str(self.normalization_factor)
-            self.to_pyarch["SAXS_diode_currents"] = str(self.monitor_values)
-            self.to_pyarch["SAXS_numberFrames"] = str(self.nb_frames)
-            self.to_pyarch["SAXS_timePerFrame"] = self.input.get("exposure_time", "?")
-            self.to_pyarch["SAXS_detector_distance"] = str(self.ai.dist)
-            self.to_pyarch["SAXS_pixelSizeX"] = str(self.ai.detector.pixel2)
-            self.to_pyarch["SAXS_pixelSizeY"] = str(self.ai.detector.pixel1)
-            f2d = self.ai.getFit2D()
-            self.to_pyarch["SAXS_beam_center_x"] = str(f2d["centerX"])
-            self.to_pyarch["SAXS_beam_center_y"] = str(f2d["centerY"])
+            else:
+                self.log_warning(f"Not sending to ISPyB: no valid URL {self.ispyb.url}")
 
-            icat = ispyb.send_icat(data=self.to_pyarch)
-            #self.log_warning("Sent to icat: " + str(icat))
-        else:
-            self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
+    def send_to_icat(self):
+        #Some more metadata for iCat, as strings: 
+        to_icat = copy.copy(self.to_pyarch)
+        to_icat["experiment_type"] = "hplc" if self.input.get("hplc_mode") else "sample-changer"  
+        to_icat["sample"] = self.sample
+        to_icat["SAXS_maskFile"] = self.mask
+        to_icat["SAXS_waveLength"] = str(self.ai.wavelength)
+        to_icat["SAXS_normalisation"] = str(self.normalization_factor)
+        to_icat["SAXS_diode_currents"] = str(self.monitor_values)
+        to_icat["SAXS_numberFrames"] = str(self.nb_frames)
+        to_icat["SAXS_timePerFrame"] = self.input.get("exposure_time", "?")
+        to_icat["SAXS_detector_distance"] = str(self.ai.dist)
+        to_icat["SAXS_pixelSizeX"] = str(self.ai.detector.pixel2)
+        to_icat["SAXS_pixelSizeY"] = str(self.ai.detector.pixel1)
+        f2d = self.ai.getFit2D()
+        to_icat["SAXS_beam_center_x"] = str(f2d["centerX"])
+        to_icat["SAXS_beam_center_y"] = str(f2d["centerY"])
+        
+        metadata = {"scanType": "integration"}
+        return send_icat(sample=self.sample.name,
+                         raw=os.path.dirname(os.path.dirname(os.path.abspath(self.input_file))),
+                         path=os.path.dirname(os.path.abspath(self.output_file)),
+                         data=to_icat, 
+                         gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"), 
+                         metadata=metadata)
 
     def send_to_memcached(self):
         "Send the content of self.to_memcached to the storage"
-        keys = {}
-        rc = {}
-        if memcache is not None:
-            mc = memcache.Client([('stanza', 11211)])
-            key_base = self.output_file
-            for k in sorted(self.to_memcached.keys(), key=lambda i:self.to_memcached[i].nbytes):
-                key = key_base + "_" + k
-                keys[k] = key
-                value = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
-                rc[k] = mc.set(key, value)
-        self.log_warning(f"Return codes for memcached {rc}")
-        return keys
+        dico={}
+        key_base = self.output_file
+        for k in sorted(self.to_memcached.keys(), key=lambda i:self.to_memcached[i].nbytes):
+            key = f"{key_base}_{k}"
+            dico[key] = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
+        return to_memcached(dico) 
+
