@@ -111,14 +111,20 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
 
     guinier = data.get("guinier")
     if guinier:
-        metadata["SAXS_guinier_rg"] = f"{guinier.Rg:.1f}±{guinier.sigma_Rg:.1f}"
-        metadata["SAXS_guinier_points"] = f"{guinier.start_point}-{guinier.end_point}"
+        metadata["SAXS_guinier_rg"] = f"{guinier.Rg:.1f}"
+        metadata["SAXS_guinier_sigma_rg"] = f"{guinier.sigma_Rg:.1f}"
+        metadata["SAXS_guinier_points_start"] = f"{guinier.start_point}"
+        metadata["SAXS_guinier_points_end"] = f"{guinier.end_point}"
         metadata["SAXS_guinier_i0"] = f"{guinier.I0:.1f}±{guinier.sigma_I0:.1f}"
 
     bift = data.get("bift")
     if bift:
         metadata["SAXS_rg"] =  f"{bift.Rg_avg:.1f}±{bift.Rg_std:.1f}"
+        metadata["SAXS_rg_std"] =  f"{bift.Rg_avg:.1f}"
+        metadata["SAXS_rg_avg"] =  f"{bift.Rg_std:.1f}"
         metadata["SAXS_d_max"] = f"{bift.Dmax_avg:.1f}±{bift.Dmax_std:.1f}"
+        metadata["SAXS_chi2r"] = f"{bift.chi2r_avg:.2f}"
+        metadata["SAXS_chi2r_error"] = f"{bift.chi2r_std:.2f}"
 
     tomerge = data.get("merged")
     if tomerge:
@@ -127,6 +133,14 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     volume = data.get("volume")
     if volume:
         metadata["SAXS_porod_volume"] = str(volume) 
+    rti = data.get("rti")
+    if rti:
+        "Vc sigma_Vc Qr sigma_Qr mass sigma_mass"
+        metadata["SAXS_vc"] = f"{rti.Vc:.2f}"
+        metadata["SAXS_vc_error"] = f"{rti.sigma_Vc:.2f}"
+        metadata["SAXS_mass"] = f"{rti.mass:.2f}"
+        metadata["SAXS_mass_error"] = f"{rti.sigma_mass:.2f}"
+        
     if not isinstance(raw, list):
         raw = [raw]
     #Other metadata one may collect ...
