@@ -27,9 +27,11 @@ provides:
 * version_info = named tuple (1,2,3,"beta",4)
 * hexversion: 0x010203B4
 * strictversion = "1.2.3b4
+* debianversion = "1.2.3~beta4"
+* calc_hexversion: the function to transform a version_tuple into an integer
 
-This is called hexversion since it only really looks meaningful when viewed as the 
-result of passing it to the built-in hex() function. 
+This is called hexversion since it only really looks meaningful when viewed as the
+result of passing it to the built-in hex() function.
 The version_info value may be used for a more human-friendly encoding of the same information.
 
 The hexversion is a 32-bit number with the following layout:
@@ -48,37 +50,41 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/02/2025"
-__status__ = "producton"
+__date__ = "13/03/2025"
+__status__ = "production"
 __docformat__ = 'restructuredtext'
+__all__ = ["date", "version_info", "strictversion", "hexversion", "debianversion",
+           "calc_hexversion", "citation"]
+
 RELEASE_LEVEL_VALUE = {"dev": 0,
                        "alpha": 10,
                        "beta": 11,
-                       "gamma": 11,
-                       "rc": 12,
+                       "gamma": 12,
+                       "rc": 13,
                        "final": 15}
 
 MAJOR = 2025
-MINOR = 2
-MICRO = 1
+MINOR = 4
+MICRO = 0
 RELEV = "dev"  # <16
 SERIAL = 0  # <16
 
 date = __date__
 
 from collections import namedtuple
+
 _version_info = namedtuple("version_info", ["major", "minor", "micro", "releaselevel", "serial"])
 
 version_info = _version_info(MAJOR, MINOR, MICRO, RELEV, SERIAL)
 
-debianversion = strictversion = version = "%d.%d.%d" % version_info[:3]
-
+strictversion = version = debianversion = "%d.%d.%d" % version_info[:3]
 if version_info.releaselevel != "final":
     version += "-%s%s" % version_info[-2:]
     debianversion += "~adev%i" % version_info[-1] if RELEV == "dev" else "~%s%i" % version_info[-2:]
-    prerel = "a" if RELEASE_LEVEL_VALUE.get(version_info[3], 0) < 10 else "b"
-    if prerel not in "ab":
-        prerel = "a"
+    #prerel = "a" if RELEASE_LEVEL_VALUE.get(version_info[3], 0) < 10 else "b"
+    prerel = "."+version_info[3]
+    #if prerel not in "ab":
+    #    prerel = "a"
     strictversion += prerel + str(version_info[-1])
 
 _PATTERN = None
