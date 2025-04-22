@@ -30,6 +30,6 @@ def to_memcached(dico):
         rc["server"] = socket.getfqdn()+":11211"
         for k, v in dico.items():
             if len(k)>250:
-                k = k[:250]
+                k = k[-250:]
             rc[k] = mc.set(k, v)    
     return rc
