@@ -141,8 +141,8 @@ def save_zip(filename, config, I, sigma):
     res = []    
     for i, s in zip(I, sigma):
         r = {"q": config.q}
-        if config.get(sample):
-            sample = config[sample]
+        if config.sample:
+            sample = config.sample
             if sample.name:
                 r["sample"]: sample.name
             if sample.buffer:
