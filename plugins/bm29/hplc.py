@@ -338,7 +338,7 @@ class HPLC(Plugin):
         int_ds.attrs["scale"] = "log"
         std_ds.attrs["interpretation"] = "spectrum"
 
-        save_zip(filename=os.path.splitext(self.output_file)[0]+".zip", 
+        save_zip(os.path.splitext(self.output_file)[0]+".zip", 
                  self.juices[0], I, sigma)
 
     # Process 2: SVD decomposition
