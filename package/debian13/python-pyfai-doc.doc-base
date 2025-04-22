@@ -1,0 +1,9 @@
+Document: dahu-manual
+Title: Dahu documentation manual
+Author: Jérôme Kieffer <kieffer@esrf.eu>
+Abstract: Dahu online data analysis server
+Section: Science/Data Analysis
+
+Format: HTML
+Index: /usr/share/doc/python-dahu-doc/html/index.html
+Files: /usr/share/doc/python-dahu-doc/html/*
