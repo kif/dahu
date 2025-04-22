@@ -955,6 +955,7 @@ class HPLC(Plugin):
                          raw=os.path.dirname(os.path.abspath(self.input_files[0])),
                          path=os.path.dirname(os.path.abspath(self.output_file)),
                          data=to_icat, 
+                         dataset="HPLC",
                          gallery=gallery, 
                          metadata=metadata)
 

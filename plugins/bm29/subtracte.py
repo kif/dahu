@@ -753,6 +753,7 @@ class SubtractBuffer(Plugin):
                          raw=raw,
                          path=os.path.dirname(os.path.abspath(self.output_file)),
                          data=to_icat, 
+                         dataset="subtraction",
                          gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"), 
                          metadata=metadata)
 
