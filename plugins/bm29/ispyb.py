@@ -228,7 +228,17 @@ class IspybConnector:
                 os.makedirs(dest)
             except Exception as err:
                 logger.error("Unable to create directory %s: %s: %s", dest, type(err), err)
-        os.stat(dest) #this is to enforce the mounting of the directory
+            else:
+                # Once the directory is pretendily created, write something in is an delete it.
+                delete_me = os.path.join(dest, "delete.me")
+                res = os.system(f"touch {delete_me}")
+                if res:
+                    logger.error(f"`touch {delete_me}` return error {res}, directory creation did probably not work as expected !")
+                try:
+                    os.remove(delete_me)
+                except FileNotFoundError:
+                    logger.error(f"`rm {delete_me}` raised FileNotFoundError, directory creation did probably not work as expected !")
+        os.stat(dest)  # this is to enforce the mounting of the directory
         if isinstance(index, int):
             filename = os.path.join(dest, "%s_%04d%s" % (basename, index, ext))
         else:
