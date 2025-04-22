@@ -135,6 +135,14 @@ def build_background(I, std=None, keep=0.3):
 
 
 def save_zip(filename, config, I, sigma):
+    """Save a stack of I into a zipfile with each frames in a dat-file.
+
+    :param filename: name of the zip-file
+    :param confif: this is some NexusJuice namedtuple. we use only q and the sample description.
+    :param I: 2D array with the intensity of the stack of curves 
+    :param sigma: 2D array with the uncertainties of the stack of frames
+    :return: nothing
+    """
     basename = os.path.basename(filename)
     base = os.path.splitext(basename)[0]
     destz = base + "_%04i.dat"
