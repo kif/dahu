@@ -135,24 +135,25 @@ def build_background(I, std=None, keep=0.3):
 
 
 def save_zip(filename, config, I, sigma):
-    
-    base = os.path.splitext(filename)[0]
+    basename = os.path.basename(filename)
+    base = os.path.splitext(basename)[0]
     destz = base + "_%04i.dat"
-    res = []    
+    common = {"q": config.q}
+    if config.sample:
+        sample = config.sample
+        if sample.name:
+            common["sample"]: sample.name
+        if sample.buffer:
+            common["buffer"] = sample.buffer
+        if sample.temperature_env:
+            common["storage temperature"] = sample.temperature_env
+        if sample.temperature:
+            common["exposure temperature"] = sample.temperature
+        if sample.concentration:
+            common["concentration"] = sample.concentration
+    res = []   
     for i, s in zip(I, sigma):
-        r = {"q": config.q}
-        if config.sample:
-            sample = config.sample
-            if sample.name:
-                r["sample"]: sample.name
-            if sample.buffer:
-                r["buffer"] = sample.buffer
-            if sample.temperature_env:
-                r["storage temperature"] = sample.temperature_env
-            if sample.temperature:
-                r["exposure temperature"] = sample.temperature
-            if sample.concentration:
-                r["concentration"] = sample.concentration
+        r = copy.copy(common)
         r["I"] = i
         r["std"] = s
         res.append(r)
