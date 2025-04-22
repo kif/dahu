@@ -139,7 +139,7 @@ def save_zip(filename, config, I, sigma):
     base = os.path.splitext(filename)[0]
     destz = base + "_%04i.dat"
     res = []    
-    for i, s in zip(I, std):
+    for i, s in zip(I, sigma):
         r = {"q": config.q}
         if config.get(sample):
             sample = config[sample]
