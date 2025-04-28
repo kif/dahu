@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/02/2025" 
+__date__ = "22/04/2025"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -21,6 +21,7 @@ import math
 from math import log, pi
 import posixpath
 import copy
+import zipfile
 from collections import namedtuple
 from urllib3.util import parse_url
 from dahu.plugin import Plugin
@@ -34,6 +35,7 @@ from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap, freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier
 from freesas.bift import BIFT
+from freesas.app.extract_ascii import write_ascii
 from scipy.optimize import minimize
 import scipy.signal
 import scipy.ndimage
@@ -41,7 +43,7 @@ import sklearn
 from sklearn.decomposition import NMF
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
-                    Sample, create_nexus_sample
+                    create_nexus_sample
 from .ispyb import IspybConnector
 from .icat import send_icat
 
@@ -131,6 +133,41 @@ def build_background(I, std=None, keep=0.3):
         bg_std = None
     return bg_avg, bg_std, to_keep
 
+
+def save_zip(filename, config, I, sigma):
+    """Save a stack of I into a zipfile with each frames in a dat-file.
+
+    :param filename: name of the zip-file
+    :param confif: this is some NexusJuice namedtuple. we use only q and the sample description.
+    :param I: 2D array with the intensity of the stack of curves 
+    :param sigma: 2D array with the uncertainties of the stack of frames
+    :return: nothing
+    """
+    basename = os.path.basename(filename)
+    base = os.path.splitext(basename)[0]
+    destz = base + "_%04i.dat"
+    common = {"q": config.q}
+    if config.sample:
+        sample = config.sample
+        if sample.name:
+            common["sample"]: sample.name
+        if sample.buffer:
+            common["buffer"] = sample.buffer
+        if sample.temperature_env:
+            common["storage temperature"] = sample.temperature_env
+        if sample.temperature:
+            common["exposure temperature"] = sample.temperature
+        if sample.concentration:
+            common["concentration"] = sample.concentration
+    res = []   
+    for i, s in zip(I, sigma):
+        r = copy.copy(common)
+        r["I"] = i
+        r["std"] = s
+        res.append(r)
+    with zipfile.ZipFile(filename, "w") as z:
+        for idx, frame in enumerate(res):
+            z.writestr(destz % idx, write_ascii(frame))
 
 
 class HPLC(Plugin):
@@ -297,6 +334,8 @@ class HPLC(Plugin):
         std_ds = integration_data.create_dataset("errors", data=numpy.ascontiguousarray(sigma, dtype=numpy.float32))
         q_ds = integration_data.create_dataset("q", data=self.juices[0].q)
         q_ds.attrs["interpretation"] = "spectrum"
+        q_ds.attrs["unit"] = unit_name
+        q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
         integration_data.attrs["signal"] = "I"
         integration_data.attrs["axes"] = [".", "q"]
         integration_data.attrs["SILX_style"] = SAXS_STYLE
@@ -307,6 +346,9 @@ class HPLC(Plugin):
         # int_ds.attrs["uncertainties"] = "errors" This does not work
         int_ds.attrs["scale"] = "log"
         std_ds.attrs["interpretation"] = "spectrum"
+
+        save_zip(os.path.splitext(self.output_file)[0]+".zip", 
+                 self.juices[0], I, sigma)
 
     # Process 2: SVD decomposition
         svd_grp = nxs.new_class(entry_grp, "2_SVD", "NXprocess")
@@ -955,6 +997,7 @@ class HPLC(Plugin):
                          raw=os.path.dirname(os.path.abspath(self.input_files[0])),
                          path=os.path.dirname(os.path.abspath(self.output_file)),
                          data=to_icat, 
+                         dataset="HPLC",
                          gallery=gallery, 
                          metadata=metadata)
 

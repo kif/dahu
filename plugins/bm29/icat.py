@@ -46,7 +46,7 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     :param proposal: mx1324
     :param beamline: name of the beamline
     :param sample: sample name as registered in icat
-    :param dataset: name given by BLISS
+    :param dataset: name of the dataset: integration, subtraction, HPLC, ... 
     :param path: directory name where processed data are staying
     :param raw: list of directory name of the raw data (not the processed ones)
     :param data: dict with all data sent to iCat

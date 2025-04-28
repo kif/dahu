@@ -651,6 +651,7 @@ class IntegrateMultiframe(Plugin):
                          raw=os.path.dirname(os.path.dirname(os.path.abspath(self.input_file))),
                          path=os.path.dirname(os.path.abspath(self.output_file)),
                          data=to_icat, 
+                         dataset = "integrate",
                          gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"), 
                          metadata=metadata)
 
