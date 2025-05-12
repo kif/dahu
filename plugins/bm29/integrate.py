@@ -29,7 +29,7 @@ from dahu.utils import fully_qualified_name
 import numpy
 import h5py
 import pyFAI
-import pyFAI.azimuthalIntegrator
+import pyFAI.integrator.azimuthal
 import freesas
 import freesas.cormap
 

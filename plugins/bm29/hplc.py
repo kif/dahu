@@ -30,7 +30,7 @@ import logging
 logger = logging.getLogger("bm29.hplc")
 import numpy
 import h5py
-import pyFAI, pyFAI.azimuthalIntegrator, pyFAI.units
+import pyFAI, pyFAI.integrator.azimuthal, pyFAI.units
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap, freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier

@@ -33,7 +33,7 @@ except ImportError:
     logger.error("Numexpr is not installed, falling back on numpy's implementations")
     numexpr = None
 import h5py
-import pyFAI, pyFAI.azimuthalIntegrator
+import pyFAI, pyFAI.integrator.azimuthal
 from pyFAI.containers import Integrate1dResult
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap, freesas.invariants
