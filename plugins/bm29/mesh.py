@@ -10,17 +10,26 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "28/04/2025"
+__date__ = "05/05/2025"
 __status__ = "development"
 __version__ = "0.1.0"
 
+import os
+import posixpath
 import json
+import collections
 from dataclasses import dataclass, fields, asdict
 import numpy
 from dahu.plugin import Plugin
+import h5py
+import pyFAI
+from pyFAI.method_registry import IntegrationMethod
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     create_nexus_sample
+
+NexusJuice = collections.namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps")
+Position = collections.namedtuple('Position', 'index slow fast')
 
 @dataclass(slots=True)
 class Scan:
@@ -63,7 +72,28 @@ class Scan:
         with open(filename, "w") as w:
             w.write(json.dumps(self.as_dict(), indent=2))
 
+    def get_pos(self, idx=None):
+        """
+        Calculate the position in the mesh scan fram according to its index
 
+        :param idx: index of current frame
+        :return: namedtuple Position=(frame_index, slow_motor_position, fast_motor_position) 
+                 if valid else None
+        """
+        width = self.fast_motor_step + 1
+        line = idx // width
+        if self.backnforth and line % 2 == 1:
+            row = self.fast_motor_step - (idx % width)
+        else:
+            row = idx % width
+        if line<=self.slow_motor_step and row<=self.fast_motor_step:
+            return Position(idx, line, row)
+        else:
+            return None
+    
+    @property
+    def shape(self):
+        return (self.slow_motor_step + 1, self.fast_motor_step + 1)
 
 
 def input_from_master(master_file):
@@ -88,7 +118,6 @@ class Mesh(Plugin):
         "measurement_id": -1,
         "collection_id": -1
        },
-       "nmf_components": 5, 
        "scan": {
             "fast_motor_name": "chipz",
             "fast_motor_start": -2.2,
@@ -98,7 +127,7 @@ class Mesh(Plugin):
             "slow_motor_start": -5.2,
             "slow_motor_stop": -12.2,
             "slow_motor_step": 7, 
-            "backnforth": False,
+            "backnforth": False
             }
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.mesh"
@@ -153,7 +182,7 @@ class Mesh(Plugin):
         ispydict = self.input.get("ispyb", {})
         ispydict["gallery"] = gallery
         self.ispyb = Ispyb._fromdict(ispydict)
-        self.scan = Scan.from_dict(self.input.scan)
+        self.scan = Scan.from_dict(self.input.get("scan", {}))
 
     def process(self):
         self.create_nexus()
@@ -168,7 +197,7 @@ class Mesh(Plugin):
 
     def teardown(self):
         Plugin.teardown(self)
-        logger.debug("HPLC.teardown")
+        # logger.debug("HPLC.teardown")
         # export the output file location
         self.output["output_file"] = self.output_file
         if self.nxs is not None:
@@ -210,10 +239,21 @@ class Mesh(Plugin):
     # Process 1: Mesh
         mesh_grp = nxs.new_class(entry_grp, "1_mesh", "NXprocess")
         mesh_grp["sequence_index"] = self.sequence_index()
-        nframes = max(i.idx.max() for i in self.juices) + 1
+        mesh_src = mesh_grp.create_group("sources")
+        if self.juices:
+            for idx, juice in enumerate(self.juices):
+                with h5py.File(juice.filename) as h:
+                    grp = h[juice.h5path]
+                    meas = grp["0_measurement"]
+                    ds = meas["images"]
+                    src = os.path.abspath(ds.file.filename)
+                    name = ds.name
+                rel_path = os.path.relpath(src, os.path.dirname(os.path.abspath(self.output_file)))
+                mesh_src[f"images_{idx:04d}"] = h5py.ExternalLink(rel_path, name)
+
         nbin = q.size
 
-        shape = (self.scan.slow_motor_step+1, self.scan.fast_motor_step+1, nbin)
+        shape = self.scan.shape + (nbin,)
         I = numpy.zeros(shape, dtype=numpy.float32)
         slow = numpy.linspace(self.scan.slow_motor_start,
                               self.scan.slow_motor_stop,
@@ -225,29 +265,45 @@ class Mesh(Plugin):
                               endpoint=True).astype("float32")
 
         sigma = numpy.zeros(shape, dtype=numpy.float32)
-        Isum = numpy.zeros(shape, dtype=numpy.float32)
+        Isum = numpy.zeros(self.scan.shape, dtype=numpy.float32)
+        indices = numpy.zeros(self.scan.shape, dtype=numpy.uint32)
 
-        #TODO: order images accordingly:
+        timestamps = []
 
-        ids = numpy.arange(nframes)
-        idx = numpy.concatenate([i.idx for i in self.juices])
-        timestamps = self.to_pyarch["time"] = numpy.concatenate([i.timestamps for i in self.juices])
-        I[idx] = numpy.vstack([i.I for i in self.juices])
-        Isum[idx] = numpy.concatenate([i.Isum for i in self.juices])
-        sigma[idx] = numpy.vstack([i.sigma for i in self.juices])
+        for juice in self.juices:
+            timestamps.append(juice.timestamps)
+            print(juice.idx)
+            for j, i in enumerate(juice.idx):
+                p = self.scan.get_pos(i)
+                if p is None:
+                    continue
+                print(p)
+                indices[p.slow, p.fast] = p.index
+                I[p.slow, p.fast] = juice.I[j]
+                Isum[p.slow, p.fast] = juice.Isum[j]
+                sigma[p.slow, p.fast] = juice.sigma[j]
 
-        hplc_data = nxs.new_class(mesh_grp, "hplc", "NXdata")
-        hplc_data.attrs["title"] = "Chromatogram"
-        sum_ds = hplc_data.create_dataset("sum", data=Isum, dtype=numpy.float32)
-        sum_ds.attrs["interpretation"] = "spectrum"
+        timestamps = self.to_pyarch["time"] = numpy.concatenate(timestamps)
+
+        mesh_data = nxs.new_class(mesh_grp, "mesh", "NXdata")
+        mesh_data.attrs["title"] = "Mesh scan"
+        sum_ds = mesh_data.create_dataset("sum", data=Isum, dtype=numpy.float32)
+        sum_ds.attrs["interpretation"] = "image"
         sum_ds.attrs["long_name"] = "Summed Intensity"
-        frame_ds = hplc_data.create_dataset("frame_ids", data=ids, dtype=numpy.uint32)
-        frame_ds.attrs["interpretation"] = "spectrum"
+        frame_ds = mesh_data.create_dataset("frame_ids", data=indices, dtype=numpy.uint32)
+        frame_ds.attrs["interpretation"] = "image"
         frame_ds.attrs["long_name"] = "frame index"
-        hplc_data.attrs["signal"] = "sum"
-        hplc_data.attrs["axes"] = "frame_ids"
-        mesh_grp.attrs["default"] = entry_grp.attrs["default"] = hplc_data.name
-        time_ds = hplc_data.create_dataset("timestamps", data=timestamps, dtype=numpy.uint32)
+        slow_motor_ds = mesh_data.create_dataset("slow_motor", data =slow)
+        slow_motor_ds.attrs["interpretation"] = "spectrum"
+        slow_motor_ds.attrs["long_name"] = self.scan.slow_motor_name
+        fast_motor_ds = mesh_data.create_dataset("fast_motor", data =fast)
+        fast_motor_ds.attrs["interpretation"] = "spectrum"
+        fast_motor_ds.attrs["long_name"] = self.scan.fast_motor_name
+        mesh_data.attrs["signal"] = "sum"
+        mesh_data.attrs["axes"] = ["slow_motor", "fast_motor"]
+
+        mesh_grp.attrs["default"] = entry_grp.attrs["default"] = mesh_data.name
+        time_ds = mesh_data.create_dataset("timestamps", data=timestamps, dtype=numpy.uint32)
         time_ds.attrs["interpretation"] = "spectrum"
         time_ds.attrs["long_name"] = "Time stamps (s)"
 
@@ -257,11 +313,17 @@ class Mesh(Plugin):
         int_ds = integration_data.create_dataset("I", data=numpy.ascontiguousarray(I, dtype=numpy.float32))
         std_ds = integration_data.create_dataset("errors", data=numpy.ascontiguousarray(sigma, dtype=numpy.float32))
         q_ds = integration_data.create_dataset("q", data=self.juices[0].q)
+        slow_motor_ds = integration_data.create_dataset("slow_motor", data =slow)
+        slow_motor_ds.attrs["interpretation"] = "spectrum"
+        slow_motor_ds.attrs["long_name"] = self.scan.slow_motor_name
+        fast_motor_ds = integration_data.create_dataset("fast_motor", data =fast)
+        fast_motor_ds.attrs["interpretation"] = "spectrum"
+        fast_motor_ds.attrs["long_name"] = self.scan.fast_motor_name
         q_ds.attrs["interpretation"] = "spectrum"
         q_ds.attrs["unit"] = unit_name
         q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
         integration_data.attrs["signal"] = "I"
-        integration_data.attrs["axes"] = [".", "q"]
+        integration_data.attrs["axes"] = ["slow_motor", "fast_motor", "q"]
         integration_data.attrs["SILX_style"] = SAXS_STYLE
 
         int_ds.attrs["interpretation"] = "spectrum"
@@ -271,8 +333,8 @@ class Mesh(Plugin):
         int_ds.attrs["scale"] = "log"
         std_ds.attrs["interpretation"] = "spectrum"
 
-        save_zip(os.path.splitext(self.output_file)[0]+".zip", 
-                 self.juices[0], I, sigma)
+        # save_zip(os.path.splitext(self.output_file)[0]+".zip", 
+        #          self.juices[0], I, sigma)
     
     @staticmethod
     def read_nexus(filename):
@@ -327,3 +389,8 @@ class Mesh(Plugin):
                     break
         return NexusJuice(filename, h5path, npt, unit, idx, Isum, q, I, sigma, poni, mask, energy, polarization, method, sample, timestamps)
         "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps"
+
+    def send_to_ispyb(self):
+        self.log_warning("send_to_ispyb: unimplemented")
+    def send_to_icat(self):
+        self.log_warning("send_to_icat: unimplemented")

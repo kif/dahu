@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/02/2025" 
+__date__ = "05/05/2025"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -29,7 +29,7 @@ from dahu.utils import fully_qualified_name
 import numpy
 import h5py
 import pyFAI
-import pyFAI.azimuthalIntegrator
+import pyFAI.integrator.azimuthal
 import freesas
 import freesas.cormap
 
@@ -68,7 +68,7 @@ class IntegrateMultiframe(Plugin):
       "frame_ids": [101, 102],
       "timestamps": [1580985678.47, 1580985678.58],
       "monitor_values": [1, 1.1],
-      "storage_ring_current": [199.6, 199.5]
+      "storage_ring_current": [199.6, 199.5],
       "exposure_time": 0.1,
       "normalisation_factor": 1.0,
       "poni_file": "/tmp/example.poni",
@@ -79,6 +79,7 @@ class IntegrateMultiframe(Plugin):
       "fidelity_rel": 1e-3,
       "hplc_mode": 0,
       "timeout": 10,
+      "plugin_name": "bm29.integratemultiframe",
       "sample": {
         "name": "bsa",
         "description": "protein description like Bovine Serum Albumin",

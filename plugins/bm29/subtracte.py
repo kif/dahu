@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "24/02/2025"
+__date__ = "05/05/2025"
 __status__ = "development"
 __version__ = "0.3.0" 
 
@@ -33,7 +33,7 @@ except ImportError:
     logger.error("Numexpr is not installed, falling back on numpy's implementations")
     numexpr = None
 import h5py
-import pyFAI, pyFAI.azimuthalIntegrator
+import pyFAI, pyFAI.integrator.azimuthal
 from pyFAI.containers import Integrate1dResult
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap, freesas.invariants
