@@ -733,7 +733,8 @@ class XdsProcessing(Plugin):
      "file_path": "/data/id27/inhouse/some/path", #excluding the scan-number and the filename
      "scan_number": "scan0001",
      "ponifile": "/tmp/geometry.poni",
-     "detector": "eiger" #optionnal
+     "detector": "eiger", #optionnal
+     "oscillation_range": 0.5, #optionnal, angular step size
      "xds_extra": ["",
                    "!UNIT_CELL_CONSTANTS= 10.317 10.317 7.3378 90 90 120 ! put correct values if known",
                    ...]
@@ -762,6 +763,7 @@ limit; re-run CORRECT
         scan_number = self.input["scan_number"]
         ponifile = self.input["ponifile"]
         detector = self.input.get("detector", "eiger")
+        oscillation = self.input.get("oscillation_range", 0.5)
         xds_extra = self.input.get("xds_extra")
         if xds_extra is None:
                 xds_extra = ["",
@@ -789,7 +791,7 @@ limit; re-run CORRECT
         else:
             dest_dir = os.path.join(file_path.replace(RAW,PROCESSED), scan_number)
             # sample_name = "unknown sample"
-        dest_dir = os.path.join(dest_dir, "xsd")
+        dest_dir = os.path.join(dest_dir, "xds")
         if len(files) == 0:
             raise RuntimeError(f"No such file {filename}")
 
@@ -801,7 +803,8 @@ limit; re-run CORRECT
                       "--geometry", ponifile,
                       "--output",  dest_dir,
                       "--neggia", NEGGIA_PLUGIN,
-                      "--CdTe"] + files
+                      "--CdTe", 
+                      "--oscillation", str(oscillation)] + files
         self.log_warning(f'start script with parameters: `{" ".join(parameters)}`')
         res = subprocess.run(parameters, capture_output=True, check=False)
         self.output["convert"] = unpack_processed(res)
