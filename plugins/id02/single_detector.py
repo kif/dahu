@@ -8,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "14/02/2024"
+__date__ = "20/02/2025"
 __status__ = "development"
 __version__ = "0.9.3"
 
@@ -371,20 +371,20 @@ Possible values for to_save:
             if self.flat_filename.endswith(".h5") or self.flat_filename.endswith(".nxs") or self.flat_filename.endswith(".hdf5"):
                 flat = self.read_data(self.flat_filename)
             else:
-                flat_fabio = fabio.open(self.flat_filename)
-                flat = flat_fabio.data
-                dummy = flat_fabio.header.get("Dummy")
-                try:
-                    dummy = float(dummy)
-                except:
-                    self.log_error("Dummy value in mask is unconsistent %s" % dummy)
-                    dummy = None
-                ddummy = flat_fabio.header.get("DDummy")
-                try:
-                    ddummy = float(ddummy)
-                except:
-                    self.log_error("DDummy value in mask is unconsitent %s" % ddummy)
-                    ddummy = 0
+                with fabio.open(self.flat_filename) as flat_fabio:
+                    flat = flat_fabio.data
+                    dummy = flat_fabio.header.get("Dummy")
+                    try:
+                        dummy = float(dummy)
+                    except:
+                        self.log_error("Dummy value in mask is unconsistent %s" % dummy)
+                        dummy = None
+                    ddummy = flat_fabio.header.get("DDummy")
+                    try:
+                        ddummy = float(ddummy)
+                    except:
+                        self.log_error("DDummy value in mask is unconsitent %s" % ddummy)
+                        ddummy = 0
 
             if flat.ndim == 3:
                 self.flat = pyFAI.average.average_dark(flat, center_method="median")
@@ -415,28 +415,27 @@ Possible values for to_save:
         self.mask_filename = self.input.get("regrouping_mask_filename")
         if isinstance(self.mask_filename, StringTypes) and os.path.exists(self.mask_filename):
             try:
-                mask_fabio = fabio.open(self.mask_filename)
+                with fabio.open(self.mask_filename) as mask_fabio:
+                    dummy = mask_fabio.header.get("Dummy")
+                    try:
+                        dummy = float(dummy)
+                    except:
+                        self.log_error("Dummy value in mask is unconsitent %s" % dummy)
+                        dummy = None
+                    ddummy = mask_fabio.header.get("DDummy")
+                    try:
+                        ddummy = float(ddummy)
+                    except:
+                        self.log_error("DDummy value in mask is unconsitent %s" % ddummy)
+                        ddummy = 0
+                    if ddummy:
+                        local_mask = abs(mask_fabio.data - dummy) <= ddummy
+                    else:
+                        local_mask = mask_fabio.data == dummy
+                    self.dummy = dummy
+                    self.delta_dummy = ddummy
             except:
                 local_mask = self.read_data(self.mask_filename) != 0
-            else:  # this is very ID02 specific !!!!
-                dummy = mask_fabio.header.get("Dummy")
-                try:
-                    dummy = float(dummy)
-                except:
-                    self.log_error("Dummy value in mask is unconsitent %s" % dummy)
-                    dummy = None
-                ddummy = mask_fabio.header.get("DDummy")
-                try:
-                    ddummy = float(ddummy)
-                except:
-                    self.log_error("DDummy value in mask is unconsitent %s" % ddummy)
-                    ddummy = 0
-                if ddummy:
-                    local_mask = abs(mask_fabio.data - dummy) <= ddummy
-                else:
-                    local_mask = mask_fabio.data == dummy
-                self.dummy = dummy
-                self.delta_dummy = ddummy
             if local_mask.ndim == 3:
                 local_mask = pyFAI.average.average_dark(local_mask, center_method="median")
             if (local_mask is not None) and (local_mask.shape != shape):

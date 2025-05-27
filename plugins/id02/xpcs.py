@@ -7,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "13/07/2021"
+__date__ = "20/02/2025"
 __status__ = "development"
 __version__ = "0.1.1"
 
@@ -174,20 +174,23 @@ Minimalistic example:
         numberq = experiment_setup.get("numberq", (1 << 16) - 2)  # we plan to store the qmask as uint16
 
         if experiment_setup.get("q_mask"):
-            qmask = fabio.open(experiment_setup["q_mask"]).data
+            with fabio.open(experiment_setup["q_mask"]) as fimg:
+                qmask = fimg.data
         else:
             q_array = geometry.center_array(self.shape, unit=self.unit)
 
             detector_maskfile = detector_section.get("mask")
             if detector_maskfile and os.path.exists(detector_maskfile):
-                detector_mask = fabio.open(detector_maskfile).data
+                with fabio.open(detector_maskfile) as fimg:
+                    detector_mask = fimg.data
             else:
                 detector_mask = detector.mask
                 if detector_mask is None:
                     detector_mask = numpy.zeros(self.shape, dtype=numpy.int8)
             beamstop_maskfile = experiment_setup.get("beamstop_mask")
             if beamstop_maskfile and os.path.exists(beamstop_maskfile):
-                beamstop_mask = fabio.open(beamstop_maskfile).data
+                with fabio.open(beamstop_maskfile) as fimg:
+                    beamstop_mask = fimg.data
             else:
                 beamstop_mask = numpy.zeros(self.shape, dtype=numpy.int8)
             mask = numpy.logical_or(detector_mask, beamstop_mask)

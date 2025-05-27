@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/11/2022"
+__date__ = "24/02/2025" 
 __status__ = "development"
-version = "0.2.1"
+version = "0.2.3"
 
 import logging
 logger = logging.getLogger("bm29.ispyb")
@@ -36,7 +36,7 @@ except ImportError:
 
 import matplotlib.pyplot
 matplotlib.use("Agg")
-from freesas.collections import RG_RESULT, RT_RESULT, StatsResult
+from freesas.containers import RG_RESULT, RT_RESULT, StatsResult
 from freesas.plot import kratky_plot, guinier_plot, scatter_plot, density_plot, hplc_plot
 
 
@@ -78,7 +78,7 @@ class IspybConnector:
             self.gallery = os.path.abspath(gallery)
             if not os.path.isdir(self.gallery):
                 try:
-                   os.makedirs(self.gallery)
+                    os.makedirs(self.gallery)
                 except Exception as err:
                     logger.warning(f"Unable to create dir {self.gallery}. {type(err)}: {err}")
         else:
@@ -98,6 +98,8 @@ class IspybConnector:
 
     def send_icat(self, proposal=None, beamline=None, sample=None, dataset=None, path=None, raw=None,  data=None):
         """
+        DEPRECATED CODE !
+        
         :param proposal: mx1324
         :param beamline: name of the beamline
         :param sample: sample name as registered in icat
@@ -106,21 +108,38 @@ class IspybConnector:
         :param raw: directory name of the raw data (not the processed ones)
         :param data: dict with all data sent to ISpyB
         """
+        logger.error("Deprecated code `ispyb.IspybConnector.send_icat()` Switch to `icat.send_icat()`")
         tmp = self.gallery.strip("/").split("/")
         idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")][-1]
-        assert idx_process>5
-        if proposal is None:
-            proposal = tmp[idx_process-5]
-        if beamline is None:
-            beamline = tmp[idx_process-4]
-        if sample is None:
-            sample = tmp[idx_process-2]
-        if dataset is None:
-            dataset = tmp[idx_process+1]
-        if path is None:
-            path = os.path.dirname(self.gallery)
-        if raw is None:            
-            raw = os.path.abspath(self.gallery[:self.gallery.lower().index("process")])            
+        if tmp[idx_process] == "processed":
+            assert idx_process>=6
+            if proposal is None:
+                proposal = tmp[idx_process-6]
+            if beamline is None:
+                beamline = tmp[idx_process-5]
+            if sample is None:
+                sample = tmp[idx_process-2]
+            if dataset is None:
+                dataset = tmp[idx_process+1]
+            if path is None:
+                path = os.path.dirname(self.gallery)
+            if raw is None:            
+                raw = os.path.abspath(self.gallery[:self.gallery.lower().index("process")])
+        elif tmp[idx_process] == "PROCESSED_DATA":           
+            if proposal is None:
+                proposal = tmp[idx_process-3]
+            if beamline is None:
+                beamline = tmp[idx_process-2]
+            if sample is None:
+                sample = tmp[idx_process+1]
+            if dataset is None:
+                dataset = tmp[idx_process+2]
+            if path is None:
+                path = os.path.dirname(self.gallery)
+            if raw is None:            
+                raw = os.path.dirname(os.path.dirname(os.path.abspath(self.gallery.replace("PROCESSED_DATA", "RAW_DATA"))))
+        else:
+            logger.error("Unrecognized path layout")
         
         metadata = {"definition": "SAXS",
                     "Sample_name": sample}
@@ -291,7 +310,10 @@ class IspybConnector:
 
         :param data: a dict with all information to be saved in Ispyb
         """
-        run_number = list(self.run_number)
+        try:
+            run_number = list(self.run_number)
+        except TypeError:
+            run_number = [self.run_number]
         guinier = data.get("guinier")
         gnom = data.get("bift")
         subtracted = data.get("subtracted")
@@ -318,7 +340,6 @@ class IspybConnector:
             densityPlot = self.density_plot(gnom, basename)
         else:
             densityPlot = ""
-
         self.client.service.addSubtraction(str(self.experiment_id),
                                            str(run_number),
                                            str(guinier.Rg if guinier else -1),

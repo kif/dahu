@@ -17,6 +17,7 @@ import fabio
 import pyFAI
 from dahu.plugin import Plugin
 from dahu.factory import register
+
 lock = Semaphore()
 logger = logging.getLogger("id27")
 
@@ -24,6 +25,8 @@ RAW = "RAW_DATA"
 PROCESSED = "PROCESSED_DATA"
 WORKDIR = "/scratch/shared"
 PREFIX = os.path.dirname(sys.executable) #where there scripts are
+NEGGIA_PLUGIN = os.path.join(os.environ["HOME"], "lib", "dectris-neggia.so")
+XDS_EXE = "xds_par"
 
 try:
     from cryio import crysalis
@@ -313,11 +316,25 @@ def fabio_conversion(file_path,
                      folder="xdi",
                      fabioimage="tifimage",
                      extension="tif",
-                     export_icat=False):
-    "Convert a set of eiger files to cbf or tiff"
+                     export_icat=False,
+                     detector="eiger"):
+    """Convert a set of eiger files to cbf or tiff
+    
+    :param file_path: First par of the input filename, typically /
+    :param scan_number: last part of the path, typically "scan0001". 
+        The actual filename is actually guessed since there can be several of them, all will be processed
+    :param folder: name of the output folder for writing (in PROCESSED_DATA, not in RAW_DATA folder)
+    :param fabioimage: type of file to write, name of the Fabio class name.
+    :param export_icat: set to True to export to icat the result.
+    :param detector: name of the detector, used to determine the input filename
+    :return: the logs of the conversion.
+    """
     results = []
-    filename = os.path.join(file_path, scan_number, 'eiger_????.h5')
-    files = {f:fabio.open(f).nframes for f in sorted(glob.glob(filename))} #since python 3.7 dict are ordered !
+    filename = os.path.join(file_path, scan_number, f'{detector}_????.h5')
+    files = {} #since python 3.7 dict are ordered !
+    for f in sorted(glob.glob(filename)):
+        with fabio.open(f) as fimg:
+            files[f] = fimg.nframes 
     all_single = max(files.values())==1
     file_path = file_path.rstrip("/")
 
@@ -339,24 +356,24 @@ def fabio_conversion(file_path,
 
     cnt = 0
     for idx_file, filename in enumerate(files):
-        img_data_fabio = fabio.open(filename)
-        basename = folder if (len(files) == 1 or all_single) else f"{folder}_{idx_file+1:04d}"
-
-        dest_dir2 = os.path.join(dest_dir, basename)
-        if not os.path.exists(dest_dir2):
-            with lock:
-                if not os.path.exists(dest_dir2):
-                    os.makedirs(dest_dir2)
-        for i in range(img_data_fabio.nframes):
-            cnt += 1
-            frame = img_data_fabio.getframe(i)
-            conv = frame.convert(fabioimage)
-            data = conv.data.astype('int32')
-            data[data < 0] = 0
-            conv.data = data
-            output = os.path.join(dest_dir2, f"{dset_name}_{cnt if all_single else i+1:04d}.{extension}")
-            conv.write(output)
-            results.append(output)
+        with fabio.open(filename) as img_data_fabio: 
+            basename = folder if (len(files) == 1 or all_single) else f"{folder}_{idx_file+1:04d}"
+    
+            dest_dir2 = os.path.join(dest_dir, basename)
+            if not os.path.exists(dest_dir2):
+                with lock:
+                    if not os.path.exists(dest_dir2):
+                        os.makedirs(dest_dir2)
+            for i in range(img_data_fabio.nframes):
+                cnt += 1
+                frame = img_data_fabio.getframe(i)
+                conv = frame.convert(fabioimage)
+                data = conv.data.astype('int32')
+                data[data < 0] = 0
+                conv.data = data
+                output = os.path.join(dest_dir2, f"{dset_name}_{cnt if all_single else i+1:04d}.{extension}")
+                conv.write(output)
+                results.append(output)
     if export_icat:
         metadata = {"definition": "conversion",
                     "Sample_name": sample_name}
@@ -452,8 +469,9 @@ class XdiConversion(Plugin):
     This is the plugin to convert an HDF5 to a stack of TIFF files
        
     Typical JSON file:
-    {"file_path": "/data/id27/inhouse/some/file.h5",
-     "scan_number": "0001"
+    {"file_path": "/data/id27/inhouse/some/path", #excluding the scan-number and the filename
+     "scan_number": "scan0001"
+     "detector": "eiger" #optionnal
     }
     
     """
@@ -465,12 +483,14 @@ class XdiConversion(Plugin):
 
         file_path = self.input["file_path"]
         scan_number = self.input["scan_number"]
+        detector = self.input.get("detector", "eiger")
         results = fabio_conversion(file_path,
                                    scan_number,
                                    folder="xdi",
                                    fabioimage="tifimage",
                                    extension="tif",
-                                   export_icat=False)
+                                   export_icat=False,
+                                   detector=detector)
         self.output["output"] = results
 
 
@@ -553,8 +573,8 @@ class XdsConversion(Plugin):
     This is the plugin to convert an HDF5 to a stack of CBF files for XDS
        
     Typical JSON file:
-    {"file_path": "/data/id27/inhouse/some/file.h5",
-     "scan_number": "0001"
+    {"file_path": "/data/id27/inhouse/some/path", #excluding the scan-number and the filename
+     "scan_number": "scan0001"
     }
     
     """
@@ -638,7 +658,7 @@ class DiffMap(Plugin):
         ai["error_model"] = "poisson"
         ai["application"] = "pyfai-integrate"
         ai["version"] = 3
-        ai["method"] = ["bbox", "csr", "opencl"]
+        ai["method"] = ["full", "csr", "opencl"]
         ai["opencl_device"] = "gpu"
         ai["nbpt_rad"] = self.input.get("npt", 1)
         ai["nbpt_azim"] = 1
@@ -648,8 +668,8 @@ class DiffMap(Plugin):
         param["experiment_title"] = os.path.join(os.path.basename(file_path), scan_number)
         param["fast_motor_name"] = "fast"
         param["slow_motor_name"] = "slow"
-        param["fast_motor_points"] = fast_scan
-        param["slow_motor_points"] = slow_scan
+        param["nbpt_fast"] = fast_scan
+        param["nbpt_slow"] = slow_scan
         param["offset"] = 0
         param["output_file"] = dest
         param["input_data"] = [(i, None, None) for i in files]
@@ -672,13 +692,16 @@ class DiffMap(Plugin):
         try:
             send_icat(file_path, dest_dir, metadata=metadata)
         except Exception as err:
+            self.log_error(f"Error in send_icat {type(err)}: {err}", do_raise=False)
             import traceback
-            print(f"Error {type(err)}: {err}")
-            traceback.print_exc(err, file=sys.stdout)
+            traceback.print_exc(file=sys.stdout)
 
 
 def send_icat(raw_dir, processed_dir, beamline="id27", proposal="", dataset="", metadata=None):
     "Function that sends to icat the processed data"
+    if IcatClient is None:
+        logger.warning("pyicat_plus is not installed, skipping")
+        return
     icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
     metadata = metadata or {"definition": "dummy processing", "Sample_name": "unknown sample"}
     l = raw_dir.split("/")
@@ -700,6 +723,96 @@ def send_icat(raw_dir, processed_dir, beamline="id27", proposal="", dataset="", 
     icat_client.store_processed_data(**kwargs)
     return kwargs
     
+@register
+class XdsProcessing(Plugin):
+    """
+    This is the plugin to convert an HDF5-lima file into a Neggia-compatible and processes it using XDS.
+       
+    Typical JSON file:
+    {"plugin_name": "id27.xdsprocessing",
+     "file_path": "/data/id27/inhouse/some/path", #excluding the scan-number and the filename
+     "scan_number": "scan0001",
+     "ponifile": "/tmp/geometry.poni",
+     "detector": "eiger" #optionnal
+     "xds_extra": ["",
+                   "!UNIT_CELL_CONSTANTS= 10.317 10.317 7.3378 90 90 120 ! put correct values if known",
+                   ...]
+MINIMUM_NUMBER_OF_PIXELS_IN_A_SPOT=4 ! default of 6 is sometimes too high
+MAXIMUM_NUMBER_OF_STRONG_PIXELS=18000 ! total number of strong pixels 
+used for indexation
+BACKGROUND_PIXEL=2.0 ! used by COLSPOT and INTEGRATE
+SIGNAL_PIXEL=3.0 ! needs to be lager than BACKGROUND_PIXEL, specifies 
+standard deviation, used in COLSPOT and INTEGRATE
+
+!EXCLUDE_RESOLUTION_RANGE= 3.93 3.87 !ice-ring at 3.897 Angstrom
+!INCLUDE_RESOLUTION_RANGE=40 1.75  ! after CORRECT, insert high resol 
+limit; re-run CORRECT
+
+    }
     
-    
-    
+    """
+
+    def process(self):
+        Plugin.process(self)
+        if not self.input:
+            logger.error("input is empty")
+
+        script_name = "hdf2neggia"
+        file_path = self.input["file_path"]
+        scan_number = self.input["scan_number"]
+        ponifile = self.input["ponifile"]
+        detector = self.input.get("detector", "eiger")
+        xds_extra = self.input.get("xds_extra")
+        if xds_extra is None:
+                xds_extra = ["",
+                             "!UNIT_CELL_CONSTANTS= 10.317 10.317 7.3378 90 90 120 ! put correct values if known",
+                             "MINIMUM_NUMBER_OF_PIXELS_IN_A_SPOT=4 ! default of 6 is sometimes too high",
+                             "MAXIMUM_NUMBER_OF_STRONG_PIXELS=18000 ! total number of strong pixels used for indexation",
+                             "BACKGROUND_PIXEL=2.0 ! used by COLSPOT and INTEGRATE",
+                             "SIGNAL_PIXEL=3.0 ! needs to be lager than BACKGROUND_PIXEL, specifies standard deviation, used in COLSPOT and INTEGRATE",
+                             "!EXCLUDE_RESOLUTION_RANGE= 3.93 3.87 !ice-ring at 3.897 Angstrom",
+                             "!INCLUDE_RESOLUTION_RANGE=40 1.75  ! after CORRECT, insert high resol limit; re-run CORRECT",
+                             ""]  
+        
+        filename = os.path.join(file_path, scan_number, f'{detector}_????.h5')
+        files = sorted(glob.glob(filename))
+        file_path = file_path.rstrip("/")
+
+        splitted = file_path.split("/")
+        if RAW in splitted:
+            raw_pos = splitted.index(RAW)
+            splitted[raw_pos] = PROCESSED
+            splitted.append(scan_number)
+            splitted.insert(0, "/")
+            dest_dir = os.path.join(*splitted)    
+            # sample_name = splitted[raw_pos + 1]
+        else:
+            dest_dir = os.path.join(file_path.replace(RAW,PROCESSED), scan_number)
+            # sample_name = "unknown sample"
+        dest_dir = os.path.join(dest_dir, "xsd")
+        if len(files) == 0:
+            raise RuntimeError(f"No such file {filename}")
+
+        if not os.path.exists(dest_dir):
+            os.makedirs(dest_dir, exist_ok=True)
+
+        script_name = os.path.join(PREFIX, script_name)
+        parameters = [script_name,
+                      "--geometry", ponifile,
+                      "--output",  dest_dir,
+                      "--neggia", NEGGIA_PLUGIN,
+                      "--CdTe"] + files
+        self.log_warning(f'start script with parameters: `{" ".join(parameters)}`')
+        res = subprocess.run(parameters, capture_output=True, check=False)
+        self.output["convert"] = unpack_processed(res)
+        if res.returncode == 0:
+            # Implement the tuning of the XDS.INP file here...
+            xdsinp = os.path.join(dest_dir, "XDS.INP")
+            with open(xdsinp, "a") as xdsfile:
+                xdsfile.write(os.linesep)
+                for line in xds_extra:
+                    xdsfile.write(line+os.linesep)
+                    
+            res = subprocess.run(XDS_EXE, cwd=dest_dir, capture_output=True, check=False)
+            self.output["xds"] = unpack_processed(res)
+        

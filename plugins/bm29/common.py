@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "29/10/2020"
+__date__ = "20/02/2025"
 __status__ = "development"
 version = "0.0.2"
 
@@ -71,7 +71,9 @@ def get_integrator(keycache):
         ai = pyFAI.load(keycache.poni)
         ai.wavelength = 1e-10 * pyFAI.units.hc / keycache.energy
         if keycache.mask:
-            mask = numpy.logical_or(fabio.open(keycache.mask).data, ai.detector.mask).astype("int8")
+            with fabio.open(keycache.mask) as fimg:
+                fabio_mask =  fimg.data
+            mask = numpy.logical_or(fabio_mask, ai.detector.mask).astype("int8")
             ai.detector.mask = mask
         shared_cache[keycache] = ai
     return ai
@@ -143,6 +145,8 @@ def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
     res = []
     sizes = []
     size = len(proba)
+    if size<2:
+        return (0,1)
     ext_diag = numpy.zeros(size + 1, dtype=numpy.int16)
     delta = numpy.zeros(size + 1, dtype=numpy.int16)
     ext_diag[1:-1] = numpy.diagonal(proba, 1) >= relative

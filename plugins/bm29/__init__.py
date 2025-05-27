@@ -4,15 +4,16 @@ List of plugins exposed:
 
 * bm29.IntegrateMultiframe
 * bm29.SubtractBuffer
+* bm29.hplc
 """
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "12/10/2020"
+__date__ = "03/12/2024"
 __status__ = "development"
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from dahu.factory import register
 from .integrate import IntegrateMultiframe

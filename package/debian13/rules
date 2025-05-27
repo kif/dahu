@@ -1,0 +1,43 @@
+#!/usr/bin/make -f
+
+export DH_VERBOSE=1
+export PYBUILD_NAME=dahu
+
+# temporaty until this bug is closed
+# https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1077205
+DEB_CFLAGS_MAINT_APPEND = -Wno-error=incompatible-pointer-types
+export DEB_CFLAGS_MAINT_APPEND
+
+PY3VER := $(shell py3versions -dv)
+
+# temporary until the 1/1/1970 issue is solved in debian stable
+include /usr/share/dpkg/pkg-info.mk # sets SOURCE_DATE_EPOCH
+
+%:
+	dh $@ --buildsystem=pybuild
+
+execute_after_dh_clean:
+	rm -rf build/man
+	rm -rf *.egg-info
+	rm -f all_testimage.json fai_cfg.json lima_cfg.json profile.log
+
+override_dh_auto_build-arch:
+	PYBUILD_BUILD_ARGS="-Ccompile-args=--verbose" dh_auto_build
+
+override_dh_auto_build-indep: override_dh_auto_build-arch
+ifeq (,$(findstring nodoc, $(DEB_BUILD_OPTIONS)))
+	env PYTHONPATH=$(shell pybuild --build -i $(PY3VER) -s custom --build-args 'echo {build_dir}') \
+	SPHINXBUILD="$(PY3VER) -m sphinx" \
+	SPHINXOPTS="-D mathjax_path=MathJax.js" \
+	sphinx-build -N -bhtml doc/source build/html
+endif
+
+# no test during build, only autopkgtest
+override_dh_auto_test:
+
+execute_after_dh_auto_install:
+	dh_install -p dahu debian/python3-dahu/usr/bin /usr
+	rm -rf debian/python3-dahu/usr/bin
+
+execute_after_dh_installdocs:
+	dh_installdocs -p python-dahu-doc "build/html"
