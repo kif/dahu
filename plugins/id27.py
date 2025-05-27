@@ -607,8 +607,12 @@ class DiffMap(Plugin):
       "npt": 2000,
       "file_path": "/data/id27/inhouse/some/path",
       "scan_number": "scan_0001",
-      "slow_scan": 10,
-      "fast_scan": 10
+      "fast_motor_name": "fast",  # optional
+      "slow_motor_name": "slow",  # optional
+      "slow_scan": 10,            # optional
+      "fast_scan": 10,            # optional
+      "slow_motor_range": [5,8],  # optional
+      "fast_motor_range": [5,8]   # optional
     }
     """
     def process(self):
@@ -645,36 +649,68 @@ class DiffMap(Plugin):
 
         config = os.path.join(dest_dir, "diff_map.json")
         dest = os.path.join(dest_dir, "diff_map.h5")
-        
-        param = {}
-        ai = pyFAI.load(self.input.get("ponifile")).get_config()
-        if "maskfile" in self.input:
-            ai["do_mask"] = True
-            ai["mask_file"] = self.input["maskfile"]
-        # some constants hardcoded for the beamline:
-        ai["do_polarization"] = True
-        ai["polarization_factor"] = 0.99
-        ai["do_solid_angle"] = True
-        ai["error_model"] = "poisson"
-        ai["application"] = "pyfai-integrate"
-        ai["version"] = 3
-        ai["method"] = ["full", "csr", "opencl"]
-        ai["opencl_device"] = "gpu"
-        ai["nbpt_rad"] = self.input.get("npt", 1)
-        ai["nbpt_azim"] = 1
-        ai["do_2D"] = False
-        ai["unit"] = self.input.get("unit", "q_nm^-1")
-        param["ai"] = ai
-        param["experiment_title"] = os.path.join(os.path.basename(file_path), scan_number)
-        param["fast_motor_name"] = "fast"
-        param["slow_motor_name"] = "slow"
-        param["nbpt_fast"] = fast_scan
-        param["nbpt_slow"] = slow_scan
-        param["offset"] = 0
-        param["output_file"] = dest
-        param["input_data"] = [(i, None, None) for i in files]
-        with open(config, "w") as w:
-            w.write(json.dumps(param, indent=2))
+        try:
+            from pyFAI.io.diffmap_config import DiffmapConfig, WorkerConfig, MotorRange, ListDataSet
+            from pyFAI.io.ponifile import PoniFile
+
+        except ImportError:
+            self.log_warning("Unable to import some of the pyFAI.io classes")
+            param = {}
+            ai = pyFAI.load(self.input.get("ponifile")).get_config()        
+            if "maskfile" in self.input:
+                ai["do_mask"] = True
+                ai["mask_file"] = self.input["maskfile"]
+            # some constants hardcoded for the beamline:
+            ai["do_polarization"] = True
+            ai["polarization_factor"] = 0.99
+            ai["do_solid_angle"] = True
+            ai["error_model"] = "poisson"
+            ai["application"] = "pyfai-integrate"
+            ai["version"] = 3
+            ai["method"] = ["full", "csr", "opencl"]
+            ai["opencl_device"] = "gpu"
+            ai["nbpt_rad"] = self.input.get("npt", 1)
+            ai["nbpt_azim"] = 1
+            ai["do_2D"] = False
+            ai["unit"] = self.input.get("unit", "q_nm^-1")
+            param["ai"] = ai
+            param["experiment_title"] = os.path.join(os.path.basename(file_path), scan_number)
+            param["fast_motor_name"] = self.input.get("fast_motor_name", "fast")
+            param["slow_motor_name"] = self.input.get("slow_motor_name", "slow")
+            param["nbpt_fast"] = fast_scan
+            param["nbpt_slow"] = slow_scan
+            param["offset"] = 0
+            param["output_file"] = dest
+            param["input_data"] = [(i, None, None) for i in files]
+            with open(config, "w") as w:
+                w.write(json.dumps(param, indent=2))
+        else:
+            poni = PoniFile(self.input.get("ponifile"))
+            dm = DiffmapConfig(ai=WorkerConfig(poni=PoniFile(self.input.get("ponifile")),
+                                               correct_solid_angle=True,
+                                               error_model="poisson",
+                                               application="pyfai-integrate",
+                                               method=("full", "csr", "opencl"),
+                                               opencl_device="gpu",
+                                               nbpt_azim=1,
+                                               nbpt_rad = self.input.get("npt", 1),
+                                               unit="q_nm^-1",
+                                               mask_file=self.input.get("maskfile")),
+                                experiment_title=os.path.join(os.path.basename(file_path), scan_number),
+                                offset=0,
+                                output_file=dest)
+            dm.ai.polarization_factor = 0.99
+            dm.slow_motor = MotorRange(name=self.input.get("slow_motor_name", "slow"), 
+                                       start=self.input.get("slow_motor_range", [1,1])[0],
+                                       stop=self.input.get("slow_motor_range", [1, slow_scan])[-1],
+                                       points=slow_scan)
+            dm.fast_motor = MotorRange(name=self.input.get("fast_motor_name", "fast"), 
+                                       start=self.input.get("fast_motor_range", [1,1])[0],
+                                       stop=self.input.get("fast_motor_range", [1, fast_scan])[-1],
+                                       points=fast_scan)
+            dm.input_data = ListDataSet.from_serialized([(i, None, None) for i in files])
+            dm.save(config)
+
         results["config"] = config
         command = [os.path.join(PREFIX, 'pyFAI-diffmap'), '--no-gui', '--config', config]
         results["processing"] = unpack_processed(subprocess.run(command, capture_output=True, check=False))
