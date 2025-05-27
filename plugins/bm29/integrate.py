@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/02/2025" 
+__date__ = "27/05/2025"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -20,6 +20,7 @@ import time
 import json
 import logging
 import copy
+import posixpath
 from collections import namedtuple
 from urllib3.util import parse_url
 from dahu.plugin import Plugin
@@ -232,7 +233,7 @@ class IntegrateMultiframe(Plugin):
         self.create_nexus()
         self.output["memcached"] = self.send_to_memcached()
         self.send_to_ispyb()
-        #self.output["icat"] = 
+        #self.output["icat"] =
         self.send_to_icat()
 
     def wait_file(self, filename, timeout=None):
@@ -277,7 +278,7 @@ class IntegrateMultiframe(Plugin):
         entry_grp = nxs.new_entry("entry", self.input.get("plugin_name", "dahu"),
                               title='BioSaxs multiframe integration',
                               force_time=get_isotime(creation_time))
-        nxs.h5.attrs["default"] = entry_grp.name
+        nxs.h5.attrs["default"] = entry_grp.name.strip("/")
 
         # Configuration
         cfg_grp = nxs.new_class(entry_grp, "configuration", "NXnote")
@@ -432,11 +433,12 @@ class IntegrateMultiframe(Plugin):
         hplc_data.attrs["axes"] = "frame_ids"
 
         if self.input.get("hplc_mode"):
-            entry_grp.attrs["default"] = entry_grp.attrs["default"] = integration_grp.attrs["default"] = hplc_data.name
+            entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
+            integration_grp.attrs["default"] = posixpath.relpath(hplc_data.name, integration_grp.name)
             self.log_warning("HPLC mode detected, stopping after frame per frame integration")
             return
 
-        integration_grp.attrs["default"] = integration_data.name
+        integration_grp.attrs["default"] = posixpath.relpath(integration_data.name, integration_grp.name)
 
     # Process 2: Freesas cormap
         cormap_grp = nxs.new_class(entry_grp, "2_correlation_mapping", "NXprocess")
@@ -466,7 +468,7 @@ class IntegrateMultiframe(Plugin):
 
         to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*cormap_results.tomerge, dtype=numpy.uint16))
         to_merge_ds.attrs["long_name"] = "Index of equivalent frames"
-        cormap_grp.attrs["default"] = cormap_data.name
+        cormap_grp.attrs["default"] = posixpath.relpath(cormap_data.name, cormap_grp.name)
         if self.ispyb.url:
             self.to_pyarch["merged"] = cormap_results.tomerge
 
@@ -497,11 +499,11 @@ class IntegrateMultiframe(Plugin):
         int_std_ds.attrs["interpretation"] = "image"
         int_std_ds.attrs["formula"] = "sqrt(sum_i(variance_i)/sum_i(normalization_i))"
         int_std_ds.attrs["method"] = "Propagated error from weighted mean assuming poissonian behavour of every data-point"
-        
+
         int_nrm_ds = average_data.create_dataset("normalization", data=norm)
         int_nrm_ds.attrs["formula"] = "sum_i(normalization_i))"
-        
-        average_grp.attrs["default"] = average_data.name
+
+        average_grp.attrs["default"] = posixpath.relpath(average_data.name, average_grp.name)
 
     # Process 4: Azimuthal integration of the time average image
         ai2_grp = nxs.new_class(entry_grp, "4_azimuthal_integration", "NXprocess")
@@ -518,7 +520,7 @@ class IntegrateMultiframe(Plugin):
         ai2_grp["configuration"] = integration_grp["configuration"]
         # ai2_grp["polarization_factor"] = integration_grp["polarization_factor"]
         # ai2_grp["integration_method"] = integration_grp["integration_method"]
-        ai2_grp.attrs["default"] = ai2_data.name
+        ai2_grp.attrs["default"] = posixpath.relpath(ai2_data.name, ai2_grp.name)
 
     # Stage 4 processing
         intensity_std = res3.deviation
@@ -552,7 +554,7 @@ class IntegrateMultiframe(Plugin):
         ai2_std_ds.attrs["interpretation"] = "spectrum"
         ai2_int_ds.attrs["units"] = "arbitrary"
         # Finally declare the default entry and default dataset ...
-        entry_grp.attrs["default"] = ai2_data.name
+        entry_grp.attrs["default"] = posixpath.relpath(ai2_data.name, entry_grp.name)
 
         # Export this to the output JSON
         # self.output["q"] = res2.radial
@@ -606,7 +608,7 @@ class IntegrateMultiframe(Plugin):
         valid_slice = slice(*tomerge)
         mask = self.ai.detector.mask
         sum_data = (self.input_frames[valid_slice]).sum(axis=0)
-        sum_norm = self.scale_factor * sum(self.monitor_values[valid_slice])    
+        sum_norm = self.scale_factor * sum(self.monitor_values[valid_slice])
         if numexpr is not None:
             # Numexpr is many-times faster than numpy when it comes to element-wise operations
             intensity_avg = numexpr.evaluate("where(mask==0, sum_data/sum_norm, 0.0)")
@@ -629,9 +631,9 @@ class IntegrateMultiframe(Plugin):
                 self.log_warning(f"Not sending to ISPyB: no valid URL {self.ispyb.url}")
 
     def send_to_icat(self):
-        #Some more metadata for iCat, as strings: 
+        #Some more metadata for iCat, as strings:
         to_icat = copy.copy(self.to_pyarch)
-        to_icat["experiment_type"] = "hplc" if self.input.get("hplc_mode") else "sample-changer"  
+        to_icat["experiment_type"] = "hplc" if self.input.get("hplc_mode") else "sample-changer"
         to_icat["sample"] = self.sample
         to_icat["SAXS_maskFile"] = self.mask
         to_icat["SAXS_waveLength"] = str(self.ai.wavelength)
@@ -645,13 +647,13 @@ class IntegrateMultiframe(Plugin):
         f2d = self.ai.getFit2D()
         to_icat["SAXS_beam_center_x"] = str(f2d["centerX"])
         to_icat["SAXS_beam_center_y"] = str(f2d["centerY"])
-        
+
         metadata = {"scanType": "integration"}
         return send_icat(sample=self.sample.name,
                          raw=os.path.dirname(os.path.dirname(os.path.abspath(self.input_file))),
                          path=os.path.dirname(os.path.abspath(self.output_file)),
-                         data=to_icat, 
-                         gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"), 
+                         data=to_icat,
+                         gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"),
                          metadata=metadata)
 
     def send_to_memcached(self):
@@ -661,5 +663,5 @@ class IntegrateMultiframe(Plugin):
         for k in sorted(self.to_memcached.keys(), key=lambda i:self.to_memcached[i].nbytes):
             key = f"{key_base}_{k}"
             dico[key] = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
-        return to_memcached(dico) 
+        return to_memcached(dico)
 
