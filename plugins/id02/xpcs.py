@@ -13,6 +13,7 @@ __version__ = "0.1.1"
 
 import os
 import json
+import posixpath
 import logging
 logger = logging.getLogger("id02.xpcs")
 
