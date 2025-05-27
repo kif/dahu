@@ -209,7 +209,7 @@ class SubtractBuffer(Plugin):
         entry_grp = nxs.new_entry("entry", self.input.get("plugin_name", "dahu"),
                                   title='BioSaxs buffer subtraction',
                                   force_time=get_isotime())
-        nxs.h5.attrs["default"] = entry_grp.name.stip["/"]
+        nxs.h5.attrs["default"] = entry_grp.name.strip["/"]
 
     # Configuration
         cfg_grp = nxs.new_class(entry_grp, "configuration", "NXnote")
