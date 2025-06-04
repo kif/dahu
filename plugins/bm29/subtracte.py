@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/05/2025"
+__date__ = "04/06/2025"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -690,7 +690,7 @@ class SubtractBuffer(Plugin):
         with Nexus(filename, "r") as nxsr:
             entry_grp = nxsr.get_entries()[0]
             h5path = entry_grp.name
-            nxdata_grp = nxsr.h5[entry_grp.attrs["default"]]
+            nxdata_grp = entry_grp[entry_grp.attrs["default"]]
             signal = nxdata_grp.attrs["signal"]
             axis = nxdata_grp.attrs["axes"]
             I = nxdata_grp[signal][()]
@@ -752,9 +752,9 @@ class SubtractBuffer(Plugin):
         return send_icat(sample=self.sample_juice.sample,
                          raw=raw,
                          path=os.path.dirname(os.path.abspath(self.output_file)),
-                         data=to_icat, 
+                         data=to_icat,
                          dataset="subtraction",
-                         gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"), 
+                         gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"),
                          metadata=metadata)
 
     def send_to_memcached(self):

@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/05/2025"
+__date__ = "04/06/2025"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -139,7 +139,7 @@ def save_zip(filename, config, I, sigma):
 
     :param filename: name of the zip-file
     :param confif: this is some NexusJuice namedtuple. we use only q and the sample description.
-    :param I: 2D array with the intensity of the stack of curves 
+    :param I: 2D array with the intensity of the stack of curves
     :param sigma: 2D array with the uncertainties of the stack of frames
     :return: nothing
     """
@@ -159,7 +159,7 @@ def save_zip(filename, config, I, sigma):
             common["exposure temperature"] = sample.temperature
         if sample.concentration:
             common["concentration"] = sample.concentration
-    res = []   
+    res = []
     for i, s in zip(I, sigma):
         r = copy.copy(common)
         r["I"] = i
@@ -348,7 +348,7 @@ class HPLC(Plugin):
         int_ds.attrs["scale"] = "log"
         std_ds.attrs["interpretation"] = "spectrum"
 
-        save_zip(os.path.splitext(self.output_file)[0]+".zip", 
+        save_zip(os.path.splitext(self.output_file)[0]+".zip",
                  self.juices[0], I, sigma)
 
     # Process 2: SVD decomposition
@@ -924,7 +924,7 @@ class HPLC(Plugin):
             entry_name = nxsr.h5.attrs["default"]
             entry_grp = nxsr.h5[entry_name]
             h5path = entry_grp.name
-            nxdata_grp = nxsr.h5[entry_grp.attrs["default"]]
+            nxdata_grp = entry_grp[entry_grp.attrs["default"]]
             assert nxdata_grp.name.endswith("hplc")  # we are reading HPLC data
             signal = nxdata_grp.attrs["signal"]
             axis = nxdata_grp.attrs["axes"]
@@ -997,9 +997,9 @@ class HPLC(Plugin):
         return send_icat(sample=self.juices[0].sample,
                          raw=os.path.dirname(os.path.abspath(self.input_files[0])),
                          path=os.path.dirname(os.path.abspath(self.output_file)),
-                         data=to_icat, 
+                         data=to_icat,
                          dataset="HPLC",
-                         gallery=gallery, 
+                         gallery=gallery,
                          metadata=metadata)
 
     def save_csv(self, filename, sum_I, Rg):
@@ -1014,7 +1014,7 @@ class HPLC(Plugin):
         lines.append("")
         with open(filename, "w") as csv:
             csv.write(os.linesep.join(lines))
-            
-            
-            
-        
+
+
+
+
