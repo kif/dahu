@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/05/2025"
+__date__ = "04/06/2025"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -80,6 +80,7 @@ class IntegrateMultiframe(Plugin):
       "fidelity_rel": 1e-3,
       "hplc_mode": 0,
       "timeout": 10,
+      "average_out_monitor_values": False,  # use this to work around noisy beam stop diode reading.
       "sample": {
         "name": "bsa",
         "description": "protein description like Bovine Serum Albumin",
@@ -186,6 +187,8 @@ class IntegrateMultiframe(Plugin):
         else:
             self.energy = numpy.float32(self.energy)  # It is important to fix the datatype of the energy
         self.monitor_values = numpy.array(self.input.get("monitor_values", 1), dtype=numpy.float64)
+        if self.input.get("average_out_monitor_values"):
+            self.monitor_values = numpy.zeros_like(self.monitor_values) + self.monitor_values.mean()
         self.normalization_factor = float(self.input.get("normalization_factor", 1))
         self.scale_factor = float(self.input.get("exposure_time", 1)) / self.normalization_factor
 
