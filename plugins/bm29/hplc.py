@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22/04/2025"
+__date__ = "27/05/2025"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -43,7 +43,7 @@ import sklearn
 from sklearn.decomposition import NMF
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
-                    create_nexus_sample
+                    Sample, create_nexus_sample
 from .ispyb import IspybConnector
 from .icat import send_icat
 
@@ -53,7 +53,7 @@ NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sig
 
 def smooth_chromatogram(signal, window):
     """smooth-out the chromatogram
-    
+
     :param signal: the chomatogram as 1d array
     :param window: the size of the window
     """
@@ -75,7 +75,7 @@ def smooth_chromatogram(signal, window):
 def search_peaks(signal, wmin=10, scale=0.9):
     """
     Label all peak regions of chromatogram.
-    
+
     :param signal=smooth signal
     :param wmin: minimum width for a peak. smaller ones are discarded.
     :param scale: shrink factor (i.e. <1 for the search zone)
@@ -110,14 +110,14 @@ def search_peaks(signal, wmin=10, scale=0.9):
 def build_background(I, std=None, keep=0.3):
     """
     Build a background from a SVD and search for the frames looking most like the background.
-    
+
     1. build a coarse approximation based on the SVD.
     2. measure the distance (cormap) of every single frame to the fundamental of the SVD
     3. average frames that looks most like the coarse approximation (with deviation)
-    
+
     :param I: 2D array of shape (nframes, nbins)
     :param std: same as I but with the standard deviation.
-    :param keep: fraction of frames to consider for background (<1!), 30% looks like a good guess 
+    :param keep: fraction of frames to consider for background (<1!), 30% looks like a good guess
     :return: (bg_avg, bg_std, indexes), each 1d of size nbins. + the index of the frames to keep
     """
     U, S, V = numpy.linalg.svd(I.T, full_matrices=False)
@@ -172,21 +172,21 @@ def save_zip(filename, config, I, sigma):
 
 class HPLC(Plugin):
     """ Rebuild the complete chromatogram and perform basic analysis on it.
-    
+
         Typical JSON file:
     {
       "integrated_files": ["img_001.h5", "img_002.h5"],
       "output_file": "hplc.h5"
       "ispyb": {
         "url": "http://ispyb.esrf.fr:1234",
-        "pyarch": "/data/pyarch/mx1234/sample", 
+        "pyarch": "/data/pyarch/mx1234/sample",
         "measurement_id": -1,
         "collection_id": -1
        },
-       "nmf_components": 5, 
+       "nmf_components": 5,
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.hplc"
-    } 
+    }
     """
     NMF_COMP = 5
     "Default number of Non-negative matrix factorisation components. Correspond to the number of spieces"
@@ -251,7 +251,7 @@ class HPLC(Plugin):
         self.to_pyarch["sample_name"] = self.juices[0].sample.name
         if not self.input.get("no_ispyb"):
             self.send_to_ispyb()
-        # self.output["icat"] = 
+        # self.output["icat"] =
         self.send_to_icat()
 
     def teardown(self):
@@ -270,7 +270,7 @@ class HPLC(Plugin):
                               title='BioSaxs HPLC experiment',
                               force_time=get_isotime())
         entry_grp["version"] = __version__
-        nxs.h5.attrs["default"] = entry_grp.name
+        nxs.h5.attrs["default"] = entry_grp.name.strip("/")
 
     # Configuration
         cfg_grp = nxs.new_class(entry_grp, "configuration", "NXnote")
@@ -322,7 +322,8 @@ class HPLC(Plugin):
         frame_ds.attrs["long_name"] = "frame index"
         hplc_data.attrs["signal"] = "sum"
         hplc_data.attrs["axes"] = "frame_ids"
-        chroma_grp.attrs["default"] = entry_grp.attrs["default"] = hplc_data.name
+        chroma_grp.attrs["default"] = posixpath.relpath(hplc_data.name, chroma_grp.name)
+        entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
         time_ds = hplc_data.create_dataset("timestamps", data=timestamps, dtype=numpy.uint32)
         time_ds.attrs["interpretation"] = "spectrum"
         time_ds.attrs["long_name"] = "Time stamps (s)"
@@ -382,7 +383,7 @@ class HPLC(Plugin):
         chroma_data.attrs["SILX_style"] = NORMAL_STYLE
 
         svd_grp.create_dataset("eigenvalues", data=S[:r], dtype=numpy.float32)
-        svd_grp.attrs["default"] = chroma_data.name
+        svd_grp.attrs["default"] = posixpath.relpath(chroma_data.name, svd_grp.name)
 
     # Process 3: NMF matrix decomposition
         nmf_grp = nxs.new_class(entry_grp, "3_NMF", "NXprocess")
@@ -412,7 +413,7 @@ class HPLC(Plugin):
             chroma_ds.attrs["interpretation"] = "spectrum"
             chroma_data.attrs["signal"] = "H"
             chroma_data.attrs["SILX_style"] = NORMAL_STYLE
-            nmf_grp.attrs["default"] = chroma_data.name
+            nmf_grp.attrs["default"] = posixpath.relpath(chroma_data.name, nmf_grp.name)
 
     # Process 5: Background estimation
         bg_grp = nxs.new_class(entry_grp, "4_background", "NXprocess")
@@ -439,7 +440,7 @@ class HPLC(Plugin):
         bg_q_ds.attrs["long_name"] = f"Scattering vector q ({radius_unit}⁻¹)"
         bg_std_ds = bg_data.create_dataset("errors", data=numpy.ascontiguousarray(bg_std, dtype=numpy.float32))
         bg_std_ds.attrs["interpretation"] = "spectrum"
-        bg_grp.attrs["default"] = bg_data.name
+        bg_grp.attrs["default"] = posixpath.relpath(bg_data.name, bg_grp.name)
         I_sub = I - bg_avg
         Istd_sub = numpy.sqrt(sigma ** 2 + bg_std ** 2)
 
@@ -476,7 +477,7 @@ class HPLC(Plugin):
         :param index: index of the fraction
         :param nxs: opened Nexus file object
         :param top_grp: top level nexus group to start building into.
-        
+
         """
         q = self.juices[0].q
         unit = self.juices[0].unit
@@ -500,7 +501,7 @@ class HPLC(Plugin):
         avg_data.attrs["title"] = f"{sample.name}, frames {fraction.start}-{fraction.stop} averaged, buffer subtracted"
         avg_data.attrs["signal"] = "I"
         avg_data.attrs["axes"] = radial_unit
-        f_grp.attrs["default"] = avg_data.name
+        f_grp.attrs["default"] = posixpath.relpath(avg_data.name, f_grp.name)
         avg_q_ds = avg_data.create_dataset(radial_unit,
                                            data=numpy.ascontiguousarray(q, dtype=numpy.float32))
         avg_q_ds.attrs["units"] = unit_name
@@ -652,9 +653,9 @@ class HPLC(Plugin):
         guinier_data_attrs["signal"] = "logI"
         guinier_data_attrs["axes"] = "q2"
         guinier_data_attrs["auxiliary_signals"] = "fit"
-        guinier_grp.attrs["default"] = guinier_data.name
+        guinier_grp.attrs["default"] = posixpath.relpath(guinier_data.name, guinier_grp.name)
         if guinier is None:
-            f_grp.attrs["default"] = avg_data.name
+            f_grp.attrs["default"] = posixpath.relpath(avg_data.name, f_grp.name)
             self.log_error("No Guinier region found, data of dubious quality", do_raise=False)
             return
 
@@ -667,7 +668,7 @@ class HPLC(Plugin):
         kratky_data = nxs.new_class(kratky_grp, "results", "NXdata")
         kratky_data.attrs["SILX_style"] = NORMAL_STYLE
         kratky_data.attrs["title"] = "Dimensionless Kratky plots"
-        kratky_grp.attrs["default"] = kratky_data.name
+        kratky_grp.attrs["default"] = posixpath.relpath(kratky_data.name, kratky_grp.name)
 
     # Stage #5 Kratky plot generation:
         Rg = guinier.Rg
@@ -804,7 +805,7 @@ class HPLC(Plugin):
             bift_ds = avg_data.create_dataset("BIFT", data=T.dot(stats.density_avg).astype(numpy.float32))
             bift_ds.attrs["interpretation"] = "spectrum"
             avg_data.attrs["auxiliary_signals"] = "BIFT"
-            bift_grp.attrs["default"] = bift_data.name
+            bift_grp.attrs["default"] = posixpath.relpath(bift_data.name, bift_grp.name)
 
     def build_ispyb_group(self, nxs, top_grp):
         """Build the ispyb group inside the HDF5/Nexus file and all associated calculation
@@ -984,7 +985,7 @@ class HPLC(Plugin):
         else:
             self.log_warning(f"Not sending to ISPyB: no valid URL in {self.ispyb}")
 
-    def send_to_icat(self): 
+    def send_to_icat(self):
         to_icat = copy.copy(self.to_pyarch)
         to_icat["experiment_type"] = "hplc"
         to_icat["sample"] = self.juices[0].sample

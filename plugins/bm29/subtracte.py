@@ -3,17 +3,17 @@
 
 """Data Analysis plugin for BM29: BioSaxs
 
-* SubtractBuffer: Search for the equivalence of buffers, average them and subtract from sample signal.  
-* SaxsAnalysis: Performs Guinier + Kratky + IFT, generates plots  
+* SubtractBuffer: Search for the equivalence of buffers, average them and subtract from sample signal.
+* SaxsAnalysis: Performs Guinier + Kratky + IFT, generates plots
 """
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "24/02/2025"
+__date__ = "27/05/2025"
 __status__ = "development"
-__version__ = "0.3.0" 
+__version__ = "0.3.0"
 
 import os
 import posixpath
@@ -141,7 +141,7 @@ class SubtractBuffer(Plugin):
         self.output["Dmax"] = self.Dmax
         self.output["Vc"] = self.Vc
         self.output["mass"] = self.mass
-        
+
         #teardown everything else:
         if self.nxs is not None:
             self.nxs.close()
@@ -169,7 +169,7 @@ class SubtractBuffer(Plugin):
                 raise(err)
         else:
             self.send_to_ispyb()
-            self.send_to_icat()        
+            self.send_to_icat()
         self.output["memcached"] = self.send_to_memcached()
 
 
@@ -209,7 +209,7 @@ class SubtractBuffer(Plugin):
         entry_grp = nxs.new_entry("entry", self.input.get("plugin_name", "dahu"),
                                   title='BioSaxs buffer subtraction',
                                   force_time=get_isotime())
-        nxs.h5.attrs["default"] = entry_grp.name
+        nxs.h5.attrs["default"] = entry_grp.name.strip["/"]
 
     # Configuration
         cfg_grp = nxs.new_class(entry_grp, "configuration", "NXnote")
@@ -271,7 +271,7 @@ class SubtractBuffer(Plugin):
         to_merge_ds = cormap_data.create_dataset("to_merge", data=to_merge_idx)
         # self.log_warning(f"to_merge: {tomerge}")
         to_merge_ds.attrs["long_name"] = "Index of equivalent frames"
-        cormap_grp.attrs["default"] = cormap_data.name
+        cormap_grp.attrs["default"] = posixpath.relpath(cormap_data.name, cormap_grp.name)
 
     # Process 2: Image processing: subtraction with standard deviation
         average_grp = nxs.new_class(entry_grp, "2_buffer_subtraction", "NXprocess")
@@ -283,7 +283,7 @@ class SubtractBuffer(Plugin):
         average_data.attrs["signal"] = "intensity_normed"
     # Stage 2 processing
 
-        # Nota: This formula takes into account the number of input frames in each averaged buffer !        
+        # Nota: This formula takes into account the number of input frames in each averaged buffer !
         #  avg = Σdata / Σnorm
         #  var = sigma² = ΣV / Σnorm
         # TODO implement those math using numexpr:
@@ -310,7 +310,7 @@ class SubtractBuffer(Plugin):
         int_std_ds.attrs["interpretation"] = "image"
         int_std_ds.attrs["formula"] = "sqrt( sample_variance + weighted_mean(buffer_variance_i) )"
         int_std_ds.attrs["method"] = "quadratic sum of sample error and buffer errors"
-        average_grp.attrs["default"] = average_data.name
+        average_grp.attrs["default"] = posixpath.relpath(average_data.name, average_grp.name)
 
         key_cache = KeyCache(self.sample_juice.npt, self.sample_juice.unit, self.sample_juice.poni, self.sample_juice.mask, self.sample_juice.energy)
         ai = get_integrator(key_cache)
@@ -346,7 +346,7 @@ class SubtractBuffer(Plugin):
         ai2_data.attrs["title"] = "%s, subtracted" % self.sample_juice.sample.name
         ai2_data.attrs["signal"] = "I"
         ai2_data.attrs["axes"] = radial_unit
-        ai2_grp.attrs["default"] = ai2_data.name
+        ai2_grp.attrs["default"] = posixpath.relpath(ai2_data.name, ai2_grp.name)
         cfg_grp = nxs.new_class(ai2_grp, "configuration", "NXnote")
         cfg_grp.create_dataset("data", data=json.dumps(ai.get_config(), indent=2, separators=(",\r\n", ": ")))
         cfg_grp.create_dataset("format", data="text/json")
@@ -393,7 +393,7 @@ class SubtractBuffer(Plugin):
 
         #  Finally declare the default entry and default dataset ...
         #  overlay the BIFT fitted data on top of the scattering curve
-        entry_grp.attrs["default"] = ai2_data.name
+        entry_grp.attrs["default"] = posixpath.relpath(ai2_data.name, entry_grp.name)
 
     # Process 4: Guinier analysis
         guinier_grp = nxs.new_class(entry_grp, "4_Guinier_analysis", "NXprocess")
@@ -527,9 +527,9 @@ class SubtractBuffer(Plugin):
         guinier_data_attrs["signal"] = "logI"
         guinier_data_attrs["axes"] = "q2"
         guinier_data_attrs["auxiliary_signals"] = "fit"
-        guinier_grp.attrs["default"] = guinier_data.name
+        guinier_grp.attrs["default"] = posixpath.relpath(guinier_data.name, guinier_grp.name)
         if guinier is None:
-            entry_grp.attrs["default"] = ai2_data.name
+            entry_grp.attrs["default"] = posixpath.relpath(ai2_data.name, entry_grp.name)
             self.log_error("No Guinier region found, data of dubious quality", do_raise=True)
 
     # Process 5: Kratky plot
@@ -541,7 +541,7 @@ class SubtractBuffer(Plugin):
         kratky_data = nxs.new_class(kratky_grp, "results", "NXdata")
         kratky_data.attrs["SILX_style"] = NORMAL_STYLE
         kratky_data.attrs["title"] = "Dimensionless Kratky plots"
-        kratky_grp.attrs["default"] = kratky_data.name
+        kratky_grp.attrs["default"] = posixpath.relpath(kratky_data.name, kratky_grp.name)
 
     # Stage #5 Kratky plot generation:
         Rg = guinier.Rg
@@ -552,9 +552,9 @@ class SubtractBuffer(Plugin):
         qRg_ds = kratky_data.create_dataset("qRg", data=xdata.astype(numpy.float32))
         qRg_ds.attrs["interpretation"] = "spectrum"
         qRg_ds.attrs["long_name"] = "q·Rg (unit-less)"
-        
+
         #Nota the "/" hereafter is chr(8725), the division sign and not the usual slash
-        k_ds = kratky_data.create_dataset("q2Rg2I∕I0", data=ydata.astype(numpy.float32)) 
+        k_ds = kratky_data.create_dataset("q2Rg2I∕I0", data=ydata.astype(numpy.float32))
         k_ds.attrs["interpretation"] = "spectrum"
         k_ds.attrs["long_name"] = "q²Rg²I(q)/I₀"
         ke_ds = kratky_data.create_dataset("errors", data=dy.astype(numpy.float32))
@@ -681,7 +681,7 @@ class SubtractBuffer(Plugin):
             bift_ds = ai2_data.create_dataset("BIFT", data=T.dot(stats.density_avg).astype(numpy.float32))
             bift_ds.attrs["interpretation"] = "spectrum"
             ai2_data.attrs["auxiliary_signals"] = "BIFT"
-            bift_grp.attrs["default"] = bift_data.name
+            bift_grp.attrs["default"] = posixpath.relpath(bift_data.name, bift_grp.name)
             self.to_pyarch["bift"] = stats
 
     @staticmethod
@@ -739,7 +739,7 @@ class SubtractBuffer(Plugin):
         else:
             self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
 
-    def send_to_icat(self): 
+    def send_to_icat(self):
         to_icat = copy.copy(self.to_pyarch)
         to_icat["experiment_type"] = "sample-changer"
         if self.sample_juice is None:
@@ -765,5 +765,5 @@ class SubtractBuffer(Plugin):
             key = key_base + "_" + k
             dico[key] = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
 
-        return to_memcached(dico) 
+        return to_memcached(dico)
 

@@ -4,7 +4,7 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/02/2025"
+__date__ = "27/05/2025"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
@@ -86,8 +86,8 @@ class Nexus:
     TODO: make it thread-safe !!!
     """
 
-    def __init__(self, filename, mode=None, 
-                 creator=None, 
+    def __init__(self, filename, mode=None,
+                 creator=None,
                  timeout=None,
                  start_time=None):
         """
@@ -233,7 +233,7 @@ class Nexus:
             nb_entries = len(self.get_entries())
             entry = "%s_%04i" % (entry, nb_entries)
         entry_grp = self.h5.require_group(entry)
-        self.h5.attrs["default"] = entry
+        self.h5.attrs["default"] = entry.strip("/")
         entry_grp.attrs["NX_class"] = "NXentry"
         entry_grp["title"] = str(title)
         entry_grp["program_name"] = program_name
@@ -258,7 +258,7 @@ class Nexus:
     def new_class(grp, name, class_type="NXcollection"):
         """
         create a new sub-group with  type class_type
-        
+
         :param grp: parent group
         :param name: name of the sub-group
         :param class_type: NeXus class name
