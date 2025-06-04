@@ -189,6 +189,7 @@ class IntegrateMultiframe(Plugin):
         self.monitor_values = numpy.array(self.input.get("monitor_values", 1), dtype=numpy.float64)
         if self.input.get("average_out_monitor_values"):
             self.monitor_values = numpy.zeros_like(self.monitor_values) + self.monitor_values.mean()
+            self.log_warning("Averaging-out the monitor values !")
         self.normalization_factor = float(self.input.get("normalization_factor", 1))
         self.scale_factor = float(self.input.get("exposure_time", 1)) / self.normalization_factor
 
@@ -655,9 +656,9 @@ class IntegrateMultiframe(Plugin):
         return send_icat(sample=self.sample.name,
                          raw=os.path.dirname(os.path.dirname(os.path.abspath(self.input_file))),
                          path=os.path.dirname(os.path.abspath(self.output_file)),
-                         data=to_icat, 
+                         data=to_icat,
                          dataset = "integrate",
-                         gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"), 
+                         gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"),
                          metadata=metadata)
 
     def send_to_memcached(self):
