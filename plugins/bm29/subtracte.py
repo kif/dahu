@@ -13,12 +13,13 @@ __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "04/06/2025"
 __status__ = "development"
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 import os
 import posixpath
 import json
 import copy
+import zipfile
 from math import log, pi
 from collections import namedtuple
 from urllib3.util import parse_url
@@ -39,6 +40,7 @@ from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap, freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier
 from freesas.bift import BIFT
+from freesas.app.extract_ascii import write_ascii
 from scipy.optimize import minimize
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
@@ -48,6 +50,63 @@ from .memcached import to_memcached
 from .icat import send_icat
 
 NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I sigma poni mask energy polarization method signal2d error2d normalization sample")
+
+
+def save_zip(filename, sample_juice, buffer_juices):
+    """Save a stack of I into a zipfile with each frames in a dat-file.
+
+    :param filename: name of the zip-file
+    :param sample_juice: 
+    :param buffer_juices: list of buffer juice
+    :return: nothing
+    """
+    basename = os.path.basename(filename)
+    base = os.path.splitext(basename)[0]
+    destz_sample = "sample/"
+    destz_buffer = "buffer_%1i/"
+    common = {"q": sample_juice.q}
+    if config.sample:
+        sample = sample_juice.sample
+        if sample.name:
+            common["sample"]: sample.name
+            destz_sample += sample.name
+        else:
+            destz_sample += "sample"
+        if sample.buffer:
+            common["buffer"] = sample.buffer
+            destz_buffer += sample.buffer
+        else:
+            destz_buffer += "buffer"
+        if sample.temperature_env:
+            common["storage temperature"] = sample.temperature_env
+        if sample.temperature:
+            common["exposure temperature"] = sample.temperature
+        if sample.concentration:
+            common["concentration"] = sample.concentration
+    destz_sample +=  "_%04i.dat"
+    destz_buffer +=  "_%04i.dat"
+    res = {}
+    # sample
+    idx = 0
+    for i, s in zip(sample.I, sample.sigma):
+        r = copy.copy(common)
+        r["I"] = i
+        r["std"] = s
+        res[destz_sample % idx] = r
+        idx+=1
+    # buffers
+    for buffer_idx, buffer in enumerate(buffer_juices):
+        idx = 0
+        for i, s in zip(buffer.I, buffer.sigma):
+            r = copy.copy(common)
+            r["I"] = i
+            r["std"] = s
+            res[destz_buffer % (buffer_idx, idx)] = r
+            idx+=1
+
+    with zipfile.ZipFile(filename, "w") as z:
+        for name, frame in res.items():
+            z.writestr(name, write_ascii(frame))
 
 
 class SubtractBuffer(Plugin):
@@ -231,6 +290,11 @@ class SubtractBuffer(Plugin):
 
         # Sample: outsourced !
         create_nexus_sample(nxs, entry_grp, self.sample_juice.sample)
+
+        #save input curves as zipfile
+        save_zip(os.path.splitext(self.output_file)[0]+.zip,
+                 self.sample_juice, 
+                 self.buffer_juices)
 
     # Process 1: CorMap
         cormap_grp = nxs.new_class(entry_grp, "1_correlation_mapping", "NXprocess")
