@@ -92,7 +92,7 @@ def save_zip(filename, sample_juice, buffer_juices):
     res = {}
     # sample
     idx = 0
-    for i, s in zip(sample.I, sample.sigma):
+    for i, s in zip(sample_juice.I, sample_juice.sigma):
         r = copy.copy(common)
         r["I"] = i
         r["std"] = s
