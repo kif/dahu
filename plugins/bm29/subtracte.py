@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "04/06/2025"
+__date__ = "10/06/2025"
 __status__ = "development"
 __version__ = "0.4.0"
 
@@ -49,14 +49,18 @@ from .ispyb import IspybConnector, NumpyEncoder
 from .memcached import to_memcached
 from .icat import send_icat
 
-NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I sigma poni mask energy polarization method signal2d error2d normalization sample")
+
+NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit "
+                                      "q I sigma poni mask energy polarization method signal2d"
+                                      "error2d normalization sample"
+                                      "I_all, sigma_all")
 
 
 def save_zip(filename, sample_juice, buffer_juices):
     """Save a stack of I into a zipfile with each frames in a dat-file.
 
     :param filename: name of the zip-file
-    :param sample_juice: 
+    :param sample_juice:
     :param buffer_juices: list of buffer juice
     :return: nothing
     """
@@ -74,17 +78,17 @@ def save_zip(filename, sample_juice, buffer_juices):
             destz_sample += "sample"
 
         if sample.buffer:
-            common["buffer"] = sample.buffer 
+            common["buffer"] = sample.buffer
             destz_buffer += sample.buffer if isinstance(sample.buffer, str) else sample.buffer.decode()
         else:
             destz_buffer += "buffer"
 
         if sample.temperature_env:
             common["storage temperature"] = sample.temperature_env
-        
+
         if sample.temperature:
             common["exposure temperature"] = sample.temperature
-        
+
         if sample.concentration:
             common["concentration"] = sample.concentration
     destz_sample +=  "_%04i.dat"
@@ -92,7 +96,7 @@ def save_zip(filename, sample_juice, buffer_juices):
     res = {}
     # sample
     idx = 0
-    for i, s in zip(sample_juice.I, sample_juice.sigma):
+    for i, s in zip(sample_juice.I_all, sample_juice.sigma_all):
         r = copy.copy(common)
         r["I"] = i
         r["std"] = s
@@ -101,7 +105,7 @@ def save_zip(filename, sample_juice, buffer_juices):
     # buffers
     for buffer_idx, buffer in enumerate(buffer_juices):
         idx = 0
-        for i, s in zip(buffer.I, buffer.sigma):
+        for i, s in zip(buffer.I_all, buffer.sigma_all):
             r = copy.copy(common)
             r["I"] = i
             r["std"] = s
@@ -295,11 +299,10 @@ class SubtractBuffer(Plugin):
         # Sample: outsourced !
         create_nexus_sample(nxs, entry_grp, self.sample_juice.sample)
 
-        #save input curves as zipfile: TODO not yet working:  
-        # the sample_juice does not contain individual integrated frames ...
-        # save_zip(os.path.splitext(self.output_file)[0]+".zip",
-        #          self.sample_juice, 
-        #          self.buffer_juices)
+        #save input curves as zipfile: TODO Check that this is is working:
+        save_zip(os.path.splitext(self.output_file)[0]+".zip",
+                 self.sample_juice,
+                 self.buffer_juices)
 
     # Process 1: CorMap
         cormap_grp = nxs.new_class(entry_grp, "1_correlation_mapping", "NXprocess")
@@ -769,13 +772,9 @@ class SubtractBuffer(Plugin):
             unit = pyFAI.units.to_unit(axis + "_" + nxdata_grp[axis].attrs["units"])
             integration_grp = nxdata_grp.parent
             poni = integration_grp["configuration/file_name"][()]
-            if isinstance(poni, bytes):
-                poni = poni.decode()
-            else:
-                poni = str(poni)
-            poni = poni.strip()
+            poni = str_(poni).strip()
             if not os.path.exists(poni):
-                poni = str(integration_grp["configuration/data"][()]).strip()
+                poni = str_(integration_grp["configuration/data"][()]).strip()
             polarization = integration_grp["configuration/polarization_factor"][()]
             method = IntegrationMethod.select_method(**json.loads(integration_grp["configuration/integration_method"][()]))[0]
             instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
@@ -791,7 +790,7 @@ class SubtractBuffer(Plugin):
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
             sample_name = posixpath.basename(sample_grp.name)
 
-            buffer = sample_grp["buffer"][()] if "buffer" in sample_grp else ""
+            buffer = str_(sample_grp["buffer"][()] if "buffer" in sample_grp else "")
             concentration = sample_grp["concentration"][()] if "concentration" in sample_grp else ""
             description = sample_grp["description"][()] if "description" in sample_grp else ""
             hplc = sample_grp["hplc"][()] if "hplc" in sample_grp else ""
@@ -799,7 +798,15 @@ class SubtractBuffer(Plugin):
             temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
             sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
 
-        return NexusJuice(filename, h5path, npt, unit, q, I, sigma, poni, mask, energy, polarization, method, image2d, error2d, norm, sample)
+            if "1_integration" in entry_grp:
+                I_all = entry_grp["1_integration/results/I"][()]
+                sigma_all = entry_grp["1_integration/results/errors"][()]
+            else:
+                I_all = []
+                sigma_all = []
+
+        return NexusJuice(filename, h5path, npt, unit, q, I, sigma, poni, mask, energy, polarization,
+                          method, image2d, error2d, norm, sample, I_all, sigma_all)
 
     def send_to_ispyb(self):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
@@ -836,3 +843,8 @@ class SubtractBuffer(Plugin):
 
         return to_memcached(dico)
 
+def str_(smth):
+    if isinstance(smth, bytes):
+        return smth.decode()
+    else:
+        return str(smth)
