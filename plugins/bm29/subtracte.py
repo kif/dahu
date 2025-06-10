@@ -292,7 +292,7 @@ class SubtractBuffer(Plugin):
         create_nexus_sample(nxs, entry_grp, self.sample_juice.sample)
 
         #save input curves as zipfile
-        save_zip(os.path.splitext(self.output_file)[0]+.zip,
+        save_zip(os.path.splitext(self.output_file)[0]+".zip",
                  self.sample_juice, 
                  self.buffer_juices)
 
