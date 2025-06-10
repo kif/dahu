@@ -72,15 +72,19 @@ def save_zip(filename, sample_juice, buffer_juices):
             destz_sample += sample.name
         else:
             destz_sample += "sample"
+
         if sample.buffer:
-            common["buffer"] = sample.buffer
-            destz_buffer += sample.buffer
+            common["buffer"] = sample.buffer 
+            destz_buffer += sample.buffer if isinstance(sample.buffer, str) else sample.buffer.decode()
         else:
             destz_buffer += "buffer"
+
         if sample.temperature_env:
             common["storage temperature"] = sample.temperature_env
+        
         if sample.temperature:
             common["exposure temperature"] = sample.temperature
+        
         if sample.concentration:
             common["concentration"] = sample.concentration
     destz_sample +=  "_%04i.dat"
