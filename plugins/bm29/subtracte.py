@@ -51,8 +51,8 @@ from .icat import send_icat
 
 
 NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit "
-                                      "q I sigma poni mask energy polarization method signal2d"
-                                      "error2d normalization sample"
+                                      "q I sigma poni mask energy polarization method signal2d "
+                                      "error2d normalization sample "
                                       "I_all, sigma_all")
 
 
