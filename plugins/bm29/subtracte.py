@@ -295,10 +295,11 @@ class SubtractBuffer(Plugin):
         # Sample: outsourced !
         create_nexus_sample(nxs, entry_grp, self.sample_juice.sample)
 
-        #save input curves as zipfile
-        save_zip(os.path.splitext(self.output_file)[0]+".zip",
-                 self.sample_juice, 
-                 self.buffer_juices)
+        #save input curves as zipfile: TODO not yet working:  
+        # the sample_juice does not contain individual integrated frames ...
+        # save_zip(os.path.splitext(self.output_file)[0]+".zip",
+        #          self.sample_juice, 
+        #          self.buffer_juices)
 
     # Process 1: CorMap
         cormap_grp = nxs.new_class(entry_grp, "1_correlation_mapping", "NXprocess")
