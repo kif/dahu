@@ -65,7 +65,7 @@ def save_zip(filename, sample_juice, buffer_juices):
     destz_sample = "sample/"
     destz_buffer = "buffer_%1i/"
     common = {"q": sample_juice.q}
-    if config.sample:
+    if sample_juice.sample:
         sample = sample_juice.sample
         if sample.name:
             common["sample"]: sample.name
