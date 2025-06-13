@@ -1,5 +1,5 @@
 """
-X-ray photon correlation spectroscopy plugin for ID02 
+X-ray photon correlation spectroscopy plugin for ID02
 
 """
 
@@ -7,12 +7,13 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/02/2025"
+__date__ = "27/05/2025"
 __status__ = "development"
 __version__ = "0.1.1"
 
 import os
 import json
+import posixpath
 import logging
 logger = logging.getLogger("id02.xpcs")
 
@@ -41,7 +42,7 @@ COMPRESSION = hdf5plugin.Bitshuffle()
 
 
 class XPCS(Plugin):
-    """This plugin does pixel correlation for XPCS and averages the signal from various bins provided in the qmask. 
+    """This plugin does pixel correlation for XPCS and averages the signal from various bins provided in the qmask.
 
 Minimalistic example:
 {
@@ -70,13 +71,13 @@ Minimalistic example:
         "q_mask": "qmask.npy",
         "beamstop_mask": "mask.npy" ,
         "directbeam_x": 104, #pixel
-        "directbeam_y": 157, #pixel 
+        "directbeam_y": 157, #pixel
     },
     "correlator":{
         "name": "MatMulCorrelator",
         "dtype": "uint8"
     }
-             
+
 }
 """
 
@@ -251,7 +252,7 @@ Minimalistic example:
                                       program_name=self.input.get("plugin_name", "dahu"),
                                       title="XPCS experiment",
                                       force_time=self.start_time)
-            nxs.h5.attrs["default"] = entry_grp.name
+            nxs.h5.attrs["default"] = entry_grp.name.strip("/")
 
             # Sample description, provided by the input
             sample_grp = nxs.new_class(entry_grp, "sample", "NXsample")
@@ -310,7 +311,8 @@ Minimalistic example:
             qmask_ds.attrs["interpretation"] = "image"
             qmask_ds.attrs["long_name"] = "mask with bins averaged (0=masked-out)"
 
-            entry_grp.attrs["default"] = xpcs_grp.attrs["default"] = xpcs_data.name
+            entry_grp.attrs["default"] = posixpath.relpath(xpcs_data.name, entry_grp.name)
+            xpcs_grp.attrs["default"] = posixpath.relpath(xpcs_data.name, xpcs_grp.name)
             result_ds = xpcs_data.create_dataset("g2", data=result.res, chunks=True, **COMPRESSION)
             result_ds.attrs["interpretation"] = "spectrum"
             errors_ds = xpcs_data.create_dataset("errors", data=result.dev, chunks=True, **COMPRESSION)

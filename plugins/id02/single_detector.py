@@ -8,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/02/2025"
+__date__ = "27/05/2025"
 __status__ = "development"
 __version__ = "0.9.3"
 
@@ -683,7 +683,7 @@ Possible values for to_save:
             nxprocess["date"] = isotime
             nxprocess["processing_type"] = ensure_str(ext)
             nxdata = nxs.new_class(nxprocess, "result_" + ext, class_type="NXdata")
-            entry.attrs["default"] = nxdata.name
+            entry.attrs["default"] = posixpath.relpath(nxdata.name, entry.name)
             metadata_grp = nxprocess.require_group("parameters")
 
             for key, val in self.metadata.items():
@@ -870,7 +870,7 @@ Possible values for to_save:
                                               **compression)
             nxdata.attrs["signal"] = "data"
             # output_ds.attrs["signal"] = "1"
-            entry.attrs["default"] = nxdata.name
+            entry.attrs["default"] = posixpath.relpath(nxdata.name, entry.name)
             if self.variance_formula is not None:
                 error_ds = nxdata.create_dataset("data_errors", shape,
                                                  dtype=numpy.float32,
