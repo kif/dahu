@@ -30,7 +30,7 @@ from dahu.utils import fully_qualified_name
 import numpy
 import h5py
 import pyFAI
-import pyFAI.azimuthalIntegrator
+import pyFAI.integrator.azimuthal
 import freesas
 import freesas.cormap
 
@@ -69,7 +69,7 @@ class IntegrateMultiframe(Plugin):
       "frame_ids": [101, 102],
       "timestamps": [1580985678.47, 1580985678.58],
       "monitor_values": [1, 1.1],
-      "storage_ring_current": [199.6, 199.5]
+      "storage_ring_current": [199.6, 199.5],
       "exposure_time": 0.1,
       "normalisation_factor": 1.0,
       "poni_file": "/tmp/example.poni",
@@ -81,6 +81,7 @@ class IntegrateMultiframe(Plugin):
       "hplc_mode": 0,
       "timeout": 10,
       "average_out_monitor_values": False,  # use this to work around noisy beam stop diode reading.
+      "plugin_name": "bm29.integratemultiframe",
       "sample": {
         "name": "bsa",
         "description": "protein description like Bovine Serum Albumin",
@@ -651,7 +652,7 @@ class IntegrateMultiframe(Plugin):
         f2d = self.ai.getFit2D()
         to_icat["SAXS_beam_center_x"] = str(f2d["centerX"])
         to_icat["SAXS_beam_center_y"] = str(f2d["centerY"])
-
+        
         metadata = {"scanType": "integration"}
         return send_icat(sample=self.sample.name,
                          raw=os.path.dirname(os.path.dirname(os.path.abspath(self.input_file))),

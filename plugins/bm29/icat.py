@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/02/2025" 
+__date__ = "05/05/2025"
 __status__ = "development"
 version = "0.3.0"
 
@@ -55,37 +55,44 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     :return: data sent to icat as a dict
     """
     gallery = _ensure_gallery(gallery)
+    print(gallery)
     tmp = gallery.strip("/").split("/")
-    idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")][-1]
-    if tmp[idx_process] == "processed":
-        assert idx_process>=6
-        if proposal is None:
-            proposal = tmp[idx_process-6]
-        if beamline is None:
-            beamline = tmp[idx_process-5]
-        if sample is None:
-            sample = tmp[idx_process-2]
-        if dataset is None:
-            dataset = tmp[idx_process+1]
-        if path is None:
-            path = os.path.dirname(gallery)
-        if raw is None:            
-            raw = os.path.abspath(gallery[:gallery.lower().index("process")])
-    elif tmp[idx_process] == "PROCESSED_DATA":           
-        if proposal is None:
-            proposal = tmp[idx_process-3]
-        if beamline is None:
-            beamline = tmp[idx_process-2]
-        if sample is None:
-            sample = tmp[idx_process+1]
-        if dataset is None:
-            dataset = tmp[idx_process+2]
-        if path is None:
-            path = os.path.dirname(gallery)
-        if raw is None:            
-            raw = os.path.dirname(os.path.dirname(os.path.abspath(gallery.replace("PROCESSED_DATA", "RAW_DATA"))))
+    idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")]
+    if idx_process:
+        idx_process=idx_process[-1]
+        if tmp[idx_process] == "processed":
+            assert idx_process>=6
+            if proposal is None:
+                proposal = tmp[idx_process-6]
+            if beamline is None:
+                beamline = tmp[idx_process-5]
+            if sample is None:
+                sample = tmp[idx_process-2]
+            if dataset is None:
+                dataset = tmp[idx_process+1]
+            if path is None:
+                path = os.path.dirname(gallery)
+            if raw is None:            
+                raw = os.path.abspath(gallery[:gallery.lower().index("process")])
+        elif tmp[idx_process] == "PROCESSED_DATA":           
+            if proposal is None:
+                proposal = tmp[idx_process-3]
+            if beamline is None:
+                beamline = tmp[idx_process-2]
+            if sample is None:
+                sample = tmp[idx_process+1]
+            if dataset is None:
+                dataset = tmp[idx_process+2]
+            if path is None:
+                path = os.path.dirname(gallery)
+            if raw is None:            
+                raw = os.path.dirname(os.path.dirname(os.path.abspath(gallery.replace("PROCESSED_DATA", "RAW_DATA"))))
+        else:
+            logger.error("Unrecognized path layout")
+            return
     else:
-        logger.error("Unrecognized path layout")
+        logger.error("No gallery provided")
+        return 
     
     if metadata is None:
         metadata = {}

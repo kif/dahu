@@ -30,7 +30,7 @@ import logging
 logger = logging.getLogger("bm29.hplc")
 import numpy
 import h5py
-import pyFAI, pyFAI.azimuthalIntegrator, pyFAI.units
+import pyFAI, pyFAI.integrator.azimuthal, pyFAI.units
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap, freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier
@@ -53,7 +53,7 @@ NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sig
 
 def smooth_chromatogram(signal, window):
     """smooth-out the chromatogram
-
+    
     :param signal: the chomatogram as 1d array
     :param window: the size of the window
     """
@@ -75,7 +75,7 @@ def smooth_chromatogram(signal, window):
 def search_peaks(signal, wmin=10, scale=0.9):
     """
     Label all peak regions of chromatogram.
-
+    
     :param signal=smooth signal
     :param wmin: minimum width for a peak. smaller ones are discarded.
     :param scale: shrink factor (i.e. <1 for the search zone)
@@ -110,14 +110,14 @@ def search_peaks(signal, wmin=10, scale=0.9):
 def build_background(I, std=None, keep=0.3):
     """
     Build a background from a SVD and search for the frames looking most like the background.
-
+    
     1. build a coarse approximation based on the SVD.
     2. measure the distance (cormap) of every single frame to the fundamental of the SVD
     3. average frames that looks most like the coarse approximation (with deviation)
-
+    
     :param I: 2D array of shape (nframes, nbins)
     :param std: same as I but with the standard deviation.
-    :param keep: fraction of frames to consider for background (<1!), 30% looks like a good guess
+    :param keep: fraction of frames to consider for background (<1!), 30% looks like a good guess 
     :return: (bg_avg, bg_std, indexes), each 1d of size nbins. + the index of the frames to keep
     """
     U, S, V = numpy.linalg.svd(I.T, full_matrices=False)
@@ -139,7 +139,7 @@ def save_zip(filename, config, I, sigma):
 
     :param filename: name of the zip-file
     :param confif: this is some NexusJuice namedtuple. we use only q and the sample description.
-    :param I: 2D array with the intensity of the stack of curves
+    :param I: 2D array with the intensity of the stack of curves 
     :param sigma: 2D array with the uncertainties of the stack of frames
     :return: nothing
     """
@@ -159,7 +159,7 @@ def save_zip(filename, config, I, sigma):
             common["exposure temperature"] = sample.temperature
         if sample.concentration:
             common["concentration"] = sample.concentration
-    res = []
+    res = []   
     for i, s in zip(I, sigma):
         r = copy.copy(common)
         r["I"] = i
@@ -172,21 +172,21 @@ def save_zip(filename, config, I, sigma):
 
 class HPLC(Plugin):
     """ Rebuild the complete chromatogram and perform basic analysis on it.
-
+    
         Typical JSON file:
     {
       "integrated_files": ["img_001.h5", "img_002.h5"],
       "output_file": "hplc.h5"
       "ispyb": {
         "url": "http://ispyb.esrf.fr:1234",
-        "pyarch": "/data/pyarch/mx1234/sample",
+        "pyarch": "/data/pyarch/mx1234/sample", 
         "measurement_id": -1,
         "collection_id": -1
        },
-       "nmf_components": 5,
+       "nmf_components": 5, 
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.hplc"
-    }
+    } 
     """
     NMF_COMP = 5
     "Default number of Non-negative matrix factorisation components. Correspond to the number of spieces"
@@ -251,7 +251,7 @@ class HPLC(Plugin):
         self.to_pyarch["sample_name"] = self.juices[0].sample.name
         if not self.input.get("no_ispyb"):
             self.send_to_ispyb()
-        # self.output["icat"] =
+        # self.output["icat"] = 
         self.send_to_icat()
 
     def teardown(self):
