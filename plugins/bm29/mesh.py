@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "05/05/2025"
+__date__ = "13/06/2025"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -50,7 +50,7 @@ class Scan:
     def as_dict(self):
         """Like asdict, without extra features:
 
-        :return: dict which can be JSON-serialized 
+        :return: dict which can be JSON-serialized
         """
         dico = {}
         for key, value in asdict(self).items():
@@ -77,7 +77,7 @@ class Scan:
         Calculate the position in the mesh scan fram according to its index
 
         :param idx: index of current frame
-        :return: namedtuple Position=(frame_index, slow_motor_position, fast_motor_position) 
+        :return: namedtuple Position=(frame_index, slow_motor_position, fast_motor_position)
                  if valid else None
         """
         width = self.fast_motor_step + 1
@@ -90,7 +90,7 @@ class Scan:
             return Position(idx, line, row)
         else:
             return None
-    
+
     @property
     def shape(self):
         return (self.slow_motor_step + 1, self.fast_motor_step + 1)
@@ -107,14 +107,14 @@ def input_from_master(master_file):
 
 class Mesh(Plugin):
     """ Rebuild the complete map and perform basic analysis on it.
-    
+
         Typical JSON file:
     {
       "integrated_files": ["img_001.h5", "img_002.h5"],
       "output_file": "mesh.h5"
       "ispyb": {
         "url": "http://ispyb.esrf.fr:1234",
-        "pyarch": "/data/pyarch/mx1234/sample", 
+        "pyarch": "/data/pyarch/mx1234/sample",
         "measurement_id": -1,
         "collection_id": -1
        },
@@ -122,18 +122,18 @@ class Mesh(Plugin):
             "fast_motor_name": "chipz",
             "fast_motor_start": -2.2,
             "fast_motor_stop": -3.2,
-            "fast_motor_step": 3, 
+            "fast_motor_step": 3,
             "slow_motor_name": "chipy",
             "slow_motor_start": -5.2,
             "slow_motor_stop": -12.2,
-            "slow_motor_step": 7, 
+            "slow_motor_step": 7,
             "backnforth": False
             }
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.mesh"
-    } 
+    }
     """
-    
+
     def __init__(self):
         Plugin.__init__(self)
         self.input_files = []
@@ -192,7 +192,7 @@ class Mesh(Plugin):
         self.to_pyarch["sample_name"] = self.juices[0].sample.name
         if not self.input.get("no_ispyb"):
             self.send_to_ispyb()
-        # self.output["icat"] = 
+        # self.output["icat"] =
         self.send_to_icat()
 
     def teardown(self):
@@ -272,12 +272,12 @@ class Mesh(Plugin):
 
         for juice in self.juices:
             timestamps.append(juice.timestamps)
-            print(juice.idx)
+            # print(juice.idx)
             for j, i in enumerate(juice.idx):
                 p = self.scan.get_pos(i)
                 if p is None:
                     continue
-                print(p)
+                # print(p)
                 indices[p.slow, p.fast] = p.index
                 I[p.slow, p.fast] = juice.I[j]
                 Isum[p.slow, p.fast] = juice.Isum[j]
@@ -333,9 +333,9 @@ class Mesh(Plugin):
         int_ds.attrs["scale"] = "log"
         std_ds.attrs["interpretation"] = "spectrum"
 
-        # save_zip(os.path.splitext(self.output_file)[0]+".zip", 
+        # save_zip(os.path.splitext(self.output_file)[0]+".zip",
         #          self.juices[0], I, sigma)
-    
+
     @staticmethod
     def read_nexus(filename):
         "return some NexusJuice from a HDF5 file "
