@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "04/06/2025"
+__date__ = "17/06/2025"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -30,7 +30,7 @@ from dahu.utils import fully_qualified_name
 import numpy
 import h5py
 import pyFAI
-import pyFAI.integrator.azimuthal
+from pyFAI import integrator
 import freesas
 import freesas.cormap
 
@@ -69,7 +69,7 @@ class IntegrateMultiframe(Plugin):
       "frame_ids": [101, 102],
       "timestamps": [1580985678.47, 1580985678.58],
       "monitor_values": [1, 1.1],
-      "storage_ring_current": [199.6, 199.5],
+      "storage_ring_current": [199.6, 199.5]
       "exposure_time": 0.1,
       "normalisation_factor": 1.0,
       "poni_file": "/tmp/example.poni",
@@ -81,7 +81,6 @@ class IntegrateMultiframe(Plugin):
       "hplc_mode": 0,
       "timeout": 10,
       "average_out_monitor_values": False,  # use this to work around noisy beam stop diode reading.
-      "plugin_name": "bm29.integratemultiframe",
       "sample": {
         "name": "bsa",
         "description": "protein description like Bovine Serum Albumin",
@@ -203,7 +202,7 @@ class IntegrateMultiframe(Plugin):
             self.nxs.close()
         if self.ai is not None:
             self.ai = None
-        # clean cache
+        # clean cacheg
         if self._input_frames is not None:
             self._input_frames = None
         self.monitor_values = None
@@ -397,15 +396,15 @@ class IntegrateMultiframe(Plugin):
         pol_ds = cfg_grp.create_dataset("polarization_factor", data=polarization_factor)
         pol_ds.attrs["comment"] = "Between -1 and +1, 0 for circular"
         cfg_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
-        integration_data = nxs.new_class(integration_grp, "results", "NXdata")
+        integration_data = nxs.new_class(integration_grp, "result", "NXdata")
         integration_grp.attrs["title"] = str(self.sample)
 
     # Stage 1 processing: Integration frame per frame
-        integrate1_results = self.process1_integration(self.input_frames)
+        integrate1_result = self.process1_integration(self.input_frames)
         radial_unit, unit_name = str(self.unit).split("_", 1)
-        q = numpy.ascontiguousarray(integrate1_results.radial, numpy.float32)
-        I = numpy.ascontiguousarray(integrate1_results.intensity, dtype=numpy.float32)
-        sigma = numpy.ascontiguousarray(integrate1_results.sigma, dtype=numpy.float32)
+        q = numpy.ascontiguousarray(integrate1_result.radial, numpy.float32)
+        I = numpy.ascontiguousarray(integrate1_result.intensity, dtype=numpy.float32)
+        sigma = numpy.ascontiguousarray(integrate1_result.sigma, dtype=numpy.float32)
 
         self.to_memcached[radial_unit] = q
         self.to_memcached["I"] = I
@@ -430,7 +429,7 @@ class IntegrateMultiframe(Plugin):
 
         hplc_data = nxs.new_class(integration_grp, "hplc", "NXdata")
         hplc_data.attrs["title"] = "Chromatogram"
-        sum_ds = hplc_data.create_dataset("sum", data=numpy.ascontiguousarray(integrate1_results.intensity.sum(axis=-1), dtype=numpy.float32))
+        sum_ds = hplc_data.create_dataset("sum", data=numpy.ascontiguousarray(integrate1_result.intensity.sum(axis=-1), dtype=numpy.float32))
         sum_ds.attrs["interpretation"] = "spectrum"
         sum_ds.attrs["long_name"] = "Summed Intensity"
         hplc_data["frame_ids"] = frame_ds
@@ -451,7 +450,7 @@ class IntegrateMultiframe(Plugin):
         cormap_grp["program"] = "freesas.cormap"
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
-        cormap_data = nxs.new_class(cormap_grp, "results", "NXdata")
+        cormap_data = nxs.new_class(cormap_grp, "result", "NXdata")
         cormap_data.attrs["SILX_style"] = NORMAL_STYLE
         cfg_grp = nxs.new_class(cormap_grp, "configuration", "NXcollection")
 
@@ -461,33 +460,33 @@ class IntegrateMultiframe(Plugin):
         cfg_grp["fidelity_rel"] = fidelity_rel
 
     # Stage 2 processing
-        cormap_results = self.process2_cormap(integrate1_results.intensity, fidelity_abs, fidelity_rel)
+        cormap_result = self.process2_cormap(integrate1_result.intensity, fidelity_abs, fidelity_rel)
         cormap_data.attrs["signal"] = "probability"
-        cormap_ds = cormap_data.create_dataset("probability", data=cormap_results.probability)
+        cormap_ds = cormap_data.create_dataset("probability", data=cormap_result.probability)
         cormap_ds.attrs["interpretation"] = "image"
         cormap_ds.attrs["long_name"] = "Probability to be the same"
 
-        count_ds = cormap_data.create_dataset("count", data=cormap_results.count)
+        count_ds = cormap_data.create_dataset("count", data=cormap_result.count)
         count_ds.attrs["interpretation"] = "image"
         count_ds.attrs["long_name"] = "Longest sequence where curves do not cross each other"
 
-        to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*cormap_results.tomerge, dtype=numpy.uint16))
+        to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*cormap_result.tomerge, dtype=numpy.uint16))
         to_merge_ds.attrs["long_name"] = "Index of equivalent frames"
         cormap_grp.attrs["default"] = posixpath.relpath(cormap_data.name, cormap_grp.name)
         if self.ispyb.url:
-            self.to_pyarch["merged"] = cormap_results.tomerge
+            self.to_pyarch["merged"] = cormap_result.tomerge
 
     # Process 3: time average and standard deviation
         average_grp = nxs.new_class(entry_grp, "3_time_average", "NXprocess")
         average_grp["sequence_index"] = 3
         average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
-        average_data = nxs.new_class(average_grp, "results", "NXdata")
+        average_data = nxs.new_class(average_grp, "result", "NXdata")
         average_data.attrs["SILX_style"] = SAXS_STYLE
         average_data.attrs["signal"] = "intensity_normed"
 
     # Stage 3 processing
-        res3 = self.process3_average(cormap_results.tomerge)
+        res3 = self.process3_average(cormap_result.tomerge)
 
         Iavg = numpy.ascontiguousarray(res3.average, dtype=numpy.float32)
         sigma_avg = numpy.ascontiguousarray(res3.deviation, dtype=numpy.float32)
@@ -516,7 +515,7 @@ class IntegrateMultiframe(Plugin):
         ai2_grp["program"] = "pyFAI"
         ai2_grp["version"] = pyFAI.version
         ai2_grp["date"] = get_isotime()
-        ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
+        ai2_data = nxs.new_class(ai2_grp, "result", "NXdata")
         ai2_data.attrs["signal"] = "I"
         ai2_data.attrs["axes"] = radial_unit
         ai2_data.attrs["SILX_style"] = SAXS_STYLE
@@ -652,7 +651,7 @@ class IntegrateMultiframe(Plugin):
         f2d = self.ai.getFit2D()
         to_icat["SAXS_beam_center_x"] = str(f2d["centerX"])
         to_icat["SAXS_beam_center_y"] = str(f2d["centerY"])
-        
+
         metadata = {"scanType": "integration"}
         return send_icat(sample=self.sample.name,
                          raw=os.path.dirname(os.path.dirname(os.path.abspath(self.input_file))),

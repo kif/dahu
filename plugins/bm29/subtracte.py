@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "10/06/2025"
+__date__ = "17/06/2025"
 __status__ = "development"
 __version__ = "0.4.0"
 
@@ -310,7 +310,7 @@ class SubtractBuffer(Plugin):
         cormap_grp["program"] = "freesas.cormap"
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
-        cormap_data = nxs.new_class(cormap_grp, "results", "NXdata")
+        cormap_data = nxs.new_class(cormap_grp, "result", "NXdata")
         cormap_data.attrs["SILX_style"] = NORMAL_STYLE
         cfg_grp = nxs.new_class(cormap_grp, "configuration", "NXcollection")
 
@@ -350,7 +350,7 @@ class SubtractBuffer(Plugin):
         average_grp["sequence_index"] = 2
         average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
-        average_data = nxs.new_class(average_grp, "results", "NXdata")
+        average_data = nxs.new_class(average_grp, "result", "NXdata")
         average_data.attrs["SILX_style"] = SAXS_STYLE
         average_data.attrs["signal"] = "intensity_normed"
     # Stage 2 processing
@@ -413,7 +413,7 @@ class SubtractBuffer(Plugin):
         ai2_grp["version"] = pyFAI.version
         ai2_grp["date"] = get_isotime()
         radial_unit, unit_name = str(key_cache.unit).split("_", 1)
-        ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
+        ai2_data = nxs.new_class(ai2_grp, "result", "NXdata")
         ai2_data.attrs["SILX_style"] = SAXS_STYLE
         ai2_data.attrs["title"] = "%s, subtracted" % self.sample_juice.sample.name
         ai2_data.attrs["signal"] = "I"
@@ -476,7 +476,7 @@ class SubtractBuffer(Plugin):
         guinier_autorg = nxs.new_class(guinier_grp, "autorg", "NXcollection")
         guinier_gpa = nxs.new_class(guinier_grp, "gpa", "NXcollection")
         guinier_guinier = nxs.new_class(guinier_grp, "guinier", "NXcollection")
-        guinier_data = nxs.new_class(guinier_grp, "results", "NXdata")
+        guinier_data = nxs.new_class(guinier_grp, "result", "NXdata")
         guinier_data.attrs["SILX_style"] = NORMAL_STYLE
         guinier_data.attrs["title"] = "Guinier analysis"
     # Stage4 processing: autorg and auto_gpa
@@ -610,7 +610,7 @@ class SubtractBuffer(Plugin):
         kratky_grp["program"] = "freesas.autorg"
         kratky_grp["version"] = freesas.version
         kratky_grp["date"] = get_isotime()
-        kratky_data = nxs.new_class(kratky_grp, "results", "NXdata")
+        kratky_data = nxs.new_class(kratky_grp, "result", "NXdata")
         kratky_data.attrs["SILX_style"] = NORMAL_STYLE
         kratky_data.attrs["title"] = "Dimensionless Kratky plots"
         kratky_grp.attrs["default"] = posixpath.relpath(kratky_data.name, kratky_grp.name)
@@ -640,7 +640,7 @@ class SubtractBuffer(Plugin):
         rti_grp["sequence_index"] = 6
         rti_grp["program"] = "freesas.invariants"
         rti_grp["version"] = freesas.version
-        rti_data = nxs.new_class(rti_grp, "results", "NXdata")
+        rti_data = nxs.new_class(rti_grp, "result", "NXdata")
         # average_data.attrs["SILX_style"] = SAXS_STYLE
         # average_data.attrs["signal"] = "intensity_normed"
         # Rambo_Tainer
@@ -678,7 +678,7 @@ class SubtractBuffer(Plugin):
         bift_grp["program"] = "freesas.bift"
         bift_grp["version"] = freesas.version
         bift_grp["date"] = get_isotime()
-        bift_data = nxs.new_class(bift_grp, "results", "NXdata")
+        bift_data = nxs.new_class(bift_grp, "result", "NXdata")
         bift_data.attrs["SILX_style"] = NORMAL_STYLE
         bift_data.attrs["title"] = "Pair distance distribution function p(r)"
 
@@ -799,8 +799,8 @@ class SubtractBuffer(Plugin):
             sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
 
             if "1_integration" in entry_grp:
-                I_all = entry_grp["1_integration/results/I"][()]
-                sigma_all = entry_grp["1_integration/results/errors"][()]
+                I_all = entry_grp["1_integration/result/I"][()]
+                sigma_all = entry_grp["1_integration/result/errors"][()]
             else:
                 I_all = []
                 sigma_all = []

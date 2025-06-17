@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "04/06/2025"
+__date__ = "17/06/2025"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -53,7 +53,7 @@ NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sig
 
 def smooth_chromatogram(signal, window):
     """smooth-out the chromatogram
-    
+
     :param signal: the chomatogram as 1d array
     :param window: the size of the window
     """
@@ -75,7 +75,7 @@ def smooth_chromatogram(signal, window):
 def search_peaks(signal, wmin=10, scale=0.9):
     """
     Label all peak regions of chromatogram.
-    
+
     :param signal=smooth signal
     :param wmin: minimum width for a peak. smaller ones are discarded.
     :param scale: shrink factor (i.e. <1 for the search zone)
@@ -110,14 +110,14 @@ def search_peaks(signal, wmin=10, scale=0.9):
 def build_background(I, std=None, keep=0.3):
     """
     Build a background from a SVD and search for the frames looking most like the background.
-    
+
     1. build a coarse approximation based on the SVD.
     2. measure the distance (cormap) of every single frame to the fundamental of the SVD
     3. average frames that looks most like the coarse approximation (with deviation)
-    
+
     :param I: 2D array of shape (nframes, nbins)
     :param std: same as I but with the standard deviation.
-    :param keep: fraction of frames to consider for background (<1!), 30% looks like a good guess 
+    :param keep: fraction of frames to consider for background (<1!), 30% looks like a good guess
     :return: (bg_avg, bg_std, indexes), each 1d of size nbins. + the index of the frames to keep
     """
     U, S, V = numpy.linalg.svd(I.T, full_matrices=False)
@@ -139,7 +139,7 @@ def save_zip(filename, config, I, sigma):
 
     :param filename: name of the zip-file
     :param confif: this is some NexusJuice namedtuple. we use only q and the sample description.
-    :param I: 2D array with the intensity of the stack of curves 
+    :param I: 2D array with the intensity of the stack of curves
     :param sigma: 2D array with the uncertainties of the stack of frames
     :return: nothing
     """
@@ -159,7 +159,7 @@ def save_zip(filename, config, I, sigma):
             common["exposure temperature"] = sample.temperature
         if sample.concentration:
             common["concentration"] = sample.concentration
-    res = []   
+    res = []
     for i, s in zip(I, sigma):
         r = copy.copy(common)
         r["I"] = i
@@ -172,21 +172,21 @@ def save_zip(filename, config, I, sigma):
 
 class HPLC(Plugin):
     """ Rebuild the complete chromatogram and perform basic analysis on it.
-    
+
         Typical JSON file:
     {
       "integrated_files": ["img_001.h5", "img_002.h5"],
       "output_file": "hplc.h5"
       "ispyb": {
         "url": "http://ispyb.esrf.fr:1234",
-        "pyarch": "/data/pyarch/mx1234/sample", 
+        "pyarch": "/data/pyarch/mx1234/sample",
         "measurement_id": -1,
         "collection_id": -1
        },
-       "nmf_components": 5, 
+       "nmf_components": 5,
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.hplc"
-    } 
+    }
     """
     NMF_COMP = 5
     "Default number of Non-negative matrix factorisation components. Correspond to the number of spieces"
@@ -251,7 +251,7 @@ class HPLC(Plugin):
         self.to_pyarch["sample_name"] = self.juices[0].sample.name
         if not self.input.get("no_ispyb"):
             self.send_to_ispyb()
-        # self.output["icat"] = 
+        # self.output["icat"] =
         self.send_to_icat()
 
     def teardown(self):
@@ -328,7 +328,7 @@ class HPLC(Plugin):
         time_ds.attrs["interpretation"] = "spectrum"
         time_ds.attrs["long_name"] = "Time stamps (s)"
 
-        integration_data = nxs.new_class(chroma_grp, "results", "NXdata")
+        integration_data = nxs.new_class(chroma_grp, "result", "NXdata")
         chroma_grp.attrs["title"] = str(self.juices[0].sample)
 
         int_ds = integration_data.create_dataset("I", data=numpy.ascontiguousarray(I, dtype=numpy.float32))
@@ -427,7 +427,7 @@ class HPLC(Plugin):
         self.to_pyarch["buffer_frames"] = to_keep
         self.to_pyarch["buffer_I"] = bg_avg
         self.to_pyarch["buffer_Stdev"] = bg_std
-        bg_data = nxs.new_class(bg_grp, "results", "NXdata")
+        bg_data = nxs.new_class(bg_grp, "result", "NXdata")
         bg_data.attrs["signal"] = "I"
         bg_data.attrs["SILX_style"] = SAXS_STYLE
         bg_data.attrs["axes"] = radial_unit
@@ -535,7 +535,7 @@ class HPLC(Plugin):
         guinier_autorg = nxs.new_class(guinier_grp, "autorg", "NXcollection")
         guinier_gpa = nxs.new_class(guinier_grp, "gpa", "NXcollection")
         guinier_guinier = nxs.new_class(guinier_grp, "guinier", "NXcollection")
-        guinier_data = nxs.new_class(guinier_grp, "results", "NXdata")
+        guinier_data = nxs.new_class(guinier_grp, "result", "NXdata")
         guinier_data.attrs["SILX_style"] = NORMAL_STYLE
         guinier_data.attrs["title"] = "Guinier analysis"
     # Stage4 processing: autorg and auto_gpa
@@ -665,7 +665,7 @@ class HPLC(Plugin):
         kratky_grp["program"] = "freesas.autorg"
         kratky_grp["version"] = freesas.version
         kratky_grp["date"] = get_isotime()
-        kratky_data = nxs.new_class(kratky_grp, "results", "NXdata")
+        kratky_data = nxs.new_class(kratky_grp, "result", "NXdata")
         kratky_data.attrs["SILX_style"] = NORMAL_STYLE
         kratky_data.attrs["title"] = "Dimensionless Kratky plots"
         kratky_grp.attrs["default"] = posixpath.relpath(kratky_data.name, kratky_grp.name)
@@ -693,7 +693,7 @@ class HPLC(Plugin):
         rti_grp["sequence_index"] = self.sequence_index()
         rti_grp["program"] = "freesas.invariants"
         rti_grp["version"] = freesas.version
-        rti_data = nxs.new_class(rti_grp, "results", "NXdata")
+        rti_data = nxs.new_class(rti_grp, "result", "NXdata")
         # average_data.attrs["SILX_style"] = SAXS_STYLE
         # average_data.attrs["signal"] = "intensity_normed"
         # Rambo_Tainer
@@ -730,7 +730,7 @@ class HPLC(Plugin):
         bift_grp["program"] = "freesas.bift"
         bift_grp["version"] = freesas.version
         bift_grp["date"] = get_isotime()
-        bift_data = nxs.new_class(bift_grp, "results", "NXdata")
+        bift_data = nxs.new_class(bift_grp, "result", "NXdata")
         bift_data.attrs["SILX_style"] = NORMAL_STYLE
         bift_data.attrs["title"] = "Pair distance distribution function p(r)"
 
@@ -930,7 +930,7 @@ class HPLC(Plugin):
             axis = nxdata_grp.attrs["axes"]
             Isum = nxdata_grp[signal][()]
             idx = nxdata_grp[axis][()]
-            integrated = nxdata_grp.parent["results"]
+            integrated = nxdata_grp.parent["result"]
             signal = integrated.attrs["signal"]
             I = integrated[signal][()]
             axes = integrated.attrs["axes"][-1]

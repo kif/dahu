@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "13/06/2025"
+__date__ = "17/06/2025"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -307,7 +307,7 @@ class Mesh(Plugin):
         time_ds.attrs["interpretation"] = "spectrum"
         time_ds.attrs["long_name"] = "Time stamps (s)"
 
-        integration_data = nxs.new_class(mesh_grp, "results", "NXdata")
+        integration_data = nxs.new_class(mesh_grp, "result", "NXdata")
         mesh_grp.attrs["title"] = str(self.juices[0].sample)
 
         int_ds = integration_data.create_dataset("I", data=numpy.ascontiguousarray(I, dtype=numpy.float32))
@@ -343,13 +343,13 @@ class Mesh(Plugin):
             entry_name = nxsr.h5.attrs["default"]
             entry_grp = nxsr.h5[entry_name]
             h5path = entry_grp.name
-            nxdata_grp = nxsr.h5[entry_grp.attrs["default"]]
+            nxdata_grp = entry_grp[entry_grp.attrs["default"]]
             # assert nxdata_grp.name.endswith("hplc")  # we are reading HPLC data
             signal = nxdata_grp.attrs["signal"]
             axis = nxdata_grp.attrs["axes"]
             Isum = nxdata_grp[signal][()]
             idx = nxdata_grp[axis][()]
-            integrated = nxdata_grp.parent["results"]
+            integrated = nxdata_grp.parent["result"]
             signal = integrated.attrs["signal"]
             I = integrated[signal][()]
             axes = integrated.attrs["axes"][-1]
