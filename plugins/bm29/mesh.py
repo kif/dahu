@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/06/2025"
+__date__ = "18/06/2025"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -24,6 +24,8 @@ from dahu.plugin import Plugin
 import h5py
 import pyFAI
 from pyFAI.method_registry import IntegrationMethod
+from pyFAI.io.ponifile import PoniFile
+from pyFAI.io.diffmap_config import DiffmapConfig, WorkerConfig, MotorRange, ListDataSet, DataSet
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     create_nexus_sample
@@ -229,6 +231,7 @@ class Mesh(Plugin):
                 input_grp["LImA_%04i" % idx] = h5py.ExternalLink(rel_path, juice.h5path)
                 self.juices.append(juice)
 
+        assert  self.juices
         q = self.juices[0].q
         unit = self.juices[0].unit
         radial_unit, unit_name = str(unit).split("_", 1)
@@ -240,6 +243,7 @@ class Mesh(Plugin):
         mesh_grp = nxs.new_class(entry_grp, "1_mesh", "NXprocess")
         mesh_grp["sequence_index"] = self.sequence_index()
         mesh_src = mesh_grp.create_group("sources")
+        input_dataset = ListDataSet()
         if self.juices:
             for idx, juice in enumerate(self.juices):
                 with h5py.File(juice.filename) as h:
@@ -248,10 +252,46 @@ class Mesh(Plugin):
                     ds = meas["images"]
                     src = os.path.abspath(ds.file.filename)
                     name = ds.name
+                    nframes, *img_shape = ds.shape
                 rel_path = os.path.relpath(src, os.path.dirname(os.path.abspath(self.output_file)))
                 mesh_src[f"images_{idx:04d}"] = h5py.ExternalLink(rel_path, name)
+                input_dataset.append(DataSet(src, name, nframes, img_shape))
+            poni = PoniFile(juice.poni)
+            # mask = juice.mask
+            polarization = juice.method
+            method = juice.method
+        else:
+            poni = mask = energy = polarization = method = None
 
         nbin = q.size
+    # Creates a configuration NXnote in the NXProcess like diffmap would do"""
+        diffmap_grp = nxs.new_class(mesh_grp, "configuration", "NXnote")
+        diffmap_grp["type"] = "text/json"
+        worker = WorkerConfig(poni=poni,
+                              nbpt_rad=nbin,
+                              nbpt_azim=1)
+        worker.unit = unit
+        worker.method = method
+        worker.polarization_factor = polarization
+
+        diffmap = DiffmapConfig(experiment_title="bm29.mesh",
+                                slow_motor=MotorRange(start=self.scan.slow_motor_start,
+                                                      stop=self.scan.slow_motor_stop,
+                                                      points=self.scan.slow_motor_step+1,
+                                                      name=self.scan.slow_motor_name),
+                                fast_motor=MotorRange(start=self.scan.fast_motor_start,
+                                                      stop=self.scan.fast_motor_stop,
+                                                      points=self.scan.fast_motor_step+1,
+                                                      name=self.scan.fast_motor_name),
+                                offset=0,
+                                zigzag_scan=self.scan.backnforth,
+                                ai=worker,
+                                input_data=input_dataset,
+                                output_file=self.output_file)
+        diffmap_grp.create_dataset("data",
+                                    data=json.dumps(diffmap.as_dict(),
+                                    indent=2,
+                                    separators=(",\r\n", ":\t")))
 
         shape = self.scan.shape + (nbin,)
         I = numpy.zeros(shape, dtype=numpy.float32)
@@ -361,7 +401,10 @@ class Mesh(Plugin):
             integration_grp = nxdata_grp.parent
             poni = str(integration_grp["configuration/file_name"][()]).strip()
             if not os.path.exists(poni):
-                poni = str(integration_grp["configuration/data"][()]).strip()
+                poni = integration_grp["configuration/data"][()]
+                if isinstance(poni, bytes):
+                    poni = poni.decode()
+                poni = json.loads(poni)
             polarization = integration_grp["configuration/polarization_factor"][()]
             method = IntegrationMethod.select_method(**json.loads(integration_grp["configuration/integration_method"][()]))[0]
             instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
@@ -392,5 +435,7 @@ class Mesh(Plugin):
 
     def send_to_ispyb(self):
         self.log_warning("send_to_ispyb: unimplemented")
+
     def send_to_icat(self):
         self.log_warning("send_to_icat: unimplemented")
+
