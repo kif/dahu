@@ -258,7 +258,7 @@ class Mesh(Plugin):
                 input_dataset.append(DataSet(src, name, nframes, img_shape))
             poni = PoniFile(juice.poni)
             # mask = juice.mask
-            polarization = juice.method
+            polarization = juice.polarization
             method = juice.method
         else:
             poni = mask = energy = polarization = method = None
@@ -271,7 +271,8 @@ class Mesh(Plugin):
                               nbpt_rad=nbin,
                               nbpt_azim=1)
         worker.unit = unit
-        worker.method = method
+        worker.method = (method.split, method.algorithm, method.implementation)
+        worker.opencl_device = method.target
         worker.polarization_factor = polarization
 
         diffmap = DiffmapConfig(experiment_title="bm29.mesh",
@@ -288,6 +289,7 @@ class Mesh(Plugin):
                                 ai=worker,
                                 input_data=input_dataset,
                                 output_file=self.output_file)
+        # print(diffmap.as_dict())
         diffmap_grp.create_dataset("data",
                                     data=json.dumps(diffmap.as_dict(),
                                     indent=2,
@@ -349,7 +351,7 @@ class Mesh(Plugin):
 
         integration_data = nxs.new_class(mesh_grp, "result", "NXdata")
         mesh_grp.attrs["title"] = str(self.juices[0].sample)
-
+        integration_data["map_ptr"] = frame_ds
         int_ds = integration_data.create_dataset("I", data=numpy.ascontiguousarray(I, dtype=numpy.float32))
         std_ds = integration_data.create_dataset("errors", data=numpy.ascontiguousarray(sigma, dtype=numpy.float32))
         q_ds = integration_data.create_dataset("q", data=self.juices[0].q)
