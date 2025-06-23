@@ -10,18 +10,21 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "18/06/2025"
+__date__ = "23/06/2025"
 __status__ = "development"
 __version__ = "0.1.0"
 
 import os
 import posixpath
 import json
+import glob
 import collections
 from dataclasses import dataclass, fields, asdict
 import numpy
 from dahu.plugin import Plugin
 import h5py
+import matplotlib
+from matplotlib.pyplot import subplots
 import pyFAI
 from pyFAI.method_registry import IntegrationMethod
 from pyFAI.io.ponifile import PoniFile
@@ -29,7 +32,7 @@ from pyFAI.io.diffmap_config import DiffmapConfig, WorkerConfig, MotorRange, Lis
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     create_nexus_sample
-
+matplotlib.use("Agg")
 NexusJuice = collections.namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps")
 Position = collections.namedtuple('Position', 'index slow fast')
 
@@ -97,14 +100,102 @@ class Scan:
     def shape(self):
         return (self.slow_motor_step + 1, self.fast_motor_step + 1)
 
+    @classmethod
+    def parse(cls, text):
+        """Alternative constructor,
+        :param text: string containing the bliss command (starting with `amesh`)
+        :return: instance of the dataclass
+        """
+        res = None
+        if text.startswith("amesh"):
+            words = text.split()
+            if len(words) >= 9:
+                res = cls(words[1], float(words[2]),float(words[3]), int(words[4]),
+                          words[5], float(words[6]),float(words[7]), int(words[8]),
+                          True)
+        return res
 
 def input_from_master(master_file):
-    """Convert a bliss masterfile containing a single NXentry with a 2D scan into a set of plugins to be launched
+    """Convert a bliss masterfile containing one or multiple NXentry
+    with a 2D scan into a set of plugins to be launched
 
     :param master_file: path to a bliss masterfile
-    :return: list of json dicts.
+    :return: list of job-input-dicts.
     """
-    pass
+    result = []
+
+    with Nexus(master_file, mode="r", pure=True) as master:
+        for entry in master.get_entries():
+            job = {"plugin_name":"bm29.mesh"}
+            name = posixpath.split(entry.name)[-1]
+            filename = os.path.abspath(entry.file.filename)
+            dirtree = filename.split(os.sep)[:-1]
+            raw_idx = dirtree.index("RAW_DATA")
+            dirtree[raw_idx] = "PROCESSED_DATA"
+            job["output_file"] = os.sep.join(dirtree + ["mesh", "mesh.h5"])
+            wildcard = os.sep.join(dirtree + ["integrate", "*.h5"])
+            input_files = glob.glob(wildcard)
+            input_files.sort()
+            job["integrated_files"] = input_files
+
+            title = entry.get("title", "")
+            if isinstance(title, h5py.Dataset):
+                title = title[()]
+            if isinstance(title, bytes):
+                title = title.decode()
+            if title:
+                scan = Scan.parse(title)
+            if scan is None:
+                continue
+            else:
+                job["scan"] = scan.as_dict()
+            result.append(job)
+    return result
+
+
+def mesh_plot(mesh,
+              title="mesh-scan",
+              x_label="fast motor",
+              y_label="slow motor",
+              x_range=None,
+              y_range=None,
+              filename=None,
+              img_format="png",
+              ax=None,
+              labelsize=None,
+              fontsize=None,):
+    """
+    Generate an image of the mesh-scan
+
+    :param mesh: sum of integrated data
+    :param filename: name of the file where the cuve should be saved
+    :param img_format: image image format
+    :param ax: subplotib where to plot in
+    :return: the matplotlib figure
+    """
+    if ax:
+        fig = ax.figure
+    else:
+        fig, ax = subplots(figsize=(12, 10))
+    ax.imshow(mesh, cmap="binary")
+    ax.set_xlabel(x_label, fontsize=fontsize)
+    ax.set_ylabel(y_label, fontsize=fontsize)
+    ax.set_title(title)
+    if x_range is not None:
+        ax.xaxis.set_major_formatter(lambda x, pos: f"{numpy.interp(x, numpy.arange(x_range.size), x_range):.2f}")
+    if y_range is not None:
+        ax.yaxis.set_major_formatter(lambda x, pos: f"{numpy.interp(x, numpy.arange(y_range.size), y_range):.2f}")
+
+    ax.tick_params(axis="x", labelsize=labelsize)
+    ax.tick_params(axis="y", labelsize=labelsize)
+
+    if filename:
+        if img_format:
+            fig.savefig(filename, format=img_format)
+        else:
+            fig.savefig(filename)
+    return fig
+
 
 
 class Mesh(Plugin):
@@ -213,7 +304,7 @@ class Mesh(Plugin):
                               title='BioSaxs Mesh experiment',
                               force_time=get_isotime())
         entry_grp["version"] = __version__
-        nxs.h5.attrs["default"] = entry_grp.name
+        nxs.h5.attrs["default"] = entry_grp.name.strip("/")
 
     # Configuration
         cfg_grp = nxs.new_class(entry_grp, "configuration", "NXnote")
@@ -344,7 +435,8 @@ class Mesh(Plugin):
         mesh_data.attrs["signal"] = "sum"
         mesh_data.attrs["axes"] = ["slow_motor", "fast_motor"]
 
-        mesh_grp.attrs["default"] = entry_grp.attrs["default"] = mesh_data.name
+        mesh_grp.attrs["default"] = posixpath.relpath(mesh_data.name, mesh_grp.name)
+        entry_grp.attrs["default"] = posixpath.relpath(mesh_data.name, entry_grp.name)
         time_ds = mesh_data.create_dataset("timestamps", data=timestamps, dtype=numpy.uint32)
         time_ds.attrs["interpretation"] = "spectrum"
         time_ds.attrs["long_name"] = "Time stamps (s)"
@@ -375,11 +467,17 @@ class Mesh(Plugin):
         int_ds.attrs["scale"] = "log"
         std_ds.attrs["interpretation"] = "spectrum"
 
+        mesh_plot(Isum,
+              title="Mesh scan",
+              x_label=self.scan.fast_motor_name,
+              y_label=self.scan.slow_motor_name,
+              x_range=fast,
+              y_range=slow,
+              filename=os.path.join(self.ispyb.gallery, "mesh.png"))
         # save_zip(os.path.splitext(self.output_file)[0]+".zip",
         #          self.juices[0], I, sigma)
 
-    @staticmethod
-    def read_nexus(filename):
+    def read_nexus(self, filename):
         "return some NexusJuice from a HDF5 file "
         with Nexus(filename, "r") as nxsr:
             entry_name = nxsr.h5.attrs["default"]
@@ -391,7 +489,11 @@ class Mesh(Plugin):
             axis = nxdata_grp.attrs["axes"]
             Isum = nxdata_grp[signal][()]
             idx = nxdata_grp[axis][()]
-            integrated = nxdata_grp.parent["result"]
+            try:
+                integrated = nxdata_grp.parent["result"]
+            except KeyError:
+                integrated = nxdata_grp.parent["results"]
+                self.log_warning(f"Parsing old file {filename} !")
             signal = integrated.attrs["signal"]
             I = integrated[signal][()]
             axes = integrated.attrs["axes"][-1]
