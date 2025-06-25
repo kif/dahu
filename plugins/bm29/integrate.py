@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/06/2025"
+__date__ = "25/06/2025"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -202,7 +202,7 @@ class IntegrateMultiframe(Plugin):
             self.nxs.close()
         if self.ai is not None:
             self.ai = None
-        # clean cacheg
+        # clean cache
         if self._input_frames is not None:
             self._input_frames = None
         self.monitor_values = None
@@ -250,7 +250,7 @@ class IntegrateMultiframe(Plugin):
 	"""
         timeout = self.timeout if timeout is None else timeout
         end_time = time.perf_counter() + timeout
-        dirname = os.path.dirname(filename)
+        dirname = os.path.dirname(filename) or "."
         while not os.path.isdir(dirname):
             if time.perf_counter() > end_time:
                 self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
@@ -274,8 +274,10 @@ class IntegrateMultiframe(Plugin):
 
     def create_nexus(self):
         "create the nexus result file with basic structure"
-        if not os.path.isdir(os.path.dirname(self.output_file)):
-            os.makedirs(os.path.dirname(self.output_file))
+        dirname = os.path.dirname(self.output_file)
+        if dirname:
+            if not os.path.isdir(dirname):
+                os.makedirs(dirname)
         creation_time = os.stat(self.input_file).st_ctime
         nxs = self.nxs = Nexus(self.output_file, mode="w", creator="dahu")
 
