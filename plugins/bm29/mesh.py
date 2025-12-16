@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "23/06/2025"
+__date__ = "04/12/2025"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -222,6 +222,7 @@ class Mesh(Plugin):
             "slow_motor_step": 7,
             "backnforth": False
             }
+        "transpose": False,
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.mesh"
     }
@@ -233,6 +234,7 @@ class Mesh(Plugin):
         self.nxs = None
         self.output_file = None
         self.scan = Scan()
+        self.transpose = None
         self.juices = []
         self.to_pyarch = {}
         self.ispyb = None
