@@ -2,7 +2,7 @@
 name = 'dahu'
 dynamic = ['version',]
 license = {file = 'LICENSE'}
-requires-python = '>=3.7'
+requires-python = '>=3.9'
 readme = 'README.rst'
 description = '"Python lightweight, plugin based, data analysis engine"'
 authors = [
@@ -24,13 +24,12 @@ classifiers = ["Development Status :: 3 - Alpha",
                "Operating System :: Microsoft :: Windows",
                "Operating System :: POSIX",
                "Programming Language :: Cython",
-               "Programming Language :: Python :: 3.6",
-               "Programming Language :: Python :: 3.7",
-               "Programming Language :: Python :: 3.8",
                "Programming Language :: Python :: 3.9",
                "Programming Language :: Python :: 3.10",
                "Programming Language :: Python :: 3.11",
                "Programming Language :: Python :: 3.12",
+               "Programming Language :: Python :: 3.13",
+               "Programming Language :: Python :: 3.14",
                "Programming Language :: Python :: Implementation :: CPython",
                "Topic :: Scientific/Engineering :: Physics",
                "Topic :: Software Development :: Libraries :: Python Modules",
