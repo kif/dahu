@@ -6,10 +6,10 @@ Dahu: online data analysis server
 The *dahu* server executes **jobs**:
 ------------------------------------
 
-* Each job lives in its own thread (yes, thread, not process, it the plugin's developper to ensure the work he is doing is GIL-compliant).
-* Each job executes one plugin, provided by the plugin's developper (i.e. the scientist)
-* The job de/serialises JSON strings coming from/returning to Tango
-* Jobs are executed asynchronously, the request for calculation is answered instantaneously with a *jobid*.
+* Each job lives in its own thread (yes, thread, not process, it the plugin's developer to ensure the work he is doing is GIL-compliant).
+* Each job executes one plugin, provided by the plugin's developer (i.e. the scientist)
+* The job (de-) serializes JSON strings coming from/returning to Tango
+* Jobs are executed asynchronously, the request for calculation is answered instantaneously with a *jobid* (an integer, unique for the process).
 * The *jobid* can be used to poll the server for the status of the job or for manual synchronization (mind that Tango can time-out!).
 * When jobs are finished, the client is notified via Tango events about the status
 * Results can be retrieved after the job has finished.
