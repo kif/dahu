@@ -11,9 +11,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "25/06/2025"
+__date__ = "05/02/2026"
 __status__ = "development"
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 import os
 import time
@@ -198,6 +198,7 @@ class IntegrateMultiframe(Plugin):
         logger.debug("IntegrateMultiframe.teardown")
         # export the output file location
         self.output["output_file"] = self.output_file
+        self.output["monitor_noise_%"] = 100 * self.monitor_values.std() / self.monitor_values.mean()
         if self.nxs is not None:
             self.nxs.close()
         if self.ai is not None:
