@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/05/2025"
+__date__ = "17/06/2025"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -21,6 +21,7 @@ import math
 from math import log, pi
 import posixpath
 import copy
+import zipfile
 from collections import namedtuple
 from urllib3.util import parse_url
 from dahu.plugin import Plugin
@@ -29,11 +30,12 @@ import logging
 logger = logging.getLogger("bm29.hplc")
 import numpy
 import h5py
-import pyFAI, pyFAI.azimuthalIntegrator, pyFAI.units
+import pyFAI, pyFAI.integrator.azimuthal, pyFAI.units
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap, freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier
 from freesas.bift import BIFT
+from freesas.app.extract_ascii import write_ascii
 from scipy.optimize import minimize
 import scipy.signal
 import scipy.ndimage
@@ -131,6 +133,41 @@ def build_background(I, std=None, keep=0.3):
         bg_std = None
     return bg_avg, bg_std, to_keep
 
+
+def save_zip(filename, config, I, sigma):
+    """Save a stack of I into a zipfile with each frames in a dat-file.
+
+    :param filename: name of the zip-file
+    :param confif: this is some NexusJuice namedtuple. we use only q and the sample description.
+    :param I: 2D array with the intensity of the stack of curves
+    :param sigma: 2D array with the uncertainties of the stack of frames
+    :return: nothing
+    """
+    basename = os.path.basename(filename)
+    base = os.path.splitext(basename)[0]
+    destz = base + "_%04i.dat"
+    common = {"q": config.q}
+    if config.sample:
+        sample = config.sample
+        if sample.name:
+            common["sample"]: sample.name
+        if sample.buffer:
+            common["buffer"] = sample.buffer
+        if sample.temperature_env:
+            common["storage temperature"] = sample.temperature_env
+        if sample.temperature:
+            common["exposure temperature"] = sample.temperature
+        if sample.concentration:
+            common["concentration"] = sample.concentration
+    res = []
+    for i, s in zip(I, sigma):
+        r = copy.copy(common)
+        r["I"] = i
+        r["std"] = s
+        res.append(r)
+    with zipfile.ZipFile(filename, "w") as z:
+        for idx, frame in enumerate(res):
+            z.writestr(destz % idx, write_ascii(frame))
 
 
 class HPLC(Plugin):
@@ -291,13 +328,15 @@ class HPLC(Plugin):
         time_ds.attrs["interpretation"] = "spectrum"
         time_ds.attrs["long_name"] = "Time stamps (s)"
 
-        integration_data = nxs.new_class(chroma_grp, "results", "NXdata")
+        integration_data = nxs.new_class(chroma_grp, "result", "NXdata")
         chroma_grp.attrs["title"] = str(self.juices[0].sample)
 
         int_ds = integration_data.create_dataset("I", data=numpy.ascontiguousarray(I, dtype=numpy.float32))
         std_ds = integration_data.create_dataset("errors", data=numpy.ascontiguousarray(sigma, dtype=numpy.float32))
         q_ds = integration_data.create_dataset("q", data=self.juices[0].q)
         q_ds.attrs["interpretation"] = "spectrum"
+        q_ds.attrs["unit"] = unit_name
+        q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
         integration_data.attrs["signal"] = "I"
         integration_data.attrs["axes"] = [".", "q"]
         integration_data.attrs["SILX_style"] = SAXS_STYLE
@@ -308,6 +347,9 @@ class HPLC(Plugin):
         # int_ds.attrs["uncertainties"] = "errors" This does not work
         int_ds.attrs["scale"] = "log"
         std_ds.attrs["interpretation"] = "spectrum"
+
+        save_zip(os.path.splitext(self.output_file)[0]+".zip",
+                 self.juices[0], I, sigma)
 
     # Process 2: SVD decomposition
         svd_grp = nxs.new_class(entry_grp, "2_SVD", "NXprocess")
@@ -385,7 +427,7 @@ class HPLC(Plugin):
         self.to_pyarch["buffer_frames"] = to_keep
         self.to_pyarch["buffer_I"] = bg_avg
         self.to_pyarch["buffer_Stdev"] = bg_std
-        bg_data = nxs.new_class(bg_grp, "results", "NXdata")
+        bg_data = nxs.new_class(bg_grp, "result", "NXdata")
         bg_data.attrs["signal"] = "I"
         bg_data.attrs["SILX_style"] = SAXS_STYLE
         bg_data.attrs["axes"] = radial_unit
@@ -493,7 +535,7 @@ class HPLC(Plugin):
         guinier_autorg = nxs.new_class(guinier_grp, "autorg", "NXcollection")
         guinier_gpa = nxs.new_class(guinier_grp, "gpa", "NXcollection")
         guinier_guinier = nxs.new_class(guinier_grp, "guinier", "NXcollection")
-        guinier_data = nxs.new_class(guinier_grp, "results", "NXdata")
+        guinier_data = nxs.new_class(guinier_grp, "result", "NXdata")
         guinier_data.attrs["SILX_style"] = NORMAL_STYLE
         guinier_data.attrs["title"] = "Guinier analysis"
     # Stage4 processing: autorg and auto_gpa
@@ -623,7 +665,7 @@ class HPLC(Plugin):
         kratky_grp["program"] = "freesas.autorg"
         kratky_grp["version"] = freesas.version
         kratky_grp["date"] = get_isotime()
-        kratky_data = nxs.new_class(kratky_grp, "results", "NXdata")
+        kratky_data = nxs.new_class(kratky_grp, "result", "NXdata")
         kratky_data.attrs["SILX_style"] = NORMAL_STYLE
         kratky_data.attrs["title"] = "Dimensionless Kratky plots"
         kratky_grp.attrs["default"] = posixpath.relpath(kratky_data.name, kratky_grp.name)
@@ -637,21 +679,21 @@ class HPLC(Plugin):
         qRg_ds = kratky_data.create_dataset("qRg", data=xdata.astype(numpy.float32))
         qRg_ds.attrs["interpretation"] = "spectrum"
         qRg_ds.attrs["long_name"] = "q·Rg (unit-less)"
-        k_ds = kratky_data.create_dataset("q2Rg2I/I0", data=ydata.astype(numpy.float32))
+        k_ds = kratky_data.create_dataset("q2Rg2I÷I0", data=ydata.astype(numpy.float32))
         k_ds.attrs["interpretation"] = "spectrum"
         k_ds.attrs["long_name"] = "q²Rg²I(q)/I₀"
         ke_ds = kratky_data.create_dataset("errors", data=dy.astype(numpy.float32))
         ke_ds.attrs["interpretation"] = "spectrum"
         kratky_data_attrs = kratky_data.attrs
-        kratky_data_attrs["signal"] = "q2Rg2I/I0"
-        kratky_data_attrs["axes"] = "qRg"
+        kratky_data_attrs["signal"] = k_ds.name
+        kratky_data_attrs["axes"] = qRg_ds.name
 
     # stage 6: Rambo-Tainer invariant
         rti_grp = nxs.new_class(f_grp, "4_invariants", "NXprocess")
         rti_grp["sequence_index"] = self.sequence_index()
         rti_grp["program"] = "freesas.invariants"
         rti_grp["version"] = freesas.version
-        rti_data = nxs.new_class(rti_grp, "results", "NXdata")
+        rti_data = nxs.new_class(rti_grp, "result", "NXdata")
         # average_data.attrs["SILX_style"] = SAXS_STYLE
         # average_data.attrs["signal"] = "intensity_normed"
         # Rambo_Tainer
@@ -688,7 +730,7 @@ class HPLC(Plugin):
         bift_grp["program"] = "freesas.bift"
         bift_grp["version"] = freesas.version
         bift_grp["date"] = get_isotime()
-        bift_data = nxs.new_class(bift_grp, "results", "NXdata")
+        bift_data = nxs.new_class(bift_grp, "result", "NXdata")
         bift_data.attrs["SILX_style"] = NORMAL_STYLE
         bift_data.attrs["title"] = "Pair distance distribution function p(r)"
 
@@ -882,13 +924,13 @@ class HPLC(Plugin):
             entry_name = nxsr.h5.attrs["default"]
             entry_grp = nxsr.h5[entry_name]
             h5path = entry_grp.name
-            nxdata_grp = nxsr.h5[entry_grp.attrs["default"]]
+            nxdata_grp = entry_grp[entry_grp.attrs["default"]]
             assert nxdata_grp.name.endswith("hplc")  # we are reading HPLC data
             signal = nxdata_grp.attrs["signal"]
             axis = nxdata_grp.attrs["axes"]
             Isum = nxdata_grp[signal][()]
             idx = nxdata_grp[axis][()]
-            integrated = nxdata_grp.parent["results"]
+            integrated = nxdata_grp.parent["result"]
             signal = integrated.attrs["signal"]
             I = integrated[signal][()]
             axes = integrated.attrs["axes"][-1]
@@ -956,6 +998,7 @@ class HPLC(Plugin):
                          raw=os.path.dirname(os.path.abspath(self.input_files[0])),
                          path=os.path.dirname(os.path.abspath(self.output_file)),
                          data=to_icat,
+                         dataset="HPLC",
                          gallery=gallery,
                          metadata=metadata)
 
@@ -971,6 +1014,7 @@ class HPLC(Plugin):
         lines.append("")
         with open(filename, "w") as csv:
             csv.write(os.linesep.join(lines))
+
 
 
 

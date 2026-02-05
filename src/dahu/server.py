@@ -3,7 +3,7 @@
 from __future__ import with_statement, print_function, absolute_import, division
 
 """
-Data Analysis RPC server over Tango: 
+Data Analysis RPC server over Tango:
 
 Tango device server
 """
@@ -11,7 +11,7 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/07/2021"
+__date__ = "04/06/2025"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
@@ -120,7 +120,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
         res = ["List of all plugin currently loaded (use initPlugin to loaded additional plugins):"]
         plugins = list(plugin_factory.registry.keys())
         plugins.sort()
-        return os.linesep.join(res + [" %s : %s" % (i, plugin_factory.registry[i].__doc__.split("\n")[0]) for i in plugins])
+        return os.linesep.join(res + [f' {i} : {plugin_factory.registry[i].__doc__.split("\n")[0]}' for i in plugins])
 
     def initPlugin(self, name):
         """
@@ -134,9 +134,9 @@ class DahuDS(PyTango.LatestDeviceImpl):
             err = "plugin %s failed to be instanciated: %s" % (name, error)
             logger.error(err)
         if plugin is None or err:
-            return "Plugin not found: %s, err" % (name, err)
+            return f"Plugin not found: {name}, {err}"
         else:
-            return "Plugin loaded: %s%s%s" % (name, os.linesep, plugin.__doc__)
+            return f"Plugin loaded: {name}{os.linesep}{plugin.__doc__}"
 
     def abort(self, jobId):
         """
@@ -283,7 +283,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
         Wait for a job to be finished and returns the status.
         May cause Tango timeout if too slow to finish ....
         May do polling to wait the job actually started
-        
+
         @param jobId: identifier of the job (int)
         @return: status of the job
         """

@@ -11,14 +11,15 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/05/2025"
+__date__ = "25/06/2025"
 __status__ = "development"
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 import os
 import posixpath
 import json
 import copy
+import zipfile
 from math import log, pi
 from collections import namedtuple
 from urllib3.util import parse_url
@@ -33,12 +34,13 @@ except ImportError:
     logger.error("Numexpr is not installed, falling back on numpy's implementations")
     numexpr = None
 import h5py
-import pyFAI, pyFAI.azimuthalIntegrator
+import pyFAI, pyFAI.integrator.azimuthal
 from pyFAI.containers import Integrate1dResult
 from pyFAI.method_registry import IntegrationMethod
 import freesas, freesas.cormap, freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier
 from freesas.bift import BIFT
+from freesas.app.extract_ascii import write_ascii
 from scipy.optimize import minimize
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
@@ -47,7 +49,72 @@ from .ispyb import IspybConnector, NumpyEncoder
 from .memcached import to_memcached
 from .icat import send_icat
 
-NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit q I sigma poni mask energy polarization method signal2d error2d normalization sample")
+
+NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit "
+                                      "q I sigma poni mask energy polarization method signal2d "
+                                      "error2d normalization sample "
+                                      "I_all, sigma_all")
+
+
+def save_zip(filename, sample_juice, buffer_juices):
+    """Save a stack of I into a zipfile with each frames in a dat-file.
+
+    :param filename: name of the zip-file
+    :param sample_juice:
+    :param buffer_juices: list of buffer juice
+    :return: nothing
+    """
+    basename = os.path.basename(filename)
+    base = os.path.splitext(basename)[0]
+    destz_sample = "sample/"
+    destz_buffer = "buffer_%1i/"
+    common = {"q": sample_juice.q}
+    if sample_juice.sample:
+        sample = sample_juice.sample
+        if sample.name:
+            common["sample"]: sample.name
+            destz_sample += sample.name
+        else:
+            destz_sample += "sample"
+
+        if sample.buffer:
+            common["buffer"] = sample.buffer
+            destz_buffer += sample.buffer if isinstance(sample.buffer, str) else sample.buffer.decode()
+        else:
+            destz_buffer += "buffer"
+
+        if sample.temperature_env:
+            common["storage temperature"] = sample.temperature_env
+
+        if sample.temperature:
+            common["exposure temperature"] = sample.temperature
+
+        if sample.concentration:
+            common["concentration"] = sample.concentration
+    destz_sample +=  "_%04i.dat"
+    destz_buffer +=  "_%04i.dat"
+    res = {}
+    # sample
+    idx = 0
+    for i, s in zip(sample_juice.I_all, sample_juice.sigma_all):
+        r = copy.copy(common)
+        r["I"] = i
+        r["std"] = s
+        res[destz_sample % idx] = r
+        idx+=1
+    # buffers
+    for buffer_idx, buffer in enumerate(buffer_juices):
+        idx = 0
+        for i, s in zip(buffer.I_all, buffer.sigma_all):
+            r = copy.copy(common)
+            r["I"] = i
+            r["std"] = s
+            res[destz_buffer % (buffer_idx, idx)] = r
+            idx+=1
+
+    with zipfile.ZipFile(filename, "w") as z:
+        for name, frame in res.items():
+            z.writestr(name, write_ascii(frame))
 
 
 class SubtractBuffer(Plugin):
@@ -209,7 +276,7 @@ class SubtractBuffer(Plugin):
         entry_grp = nxs.new_entry("entry", self.input.get("plugin_name", "dahu"),
                                   title='BioSaxs buffer subtraction',
                                   force_time=get_isotime())
-        nxs.h5.attrs["default"] = entry_grp.name.strip["/"]
+        nxs.h5.attrs["default"] = entry_grp.name.strip("/")
 
     # Configuration
         cfg_grp = nxs.new_class(entry_grp, "configuration", "NXnote")
@@ -232,13 +299,18 @@ class SubtractBuffer(Plugin):
         # Sample: outsourced !
         create_nexus_sample(nxs, entry_grp, self.sample_juice.sample)
 
+        #save input curves as zipfile: TODO Check that this is is working:
+        save_zip(os.path.splitext(self.output_file)[0]+".zip",
+                 self.sample_juice,
+                 self.buffer_juices)
+
     # Process 1: CorMap
         cormap_grp = nxs.new_class(entry_grp, "1_correlation_mapping", "NXprocess")
         cormap_grp["sequence_index"] = 1
         cormap_grp["program"] = "freesas.cormap"
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
-        cormap_data = nxs.new_class(cormap_grp, "results", "NXdata")
+        cormap_data = nxs.new_class(cormap_grp, "result", "NXdata")
         cormap_data.attrs["SILX_style"] = NORMAL_STYLE
         cfg_grp = nxs.new_class(cormap_grp, "configuration", "NXcollection")
 
@@ -278,7 +350,7 @@ class SubtractBuffer(Plugin):
         average_grp["sequence_index"] = 2
         average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
-        average_data = nxs.new_class(average_grp, "results", "NXdata")
+        average_data = nxs.new_class(average_grp, "result", "NXdata")
         average_data.attrs["SILX_style"] = SAXS_STYLE
         average_data.attrs["signal"] = "intensity_normed"
     # Stage 2 processing
@@ -341,7 +413,7 @@ class SubtractBuffer(Plugin):
         ai2_grp["version"] = pyFAI.version
         ai2_grp["date"] = get_isotime()
         radial_unit, unit_name = str(key_cache.unit).split("_", 1)
-        ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
+        ai2_data = nxs.new_class(ai2_grp, "result", "NXdata")
         ai2_data.attrs["SILX_style"] = SAXS_STYLE
         ai2_data.attrs["title"] = "%s, subtracted" % self.sample_juice.sample.name
         ai2_data.attrs["signal"] = "I"
@@ -404,7 +476,7 @@ class SubtractBuffer(Plugin):
         guinier_autorg = nxs.new_class(guinier_grp, "autorg", "NXcollection")
         guinier_gpa = nxs.new_class(guinier_grp, "gpa", "NXcollection")
         guinier_guinier = nxs.new_class(guinier_grp, "guinier", "NXcollection")
-        guinier_data = nxs.new_class(guinier_grp, "results", "NXdata")
+        guinier_data = nxs.new_class(guinier_grp, "result", "NXdata")
         guinier_data.attrs["SILX_style"] = NORMAL_STYLE
         guinier_data.attrs["title"] = "Guinier analysis"
     # Stage4 processing: autorg and auto_gpa
@@ -538,7 +610,7 @@ class SubtractBuffer(Plugin):
         kratky_grp["program"] = "freesas.autorg"
         kratky_grp["version"] = freesas.version
         kratky_grp["date"] = get_isotime()
-        kratky_data = nxs.new_class(kratky_grp, "results", "NXdata")
+        kratky_data = nxs.new_class(kratky_grp, "result", "NXdata")
         kratky_data.attrs["SILX_style"] = NORMAL_STYLE
         kratky_data.attrs["title"] = "Dimensionless Kratky plots"
         kratky_grp.attrs["default"] = posixpath.relpath(kratky_data.name, kratky_grp.name)
@@ -554,21 +626,21 @@ class SubtractBuffer(Plugin):
         qRg_ds.attrs["long_name"] = "q·Rg (unit-less)"
 
         #Nota the "/" hereafter is chr(8725), the division sign and not the usual slash
-        k_ds = kratky_data.create_dataset("q2Rg2I∕I0", data=ydata.astype(numpy.float32))
+        k_ds = kratky_data.create_dataset("q2Rg2I÷I0", data=ydata.astype(numpy.float32))
         k_ds.attrs["interpretation"] = "spectrum"
         k_ds.attrs["long_name"] = "q²Rg²I(q)/I₀"
         ke_ds = kratky_data.create_dataset("errors", data=dy.astype(numpy.float32))
         ke_ds.attrs["interpretation"] = "spectrum"
         kratky_data_attrs = kratky_data.attrs
-        kratky_data_attrs["signal"] = "q2Rg2I∕I0"
-        kratky_data_attrs["axes"] = "qRg"
+        kratky_data_attrs["signal"] = k_ds.name
+        kratky_data_attrs["axes"] = qRg_ds.name
 
     # stage 6: Rambo-Tainer invariant
         rti_grp = nxs.new_class(entry_grp, "6_invariants", "NXprocess")
         rti_grp["sequence_index"] = 6
         rti_grp["program"] = "freesas.invariants"
         rti_grp["version"] = freesas.version
-        rti_data = nxs.new_class(rti_grp, "results", "NXdata")
+        rti_data = nxs.new_class(rti_grp, "result", "NXdata")
         # average_data.attrs["SILX_style"] = SAXS_STYLE
         # average_data.attrs["signal"] = "intensity_normed"
         # Rambo_Tainer
@@ -606,7 +678,7 @@ class SubtractBuffer(Plugin):
         bift_grp["program"] = "freesas.bift"
         bift_grp["version"] = freesas.version
         bift_grp["date"] = get_isotime()
-        bift_data = nxs.new_class(bift_grp, "results", "NXdata")
+        bift_data = nxs.new_class(bift_grp, "result", "NXdata")
         bift_data.attrs["SILX_style"] = NORMAL_STYLE
         bift_data.attrs["title"] = "Pair distance distribution function p(r)"
 
@@ -690,7 +762,7 @@ class SubtractBuffer(Plugin):
         with Nexus(filename, "r") as nxsr:
             entry_grp = nxsr.get_entries()[0]
             h5path = entry_grp.name
-            nxdata_grp = nxsr.h5[entry_grp.attrs["default"]]
+            nxdata_grp = entry_grp[entry_grp.attrs["default"]]
             signal = nxdata_grp.attrs["signal"]
             axis = nxdata_grp.attrs["axes"]
             I = nxdata_grp[signal][()]
@@ -700,13 +772,9 @@ class SubtractBuffer(Plugin):
             unit = pyFAI.units.to_unit(axis + "_" + nxdata_grp[axis].attrs["units"])
             integration_grp = nxdata_grp.parent
             poni = integration_grp["configuration/file_name"][()]
-            if isinstance(poni, bytes):
-                poni = poni.decode()
-            else:
-                poni = str(poni)
-            poni = poni.strip()
+            poni = str_(poni).strip()
             if not os.path.exists(poni):
-                poni = str(integration_grp["configuration/data"][()]).strip()
+                poni = str_(integration_grp["configuration/data"][()]).strip()
             polarization = integration_grp["configuration/polarization_factor"][()]
             method = IntegrationMethod.select_method(**json.loads(integration_grp["configuration/integration_method"][()]))[0]
             instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
@@ -722,7 +790,7 @@ class SubtractBuffer(Plugin):
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
             sample_name = posixpath.basename(sample_grp.name)
 
-            buffer = sample_grp["buffer"][()] if "buffer" in sample_grp else ""
+            buffer = str_(sample_grp["buffer"][()] if "buffer" in sample_grp else "")
             concentration = sample_grp["concentration"][()] if "concentration" in sample_grp else ""
             description = sample_grp["description"][()] if "description" in sample_grp else ""
             hplc = sample_grp["hplc"][()] if "hplc" in sample_grp else ""
@@ -730,7 +798,15 @@ class SubtractBuffer(Plugin):
             temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
             sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
 
-        return NexusJuice(filename, h5path, npt, unit, q, I, sigma, poni, mask, energy, polarization, method, image2d, error2d, norm, sample)
+            if "1_integration" in entry_grp:
+                I_all = entry_grp["1_integration/result/I"][()]
+                sigma_all = entry_grp["1_integration/result/errors"][()]
+            else:
+                I_all = []
+                sigma_all = []
+
+        return NexusJuice(filename, h5path, npt, unit, q, I, sigma, poni, mask, energy, polarization,
+                          method, image2d, error2d, norm, sample, I_all, sigma_all)
 
     def send_to_ispyb(self):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
@@ -753,6 +829,7 @@ class SubtractBuffer(Plugin):
                          raw=raw,
                          path=os.path.dirname(os.path.abspath(self.output_file)),
                          data=to_icat,
+                         dataset="subtraction",
                          gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"),
                          metadata=metadata)
 
@@ -766,3 +843,8 @@ class SubtractBuffer(Plugin):
 
         return to_memcached(dico)
 
+def str_(smth):
+    if isinstance(smth, bytes):
+        return smth.decode()
+    else:
+        return str(smth)
