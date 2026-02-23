@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/06/2025"
+__date__ = "23/02/2026"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -768,11 +768,11 @@ class HPLC(Plugin):
             res = minimize(bo.opti_evidence, (Dmax, log(alpha)), args=(npt, use_wisdom), method="powell")
             cfg_grp["Powell_steps"] = res.nfev
             cfg_grp["Monte-Carlo_steps"] = 0
+            stats = bo.calc_stats()
         except Exception as error:
             bift_grp["Failed"] = "%s: %s" % (error.__class__.__name__, error)
             bo = None
         else:
-            stats = bo.calc_stats()
             bift_grp["alpha"] = stats.alpha_avg
             bift_grp["alpha_error"] = stats.alpha_std
             self.Dmax = bift_grp["Dmax"] = stats.Dmax_avg
