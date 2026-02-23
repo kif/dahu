@@ -540,11 +540,10 @@ class HPLC(Plugin):
         guinier_data.attrs["title"] = "Guinier analysis"
     # Stage4 processing: autorg and auto_gpa
         sasm = numpy.vstack((q, I_frc, sigma_frc)).T
-
         try:
             gpa = auto_gpa(sasm)
         except Exception as error:
-            guinier_gpa["Failed"] = "%s: %s" % (error.__class__.__name__, error)
+            guinier_gpa["Failed"] = f"{error.__class__.__name__}: {error}"
             gpa = None
         else:
             #  "Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
@@ -562,7 +561,7 @@ class HPLC(Plugin):
         try:
             guinier = auto_guinier(sasm)
         except Exception as error:
-            guinier_guinier["Failed"] = "%s: %s" % (error.__class__.__name__, error)
+            guinier_guinier["Failed"] = f"{error.__class__.__name__}: {error}"
             guinier = None
         else:
             #  "Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
@@ -582,7 +581,7 @@ class HPLC(Plugin):
         try:
             autorg = autoRg(sasm)
         except Exception as err:
-            guinier_autorg["Failed"] = "%s: %s" % (err.__class__.__name__, err)
+            guinier_autorg["Failed"] = f"{err.__class__.__name__}: {err}"
             autorg = None
         else:
             if autorg.Rg < 0:
@@ -636,7 +635,7 @@ class HPLC(Plugin):
         dlogI = err[mask] / logI
         q2_ds = guinier_data.create_dataset("q2", data=q2.astype(numpy.float32))
         q2_ds.attrs["unit"] = radius_unit + "⁻²"
-        q2_ds.attrs["long_name"] = "q² (%s⁻²)" % radius_unit
+        q2_ds.attrs["long_name"] = f"q² ({radius_unit}⁻²)"
         q2_ds.attrs["interpretation"] = "spectrum"
         lnI_ds = guinier_data.create_dataset("logI", data=logI.astype(numpy.float32))
         lnI_ds.attrs["long_name"] = "log(I)"
@@ -770,7 +769,7 @@ class HPLC(Plugin):
             cfg_grp["Monte-Carlo_steps"] = 0
             stats = bo.calc_stats()
         except Exception as error:
-            bift_grp["Failed"] = "%s: %s" % (error.__class__.__name__, error)
+            bift_grp["Failed"] = f"{error.__class__.__name__}: {error}"
             bo = None
         else:
             bift_grp["alpha"] = stats.alpha_avg
@@ -792,7 +791,7 @@ class HPLC(Plugin):
             r_ds.attrs["interpretation"] = "spectrum"
 
             r_ds.attrs["unit"] = radius_unit
-            r_ds.attrs["long_name"] = "radius r(%s)" % radius_unit
+            r_ds.attrs["long_name"] = f"radius r({radius_unit})"
             p_ds = bift_data.create_dataset("p(r)", data=stats.density_avg.astype(numpy.float32))
             p_ds.attrs["interpretation"] = "spectrum"
             bift_data["errors"] = stats.density_std
