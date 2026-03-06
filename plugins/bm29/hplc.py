@@ -10,9 +10,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "23/02/2026"
+__date__ = "06/03/2026"
 __status__ = "development"
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 import time
 import os
@@ -46,9 +46,31 @@ from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integra
                     Sample, create_nexus_sample
 from .ispyb import IspybConnector
 from .icat import send_icat
+from typing import NamedTuple
 
 
-NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps")
+class NexusJuice(NamedTuple):
+    """All information of an integration file"""
+    filename: str
+    h5path: str
+    npt:int
+    unit: pyFAI.units.Unit
+    idx: numpy.ndarray
+    Isum: numpy.ndarray
+    q: numpy.ndarray
+    I: numpy.ndarray
+    sigma: numpy.ndarray
+    poni: str
+    mask: numpy.ndarray
+    energy: float
+    polarization: float
+    method: tuple
+    sample: Sample
+    timestamps: numpy.ndarray
+    diode: numpy.ndarray|None = None
+
+
+# NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps")
 
 
 def smooth_chromatogram(signal, window):
@@ -183,7 +205,8 @@ class HPLC(Plugin):
         "measurement_id": -1,
         "collection_id": -1
        },
-       "nmf_components": 5,
+      "nmf_components": 5,
+      "diode_medfilt": 0,
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.hplc"
     }
@@ -295,9 +318,7 @@ class HPLC(Plugin):
         # Sample: outsourced !
         create_nexus_sample(nxs, entry_grp, self.juices[0].sample)
 
-    # Process 1: Chromatogram
-        chroma_grp = nxs.new_class(entry_grp, "1_chromatogram", "NXprocess")
-        chroma_grp["sequence_index"] = self.sequence_index()
+
         nframes = max(i.idx.max() for i in self.juices) + 1
         nbin = q.size
 
@@ -312,6 +333,30 @@ class HPLC(Plugin):
         Isum[idx] = numpy.concatenate([i.Isum for i in self.juices])
         sigma[idx] = numpy.vstack([i.sigma for i in self.juices])
 
+
+    # Process 0.5: preprocessing
+        medfilt_order = self.input.get("diode_medfilt", 0)
+        if medfilt_order >= 2:
+            preproc_grp = nxs.new_class(entry_grp, "0_pre-process", "NXprocess")
+            preproc_grp["sequence_index"] = self.sequence_index()
+            preproc_grp["filter_used"] = "scipy.ndimage.median_filter"
+            preproc_grp["filter_size"] = medfilt_order
+            diode_raw = numpy.concatenate([i.diode for i in self.juices])
+            # diode_smooth = scipy.signal.medfilt(diode_raw, medfilt_order)
+            diode_smooth = scipy.ndimage.median_filter(diode_raw, medfilt_order, mode="mirror")
+            noise = 100 * (((diode_raw-diode_smooth)**2).mean())**0.5 / diode_raw.mean()
+            preproc_grp.create_dataset("noise", data=noise).attrs["unit"]=r"%"
+            preproc_grp.create_dataset("diode_raw", data=diode_raw).attrs["interpretation"] = "spectrum"
+            preproc_grp.create_dataset("diode_smooth", data=diode_smooth).attrs["interpretation"] = "spectrum"
+            scale = diode_raw/diode_smooth
+            I *= numpy.atleast_2d(scale).T
+            Isum *= scale
+            sigma *= numpy.atleast_2d(scale).T
+
+    # Process 1: Chromatogram
+        chroma_grp = nxs.new_class(entry_grp, "1_chromatogram", "NXprocess")
+
+        chroma_grp["sequence_index"] = self.sequence_index()
         hplc_data = nxs.new_class(chroma_grp, "hplc", "NXdata")
         hplc_data.attrs["title"] = "Chromatogram"
         sum_ds = hplc_data.create_dataset("sum", data=Isum, dtype=numpy.float32)
@@ -324,7 +369,7 @@ class HPLC(Plugin):
         hplc_data.attrs["axes"] = "frame_ids"
         chroma_grp.attrs["default"] = posixpath.relpath(hplc_data.name, chroma_grp.name)
         entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
-        time_ds = hplc_data.create_dataset("timestamps", data=timestamps, dtype=numpy.uint32)
+        time_ds = hplc_data.create_dataset("timestamps", data=timestamps, dtype=numpy.float64)
         time_ds.attrs["interpretation"] = "spectrum"
         time_ds.attrs["long_name"] = "Time stamps (s)"
 
@@ -969,8 +1014,13 @@ class HPLC(Plugin):
                 if ts_name in meas_grp:
                     timestamps = meas_grp[ts_name][()]
                     break
-        return NexusJuice(filename, h5path, npt, unit, idx, Isum, q, I, sigma, poni, mask, energy, polarization, method, sample, timestamps)
-        "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps"
+            if "diode" in meas_grp:
+                diode = meas_grp["diode"][()]
+            else:
+                diode = []
+
+        return NexusJuice(filename, h5path, npt, unit, idx, Isum, q, I, sigma, poni, mask, energy, polarization, method, sample, timestamps, diode)
+        "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps diode"
 
     def send_to_ispyb(self):
         """Data sent to ISPyB are:
