@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "05/02/2026"
+__date__ = "09/03/2026"
 __status__ = "development"
 __version__ = "0.3.1"
 
@@ -21,7 +21,7 @@ import json
 import logging
 import copy
 import posixpath
-from collections import namedtuple
+from typing import NamedTuple
 from urllib3.util import parse_url
 from dahu.plugin import Plugin
 from dahu.factory import register
@@ -40,7 +40,7 @@ from .ispyb import IspybConnector, NumpyEncoder
 from .icat import send_icat
 from .memcached import to_memcached
 
-
+version = __version__
 logger = logging.getLogger("bm29.integrate")
 try:
     import numexpr
@@ -48,9 +48,23 @@ except ImportError:
     logger.error("Numexpr is not installed, falling back on numpy's implementations")
     numexpr = None
 
-IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
-CormapResult = namedtuple("CormapResult", "probability count tomerge")
-AverageResult = namedtuple("AverageResult", "average deviation normalization")
+
+class IntegrationResult(NamedTuple):
+    radial:numpy.ndarray
+    intensity:numpy.ndarray
+    sigma:numpy.ndarray
+
+
+class CormapResult(NamedTuple):
+    probability:float
+    count:int
+    tomerge:int
+
+
+class AverageResult(NamedTuple):
+    average:numpy.ndarray
+    deviation:numpy.ndarray
+    normalization:numpy.ndarray
 
 
 @register
@@ -405,7 +419,7 @@ class IntegrateMultiframe(Plugin):
         integrate1_result = self.process1_integration(self.input_frames)
         radial_unit, unit_name = str(self.unit).split("_", 1)
         q = numpy.ascontiguousarray(integrate1_result.radial, numpy.float32)
-        I = numpy.ascontiguousarray(integrate1_result.intensity, dtype=numpy.float32)
+        I = numpy.ascontiguousarray(integrate1_result.intensity, dtype=numpy.float32)  #noqa
         sigma = numpy.ascontiguousarray(integrate1_result.sigma, dtype=numpy.float32)
 
         self.to_memcached[radial_unit] = q

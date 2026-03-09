@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "25/06/2025"
+__date__ = "09/03/2026"
 __status__ = "development"
 __version__ = "0.4.0"
 
@@ -21,18 +21,12 @@ import json
 import copy
 import zipfile
 from math import log, pi
-from collections import namedtuple
+from typing import NamedTuple
 from urllib3.util import parse_url
+import numpy
 from dahu.plugin import Plugin
 from dahu.utils import fully_qualified_name
 import logging
-logger = logging.getLogger("bm29.subtract")
-import numpy
-try:
-    import numexpr
-except ImportError:
-    logger.error("Numexpr is not installed, falling back on numpy's implementations")
-    numexpr = None
 import h5py
 import pyFAI
 import pyFAI.integrator.azimuthal
@@ -51,12 +45,33 @@ from .common import Ispyb, get_equivalent_frames, cmp_float, get_integrator, Key
 from .ispyb import IspybConnector, NumpyEncoder
 from .memcached import to_memcached
 from .icat import send_icat
+logger = logging.getLogger("bm29.subtract")
+try:
+    import numexpr
+except ImportError:
+    logger.error("Numexpr is not installed, falling back on numpy's implementations")
+    numexpr = None
 
 
-NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit "
-                                      "q I sigma poni mask energy polarization method signal2d "
-                                      "error2d normalization sample "
-                                      "I_all, sigma_all")
+class NexusJuice(NamedTuple):
+    filename: str
+    h5path: str
+    npt: int
+    unit: str
+    q: numpy.ndarray
+    I: numpy.ndarray  # noqa
+    sigma: numpy.ndarray
+    poni:str
+    mask: numpy.ndarray
+    energy: float
+    polarization: float
+    method: tuple
+    signal2d: numpy.ndarray
+    error2d: numpy.ndarray
+    normalization: numpy.ndarray
+    sample:str
+    I_all: numpy.ndarray
+    sigma_all: numpy.ndarray
 
 
 def save_zip(filename, sample_juice, buffer_juices):
@@ -67,8 +82,6 @@ def save_zip(filename, sample_juice, buffer_juices):
     :param buffer_juices: list of buffer juice
     :return: nothing
     """
-    basename = os.path.basename(filename)
-    base = os.path.splitext(basename)[0]
     destz_sample = "sample/"
     destz_buffer = "buffer_%1i/"
     common = {"q": sample_juice.q}
@@ -565,8 +578,8 @@ class SubtractBuffer(Plugin):
 
     # Stage #4 Guinier plot generation:
 
-        q, I, err = sasm.T[:3]
-        mask = (I > 0) & numpy.isfinite(I) & (q > 0) & numpy.isfinite(q)
+        q, I_ary, err = sasm.T[:3]
+        mask = (I_ary > 0) & numpy.isfinite(I_ary) & (q > 0) & numpy.isfinite(q)
         if err is not None:
             mask &= (err > 0.0) & numpy.isfinite(err)
         mask = mask.astype(bool)
@@ -581,7 +594,7 @@ class SubtractBuffer(Plugin):
             mask[end:] = False
 
         q2 = q[mask] ** 2
-        logI = numpy.log(I[mask])
+        logI = numpy.log(I_ary[mask])
         dlogI = err[mask] / logI
         q2_ds = guinier_data.create_dataset("q2", data=q2.astype(numpy.float32))
         q2_ds.attrs["unit"] = radius_unit + "⁻²"
@@ -622,7 +635,7 @@ class SubtractBuffer(Plugin):
         Rg = guinier.Rg
         I0 = guinier.I0
         xdata = q * Rg
-        ydata = xdata * xdata * I / I0
+        ydata = xdata * xdata * I_ary / I0
         dy = xdata * xdata * err / I0
         qRg_ds = kratky_data.create_dataset("qRg", data=xdata.astype(numpy.float32))
         qRg_ds.attrs["interpretation"] = "spectrum"
@@ -688,7 +701,7 @@ class SubtractBuffer(Plugin):
         cfg_grp = nxs.new_class(bift_grp, "configuration", "NXcollection")
     # Process stage7, i.e. perform the IFT
         try:
-            bo = BIFT(q, I, err)
+            bo = BIFT(q, I_ary, err)
             cfg_grp["Rg"] = guinier.Rg
             # Pretty limited quality as we have real time constrains
             cfg_grp["npt"] = npt = 64
@@ -768,7 +781,7 @@ class SubtractBuffer(Plugin):
             nxdata_grp = entry_grp[entry_grp.attrs["default"]]
             signal = nxdata_grp.attrs["signal"]
             axis = nxdata_grp.attrs["axes"]
-            I = nxdata_grp[signal][()]
+            I_ary = nxdata_grp[signal][()]
             q = nxdata_grp[axis][()]
             sigma = nxdata_grp["errors"][()]
             npt = len(q)
@@ -808,7 +821,7 @@ class SubtractBuffer(Plugin):
                 I_all = []
                 sigma_all = []
 
-        return NexusJuice(filename, h5path, npt, unit, q, I, sigma, poni, mask, energy, polarization,
+        return NexusJuice(filename, h5path, npt, unit, q, I_ary, sigma, poni, mask, energy, polarization,
                           method, image2d, error2d, norm, sample, I_all, sigma_all)
 
     def send_to_ispyb(self):

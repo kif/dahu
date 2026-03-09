@@ -4,16 +4,16 @@
 """Data Analysis plugin for BM29: BioSaxs
 
 Common data structures: Sample, Ispyb
- 
+
 """
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/02/2025"
+__date__ = "09/03/2026"
 __status__ = "development"
-version = "0.0.2"
+__version__ = "0.0.2"
 
 import os
 from pathlib import Path
@@ -21,7 +21,6 @@ from collections import namedtuple
 from typing import NamedTuple
 import json
 import logging
-logger = logging.getLogger("bm29.common")
 import numpy
 from dahu.cache import DataCache
 from hdf5plugin import Bitshuffle, Zfp
@@ -29,20 +28,19 @@ import pyFAI
 import pyFAI.units
 from pyFAI.method_registry import IntegrationMethod
 import fabio
-# else:
-#     from pyFAI.io import Nexus, get_isotime
-    
-#cmp contains the compression options, shared by all plugins. Used mainly for images 
-cmp = cmp_int = Bitshuffle()
-cmp_float = Zfp(reversible=True) 
+logger = logging.getLogger("bm29.common")
 
+#cmp contains the compression options, shared by all plugins. Used mainly for images
+cmp = cmp_int = Bitshuffle()
+cmp_float = Zfp(reversible=True)
+version = __version__
 
 #This is used for NXdata plot style
 SAXS_STYLE = json.dumps({"signal_scale_type": "log"},
-                        indent=2, 
+                        indent=2,
                         separators=(",\r\n", ":\t"))
 NORMAL_STYLE = json.dumps({"signal_scale_type": "linear"},
-                          indent=2, 
+                          indent=2,
                           separators=(",\r\n", ":\t"))
 
 
@@ -89,7 +87,7 @@ def _fromdict(cls, dico):
 
 
 class Sample(NamedTuple):
-    """ This object represents the sample with the following representation 
+    """ This object represents the sample with the following representation
       "sample": {
         "name": "bsa",
         "description": "protein description like Bovine Serum Albumin",
@@ -97,7 +95,7 @@ class Sample(NamedTuple):
         "concentration": 0,
         "hplc": "column name and chromatography conditions",
         "temperature": 20,
-        "temperature_env": 20},  
+        "temperature_env": 20},
     """
     name: str="Unknown sample"
     description: str=None
@@ -150,7 +148,7 @@ def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
     ext_diag = numpy.zeros(size + 1, dtype=numpy.int16)
     delta = numpy.zeros(size + 1, dtype=numpy.int16)
     ext_diag[1:-1] = numpy.diagonal(proba, 1) >= relative
-    ext_diag[0] = ext_diag[1] 
+    ext_diag[0] = ext_diag[1]
     delta[0] = ext_diag[1]
     delta[1:] = ext_diag[1:] - ext_diag[:-1]
     start = numpy.where(delta > 0)[0]

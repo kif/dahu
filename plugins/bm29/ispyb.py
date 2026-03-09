@@ -13,15 +13,19 @@ __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "09/03/2026"
 __status__ = "development"
-version = "0.2.3"
+__version__ = "0.2.3"
+
 
 import logging
-logger = logging.getLogger("bm29.ispyb")
 import os
 import shutil
 import json
 import tempfile
 import numpy
+from freesas.plot import kratky_plot, guinier_plot, scatter_plot, density_plot
+import matplotlib.pyplot
+
+logger = logging.getLogger("bm29.ispyb")
 try:
     from suds.client import Client
     from suds.transport.https import HttpAuthenticated
@@ -34,9 +38,8 @@ except ImportError:
     print("iCat connection will no work")
     IcatClient = None
 
-import matplotlib.pyplot
+
 matplotlib.use("Agg")
-from freesas.plot import kratky_plot, guinier_plot, scatter_plot, density_plot
 
 
 class NumpyEncoder(json.JSONEncoder):

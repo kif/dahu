@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "04/12/2025"
+__date__ = "09/03/2026"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -18,8 +18,8 @@ import os
 import posixpath
 import json
 import glob
-import collections
 from dataclasses import dataclass, asdict
+from typing import NamedTuple
 import numpy
 from dahu.plugin import Plugin
 import h5py
@@ -30,9 +30,35 @@ from pyFAI.method_registry import IntegrationMethod
 from pyFAI.io.ponifile import PoniFile
 from pyFAI.io.diffmap_config import DiffmapConfig, WorkerConfig, MotorRange, ListDataSet, DataSet
 from .common import Sample, Ispyb, Nexus, get_isotime, SAXS_STYLE, create_nexus_sample
+
+
 matplotlib.use("Agg")
-NexusJuice = collections.namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps")
-Position = collections.namedtuple('Position', 'index slow fast')
+
+
+class NexusJuice(NamedTuple):
+    filename: str
+    h5path: str
+    npt: int
+    unit: str
+    idx: int
+    Isum: numpy.ndarray
+    q: numpy.ndarray
+    I: numpy.ndarray  #noqa
+    sigma: numpy.ndarray
+    poni: str
+    mask: numpy.ndarray
+    energy: float
+    polarization: float
+    method: tuple
+    sample: str
+    timestamps:numpy.ndarray
+
+
+class Position(NamedTuple):
+    index: int
+    slow: int
+    fast:int
+
 
 @dataclass(slots=True)
 class Scan:
@@ -125,7 +151,7 @@ def input_from_master(master_file):
     with Nexus(master_file, mode="r", pure=True) as master:
         for entry in master.get_entries():
             job = {"plugin_name":"bm29.mesh"}
-            name = posixpath.split(entry.name)[-1]
+            # name = posixpath.split(entry.name)[-1]
             filename = os.path.abspath(entry.file.filename)
             dirtree = filename.split(os.sep)[:-1]
             raw_idx = dirtree.index("RAW_DATA")
@@ -352,7 +378,7 @@ class Mesh(Plugin):
             polarization = juice.polarization
             method = juice.method
         else:
-            poni = mask = energy = polarization = method = None
+            poni = polarization = method = None
 
         nbin = q.size
     # Creates a configuration NXnote in the NXProcess like diffmap would do"""
@@ -387,7 +413,7 @@ class Mesh(Plugin):
                                     separators=(",\r\n", ":\t")))
 
         shape = self.scan.shape + (nbin,)
-        I = numpy.zeros(shape, dtype=numpy.float32)
+        I_ary = numpy.zeros(shape, dtype=numpy.float32)
         slow = numpy.linspace(self.scan.slow_motor_start,
                               self.scan.slow_motor_stop,
                               self.scan.slow_motor_step+1,
@@ -412,7 +438,7 @@ class Mesh(Plugin):
                     continue
                 # print(p)
                 indices[p.slow, p.fast] = p.index
-                I[p.slow, p.fast] = juice.I[j]
+                I_ary[p.slow, p.fast] = juice.I[j]
                 Isum[p.slow, p.fast] = juice.Isum[j]
                 sigma[p.slow, p.fast] = juice.sigma[j]
 
@@ -444,7 +470,7 @@ class Mesh(Plugin):
         integration_data = nxs.new_class(mesh_grp, "result", "NXdata")
         mesh_grp.attrs["title"] = str(self.juices[0].sample)
         integration_data["map_ptr"] = frame_ds
-        int_ds = integration_data.create_dataset("I", data=numpy.ascontiguousarray(I, dtype=numpy.float32))
+        int_ds = integration_data.create_dataset("I", data=numpy.ascontiguousarray(I_ary, dtype=numpy.float32))
         std_ds = integration_data.create_dataset("errors", data=numpy.ascontiguousarray(sigma, dtype=numpy.float32))
         q_ds = integration_data.create_dataset("q", data=self.juices[0].q)
         slow_motor_ds = integration_data.create_dataset("slow_motor", data =slow)
@@ -495,7 +521,7 @@ class Mesh(Plugin):
                 integrated = nxdata_grp.parent["results"]
                 self.log_warning(f"Parsing old file {filename} !")
             signal = integrated.attrs["signal"]
-            I = integrated[signal][()]
+            I_ary = integrated[signal][()]
             axes = integrated.attrs["axes"][-1]
             q = integrated[axes][()]
             sigma = integrated["errors"][()]
@@ -534,7 +560,7 @@ class Mesh(Plugin):
                 if ts_name in meas_grp:
                     timestamps = meas_grp[ts_name][()]
                     break
-        return NexusJuice(filename, h5path, npt, unit, idx, Isum, q, I, sigma, poni, mask, energy, polarization, method, sample, timestamps)
+        return NexusJuice(filename, h5path, npt, unit, idx, Isum, q, I_ary, sigma, poni, mask, energy, polarization, method, sample, timestamps)
         "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps"
 
     def send_to_ispyb(self):

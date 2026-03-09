@@ -26,7 +26,6 @@ from urllib3.util import parse_url
 from dahu.plugin import Plugin
 # from dahu.utils import fully_qualified_name
 import logging
-logger = logging.getLogger("bm29.hplc")
 import numpy
 import h5py
 import pyFAI
@@ -51,8 +50,9 @@ from .ispyb import IspybConnector
 from .icat import send_icat
 from typing import NamedTuple
 import matplotlib.pyplot
-matplotlib.use("Agg")
 from freesas.plot import hplc_plot
+logger = logging.getLogger("bm29.hplc")
+matplotlib.use("Agg")
 
 
 
@@ -65,7 +65,7 @@ class NexusJuice(NamedTuple):
     idx: numpy.ndarray
     Isum: numpy.ndarray
     q: numpy.ndarray
-    I: numpy.ndarray
+    I: numpy.ndarray  #noqa
     sigma: numpy.ndarray
     poni: str
     mask: numpy.ndarray
@@ -136,7 +136,7 @@ def search_peaks(signal, wmin=10, scale=0.9):
     return scipy.ndimage.label(res)
 
 
-def build_background(I, std=None, keep=0.3):
+def build_background(intensity, std=None, keep=0.3):
     """
     Build a background from a SVD and search for the frames looking most like the background.
 
@@ -144,18 +144,18 @@ def build_background(I, std=None, keep=0.3):
     2. measure the distance (cormap) of every single frame to the fundamental of the SVD
     3. average frames that looks most like the coarse approximation (with deviation)
 
-    :param I: 2D array of shape (nframes, nbins)
-    :param std: same as I but with the standard deviation.
+    :param intensity: 2D array of shape (nframes, nbins)
+    :param std: same as intensity but with the standard deviation.
     :param keep: fraction of frames to consider for background (<1!), 30% looks like a good guess
     :return: (bg_avg, bg_std, indexes), each 1d of size nbins. + the index of the frames to keep
     """
-    U, S, V = numpy.linalg.svd(I.T, full_matrices=False)
+    U, S, V = numpy.linalg.svd(intensity.T, full_matrices=False)
     bg1 = numpy.median(V[0]) * S[0] * U[:, 0]
-    Pscore = [freesas.cormap.measure_longest(numpy.ascontiguousarray(bg1 - i, dtype=numpy.float64)) for i in I]
+    Pscore = [freesas.cormap.measure_longest(numpy.ascontiguousarray(bg1 - i, dtype=numpy.float64)) for i in intensity]
     orderd = numpy.argsort(Pscore)
-    nkeep = int(math.ceil(keep * I.shape[0]))
+    nkeep = int(math.ceil(keep * intensity.shape[0]))
     to_keep = numpy.sort(orderd[:nkeep])
-    bg_avg = I[to_keep].mean(axis=0)
+    bg_avg = intensity[to_keep].mean(axis=0)
     if std is not None:
         bg_std = numpy.sqrt(((std[to_keep]) ** 2).sum(axis=0)) / len(to_keep)
     else:
@@ -163,12 +163,12 @@ def build_background(I, std=None, keep=0.3):
     return bg_avg, bg_std, to_keep
 
 
-def save_zip(filename, config, I, sigma):
-    """Save a stack of I into a zipfile with each frames in a dat-file.
+def save_zip(filename, config, intensity, sigma):
+    """Save a stack of intensity into a zipfile with each frames in a dat-file.
 
     :param filename: name of the zip-file
     :param confif: this is some NexusJuice namedtuple. we use only q and the sample description.
-    :param I: 2D array with the intensity of the stack of curves
+    :param intensity: 2D array with the intensity of the stack of curves
     :param sigma: 2D array with the uncertainties of the stack of frames
     :return: nothing
     """
@@ -189,7 +189,7 @@ def save_zip(filename, config, I, sigma):
         if sample.concentration:
             common["concentration"] = sample.concentration
     res = []
-    for i, s in zip(I, sigma):
+    for i, s in zip(intensity, sigma):
         r = copy.copy(common)
         r["I"] = i
         r["std"] = s
@@ -340,7 +340,7 @@ class HPLC(Plugin):
         nframes = max(i.idx.max() for i in self.juices) + 1
         nbin = q.size
 
-        I = numpy.zeros((nframes, nbin), dtype=numpy.float32)
+        I = numpy.zeros((nframes, nbin), dtype=numpy.float32)  #noqa
         sigma = numpy.zeros((nframes, nbin), dtype=numpy.float32)
         Isum = numpy.zeros(nframes)
 
@@ -367,7 +367,7 @@ class HPLC(Plugin):
             preproc_grp.create_dataset("diode_raw", data=diode_raw).attrs["interpretation"] = "spectrum"
             preproc_grp.create_dataset("diode_smooth", data=diode_smooth).attrs["interpretation"] = "spectrum"
             scale = diode_raw/diode_smooth
-            I *= numpy.atleast_2d(scale).T
+            I *= numpy.atleast_2d(scale).T  #noqa
             Isum *= scale
             sigma *= numpy.atleast_2d(scale).T
 
@@ -699,7 +699,7 @@ class HPLC(Plugin):
 
     # Stage #4 Guinier plot generation:
 
-        q, I, err = sasm.T[:3]
+        q, I, err = sasm.T[:3]  # noqa
         mask = (I > 0) & numpy.isfinite(I) & (q > 0) & numpy.isfinite(q)
         if err is not None:
             mask &= (err > 0.0) & numpy.isfinite(err)
@@ -970,13 +970,13 @@ class HPLC(Plugin):
                 guinier = freesas.autorg.auto_gpa(sasm)
                 try:
                     rti = freesas.invariants.calc_Rambo_Tainer(sasm, guinier)
-                except:
+                except Exception:
                     rti = None
                 try:
                     porod = freesas.invariants.calc_Porod(sasm, guinier)
-                except:
+                except Exception:
                     porod = None
-            except:
+            except Exception:
                 guinier = rti = porod = None
             if guinier is not None:
                 for k, v in zip(["Rg", "Rg_Stdev", "I0", "I0_Stdev", "quality"],
@@ -1013,7 +1013,7 @@ class HPLC(Plugin):
             idx = nxdata_grp[axis][()]
             integrated = nxdata_grp.parent["result"]
             signal = integrated.attrs["signal"]
-            I = integrated[signal][()]
+            I = integrated[signal][()]  #noqa
             axes = integrated.attrs["axes"][-1]
             q = integrated[axes][()]
             sigma = integrated["errors"][()]
@@ -1121,7 +1121,7 @@ class HPLC(Plugin):
             os.makedirs(dirname, exist_ok=True)
         lines = ["id,ΣI,Rg"]
         idx = 0
-        for I,rg in zip(sum_I, Rg):
+        for I, rg in zip(sum_I, Rg):  # noqa
             lines.append(f"{idx},{I},{rg}")
             idx+=1
         lines.append("")
