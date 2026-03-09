@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "06/03/2026"
+__date__ = "09/03/2026"
 __status__ = "development"
 __version__ = "0.4.0"
 
@@ -47,6 +47,7 @@ from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integra
 from .ispyb import IspybConnector
 from .icat import send_icat
 from typing import NamedTuple
+from dataclasses import dataclass
 
 
 class NexusJuice(NamedTuple):
@@ -69,8 +70,41 @@ class NexusJuice(NamedTuple):
     timestamps: numpy.ndarray
     diode: numpy.ndarray|None = None
 
-
 # NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps")
+
+@dataclass
+class UVJuice:
+    """All information of an UV-file"""
+    wavelengths: numpy.ndarray
+    timestamps: numpy.ndarray
+    absorbance: numpy.ndarray
+
+    @classmethod
+    def from_file(cls, filename):
+        """Create dataclass from filename
+
+        :param filename: name or Path of the .dat file to read & parse
+        :return: dataclass instance
+        """
+        with open(filename) as fd:
+            header = fd.readline()
+        keys = [k.strip() for k in header.split("|")]
+        raw = numpy.loadtxt(filename, skiprows=1, delimiter="|", unpack=True)
+        nb_time = raw.shape[1]
+        nb_wl = raw.shape[0] // 3
+        absorbance = numpy.empty((nb_wl, nb_time))
+        timestamps = numpy.empty(nb_time)
+        wavelengths = numpy.empty(nb_wl)
+        for i,k in enumerate(keys):
+            if k=="T0":
+                timestamps = raw[i]
+            elif k.startswith("w"):
+                j = int(k[1])
+                wavelengths[j] = raw[i,0]
+            elif k.startswith("ABS"):
+                j = int(k[3])
+                absorbance[j] = raw[i]
+        return cls(wavelengths, timestamps, absorbance)
 
 
 def smooth_chromatogram(signal, window):
@@ -207,12 +241,13 @@ class HPLC(Plugin):
        },
       "nmf_components": 5,
       "diode_medfilt": 0,
+      "UV_datafile": "path to UV .dat file in some gallery"
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.hplc"
     }
     """
     NMF_COMP = 5
-    "Default number of Non-negative matrix factorisation components. Correspond to the number of spieces"
+    "Default number of Non-negative matrix factorization components. Correspond to the number of spices"
 
     def __init__(self):
         Plugin.__init__(self)
@@ -253,6 +288,14 @@ class HPLC(Plugin):
 
             self.log_warning("No output file provided, using " + self.output_file)
         self.nmf_components = int(self.input.get("nmf_components", self.NMF_COMP))
+
+        uv_datafile = self.input.get("UV_datafile")
+        if uv_datafile and os.path.exists(uv_datafile):
+            try:
+                self.uv_data = UVJuice.from_file(uv_datafile)
+            except Exception as err:
+                self.uv_data = None
+                self.log_warning(f"Unable to parse {uv_datafile}; {err.__class__.__name__}: {err}")
 
         #Manage gallery here
         dirname = os.path.dirname(self.output_file)
@@ -355,10 +398,23 @@ class HPLC(Plugin):
 
     # Process 1: Chromatogram
         chroma_grp = nxs.new_class(entry_grp, "1_chromatogram", "NXprocess")
-
         chroma_grp["sequence_index"] = self.sequence_index()
-        hplc_data = nxs.new_class(chroma_grp, "hplc", "NXdata")
-        hplc_data.attrs["title"] = "Chromatogram"
+
+        # UV-chromatogram
+        if self.uv_data:
+            uv_data = nxs.new_class(chroma_grp, "UV-Vis", "NXdata")
+            uv_data.attrs["title"] = "UV-Vis - Chromatogram"
+            uv_data["sequence_index"] = self.sequence_index()
+
+
+
+
+        # SAXS-chromatogram
+
+        hplc_data = nxs.new_class(chroma_grp, "SAXS", "NXdata")
+        hplc_data.attrs["title"] = "SAXS - Chromatogram"
+        hplc_data["sequence_index"] = self.sequence_index()
+
         sum_ds = hplc_data.create_dataset("sum", data=Isum, dtype=numpy.float32)
         sum_ds.attrs["interpretation"] = "spectrum"
         sum_ds.attrs["long_name"] = "Summed Intensity"
@@ -366,7 +422,7 @@ class HPLC(Plugin):
         frame_ds.attrs["interpretation"] = "spectrum"
         frame_ds.attrs["long_name"] = "frame index"
         hplc_data.attrs["signal"] = "sum"
-        hplc_data.attrs["axes"] = "frame_ids"
+        hplc_data.attrs["axes"] = "timestamps" #"frame_ids"
         chroma_grp.attrs["default"] = posixpath.relpath(hplc_data.name, chroma_grp.name)
         entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
         time_ds = hplc_data.create_dataset("timestamps", data=timestamps, dtype=numpy.float64)
