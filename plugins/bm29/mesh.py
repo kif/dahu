@@ -19,7 +19,7 @@ import posixpath
 import json
 import glob
 import collections
-from dataclasses import dataclass, fields, asdict
+from dataclasses import dataclass, asdict
 import numpy
 from dahu.plugin import Plugin
 import h5py
@@ -29,9 +29,7 @@ import pyFAI
 from pyFAI.method_registry import IntegrationMethod
 from pyFAI.io.ponifile import PoniFile
 from pyFAI.io.diffmap_config import DiffmapConfig, WorkerConfig, MotorRange, ListDataSet, DataSet
-from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
-                    polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
-                    create_nexus_sample
+from .common import Sample, Ispyb, Nexus, get_isotime, SAXS_STYLE, create_nexus_sample
 matplotlib.use("Agg")
 NexusJuice = collections.namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps")
 Position = collections.namedtuple('Position', 'index slow fast')

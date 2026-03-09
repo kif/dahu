@@ -25,10 +25,10 @@ logger = logging.getLogger("bm29.common")
 import numpy
 from dahu.cache import DataCache
 from hdf5plugin import Bitshuffle, Zfp
-import pyFAI, pyFAI.units
+import pyFAI
+import pyFAI.units
 from pyFAI.method_registry import IntegrationMethod
 import fabio
-from .nexus import Nexus, get_isotime
 # else:
 #     from pyFAI.io import Nexus, get_isotime
     

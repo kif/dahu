@@ -30,7 +30,6 @@ from dahu.utils import fully_qualified_name
 import numpy
 import h5py
 import pyFAI
-from pyFAI import integrator
 import freesas
 import freesas.cormap
 

@@ -34,15 +34,18 @@ except ImportError:
     logger.error("Numexpr is not installed, falling back on numpy's implementations")
     numexpr = None
 import h5py
-import pyFAI, pyFAI.integrator.azimuthal
+import pyFAI
+import pyFAI.integrator.azimuthal
 from pyFAI.containers import Integrate1dResult
 from pyFAI.method_registry import IntegrationMethod
-import freesas, freesas.cormap, freesas.invariants
+import freesas
+import freesas.cormap
+import freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier
 from freesas.bift import BIFT
 from freesas.app.extract_ascii import write_ascii
 from scipy.optimize import minimize
-from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
+from .common import Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     Sample, create_nexus_sample
 from .ispyb import IspybConnector, NumpyEncoder

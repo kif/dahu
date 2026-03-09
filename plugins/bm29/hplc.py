@@ -22,7 +22,6 @@ from math import log, pi
 import posixpath
 import copy
 import zipfile
-from collections import namedtuple
 from urllib3.util import parse_url
 from dahu.plugin import Plugin
 # from dahu.utils import fully_qualified_name
@@ -30,24 +29,31 @@ import logging
 logger = logging.getLogger("bm29.hplc")
 import numpy
 import h5py
-import pyFAI, pyFAI.integrator.azimuthal, pyFAI.units
+import pyFAI
+import pyFAI.integrator.azimuthal
+import pyFAI.units
 from pyFAI.method_registry import IntegrationMethod
-import freesas, freesas.cormap, freesas.invariants
+import freesas
+import freesas.cormap
+import freesas.invariants
 from freesas.autorg import auto_gpa, autoRg, auto_guinier
 from freesas.bift import BIFT
 from freesas.app.extract_ascii import write_ascii
+from freesas.containers import UVJuice
 from scipy.optimize import minimize
 import scipy.signal
 import scipy.ndimage
 import sklearn
 from sklearn.decomposition import NMF
-from .common import Sample, Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
-                    polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
+from .common import Ispyb, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
                     Sample, create_nexus_sample
 from .ispyb import IspybConnector
 from .icat import send_icat
 from typing import NamedTuple
-from dataclasses import dataclass
+import matplotlib.pyplot
+matplotlib.use("Agg")
+from freesas.plot import hplc_plot
+
 
 
 class NexusJuice(NamedTuple):
@@ -72,39 +78,6 @@ class NexusJuice(NamedTuple):
 
 # NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps")
 
-@dataclass
-class UVJuice:
-    """All information of an UV-file"""
-    wavelengths: numpy.ndarray
-    timestamps: numpy.ndarray
-    absorbance: numpy.ndarray
-
-    @classmethod
-    def from_file(cls, filename):
-        """Create dataclass from filename
-
-        :param filename: name or Path of the .dat file to read & parse
-        :return: dataclass instance
-        """
-        with open(filename) as fd:
-            header = fd.readline()
-        keys = [k.strip() for k in header.split("|")]
-        raw = numpy.loadtxt(filename, skiprows=1, delimiter="|", unpack=True)
-        nb_time = raw.shape[1]
-        nb_wl = raw.shape[0] // 3
-        absorbance = numpy.empty((nb_wl, nb_time))
-        timestamps = numpy.empty(nb_time)
-        wavelengths = numpy.empty(nb_wl)
-        for i,k in enumerate(keys):
-            if k=="T0":
-                timestamps = raw[i]
-            elif k.startswith("w"):
-                j = int(k[1])
-                wavelengths[j] = raw[i,0]
-            elif k.startswith("ABS"):
-                j = int(k[3])
-                absorbance[j] = raw[i]
-        return cls(wavelengths, timestamps, absorbance)
 
 
 def smooth_chromatogram(signal, window):
@@ -241,7 +214,7 @@ class HPLC(Plugin):
        },
       "nmf_components": 5,
       "diode_medfilt": 0,
-      "UV_datafile": "path to UV .dat file in some gallery"
+      "uv_datafile": "path to UV .dat file in some gallery",
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.hplc"
     }
@@ -290,7 +263,7 @@ class HPLC(Plugin):
             self.log_warning("No output file provided, using " + self.output_file)
         self.nmf_components = int(self.input.get("nmf_components", self.NMF_COMP))
 
-        uv_datafile = self.input.get("UV_datafile")
+        uv_datafile = self.input.get("uv_datafile")
         if uv_datafile and os.path.exists(uv_datafile):
             try:
                 self.uv_data = UVJuice.from_file(uv_datafile)
@@ -316,6 +289,7 @@ class HPLC(Plugin):
         self.to_pyarch["chunk_size"] = self.juices[0].Isum.size
         self.to_pyarch["id"] = os.path.commonprefix(self.input_files)
         self.to_pyarch["sample_name"] = self.juices[0].sample.name
+        self.build_plot()
         if not self.input.get("no_ispyb"):
             self.send_to_ispyb()
         # self.output["icat"] =
@@ -406,11 +380,12 @@ class HPLC(Plugin):
             uv_data = nxs.new_class(chroma_grp, "UV-Vis", "NXdata")
             uv_data.attrs["title"] = "UV-Vis - Chromatogram"
             uv_data["sequence_index"] = self.sequence_index()
-            absorbance = uv_data.create_dataset("absorbance", data=self.self.uv_data.absorbance)
+            absorbance = uv_data.create_dataset("absorbance", data=self.uv_data.absorbance)
             absorbance.attrs["unit"] = "∅"
             absorbance.attrs["interpretation"] = "spectrum"
-            uv_data.create_dataset("timestamps", data=self.self.uv_data.timestamps).attrs["unit"] = "s"
-            uv_data.create_dataset("wavelengths", data=self.self.uv_data.wavelengths).attrs["unit"] = "nm"
+            absorbance.attrs["SILX_style"] = NORMAL_STYLE
+            uv_data.create_dataset("timestamps", data=self.uv_data.timestamps).attrs["unit"] = "s"
+            uv_data.create_dataset("wavelengths", data=self.uv_data.wavelengths).attrs["unit"] = "nm"
             uv_data.attrs["signal"] = "absorbance"
             uv_data.attrs["axes"] = ["wavelengths", "timestamps"]
 
@@ -422,8 +397,10 @@ class HPLC(Plugin):
         sum_ds = hplc_data.create_dataset("sum", data=Isum, dtype=numpy.float32)
         sum_ds.attrs["interpretation"] = "spectrum"
         sum_ds.attrs["long_name"] = "Summed Intensity"
+        sum_ds.attrs["SILX_style"] = NORMAL_STYLE
         frame_ds = hplc_data.create_dataset("frame_ids", data=ids, dtype=numpy.uint32)
         frame_ds.attrs["interpretation"] = "spectrum"
+
         frame_ds.attrs["long_name"] = "frame index"
         hplc_data.attrs["signal"] = "sum"
         hplc_data.attrs["axes"] = "timestamps" #"frame_ids"
@@ -1081,6 +1058,33 @@ class HPLC(Plugin):
 
         return NexusJuice(filename, h5path, npt, unit, idx, Isum, q, I, sigma, poni, mask, energy, polarization, method, sample, timestamps, diode)
         "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps diode"
+
+    def build_plot(self):
+        """Create a chromatogram in the gallery"""
+        gallery = os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery")
+        filename = os.path.join(gallery, 'chromatogram.png')
+        if not os.path.isdir(gallery):
+            try:
+                os.makedirs(gallery)
+            except Exception as err:
+                self.log_warning(f"Unable to create directory {gallery}; {err.__class__.__name__}: {err}")
+                return
+        sample = self.to_pyarch.get("sample_name", "sample")
+        chromatogram = self.to_pyarch.get("sum_I")
+
+        if chromatogram is not None:
+            fractions = self.to_pyarch.get("merge_frames")
+            if fractions is not None:
+                fractions.sort()
+            hplc_plot(chromatogram,
+                      timestamps=self.to_pyarch.get("time"),
+                      fractions=fractions,
+                      title=f"Chromatograms of {sample}",
+                      filename=filename,
+                      img_format="png",
+                      uv_data=self.uv_data)
+            self.output["chromatogram_file"] = filename
+
 
     def send_to_ispyb(self):
         """Data sent to ISPyB are:
