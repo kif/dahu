@@ -255,6 +255,7 @@ class HPLC(Plugin):
         self.nxs = None
         self.output_file = None
         self.juices = []
+        self.uv_data = None
         self.nmf_components = self.NMF_COMP
         self.to_pyarch = {}
         self.ispyb = None
@@ -405,12 +406,15 @@ class HPLC(Plugin):
             uv_data = nxs.new_class(chroma_grp, "UV-Vis", "NXdata")
             uv_data.attrs["title"] = "UV-Vis - Chromatogram"
             uv_data["sequence_index"] = self.sequence_index()
-
-
-
+            absorbance = uv_data.create_dataset("absorbance", data=self.self.uv_data.absorbance)
+            absorbance.attrs["unit"] = "∅"
+            absorbance.attrs["interpretation"] = "spectrum"
+            uv_data.create_dataset("timestamps", data=self.self.uv_data.timestamps).attrs["unit"] = "s"
+            uv_data.create_dataset("wavelengths", data=self.self.uv_data.wavelengths).attrs["unit"] = "nm"
+            uv_data.attrs["signal"] = "absorbance"
+            uv_data.attrs["axes"] = ["wavelengths", "timestamps"]
 
         # SAXS-chromatogram
-
         hplc_data = nxs.new_class(chroma_grp, "SAXS", "NXdata")
         hplc_data.attrs["title"] = "SAXS - Chromatogram"
         hplc_data["sequence_index"] = self.sequence_index()
