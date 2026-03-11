@@ -3,7 +3,7 @@
 #
 
 """
-Data Analysis RPC server over Tango: 
+Data Analysis RPC server over Tango:
 
 Factory for the loading of plugins
 """
@@ -12,25 +12,24 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/03/2020"
+__date__ = "11/03/2026"
 __status__ = "production"
 
 import os
 import os.path as op
 import logging
 from collections import OrderedDict
-logger = logging.getLogger("dahu.factory")
 from threading import Semaphore
 from .utils import get_workdir, fully_qualified_name
-
 import importlib.util
+logger = logging.getLogger("dahu.factory")
 
 
 def load_source(module_name, file_path):
     "Plugin loader which does not pollute sys.module"
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     #module = importlib.util.module_from_spec(spec)
-    #spec.loader.exec_module(module)    
+    #spec.loader.exec_module(module)
     module = spec.loader.load_module(spec.name)
     #Option: remove from sys.modules ...
     return module
@@ -77,7 +76,7 @@ class Factory(object):
                 python_files.append(i[:-3])
             if op.isdir(j) and op.exists(op.join(j, "__init__.py")):
                 python_files.append(i)
-                                         
+
         logger.info(f"Available modules in dahu from {directory}:{os.linesep}" + " ".join(python_files))
         with self._sem:
             self.plugin_dirs[abs_dir] = python_files
@@ -85,7 +84,7 @@ class Factory(object):
     def search_plugin(self, plugin_name):
         """
         Search for a given plugins ...
-        starting from the FQN package.class, 
+        starting from the FQN package.class,
         """
         if "." not in plugin_name:
             logger.error("plugin name have to be fully qualified, here: %s" % plugin_name)
@@ -110,7 +109,7 @@ class Factory(object):
     def __call__(self, plugin_name):
         """
         create a plugin instance from its name
-        
+
         @param plugin_name: name of the plugin as a string
         @return: plugin instance
         """
@@ -129,13 +128,13 @@ class Factory(object):
     def register(cls, klass, fqn=None):
         """
         Register a class as a plugin which can be instanciated.
-        
+
         This can be used as a decorator
-        
-        @plugin_factor.register 
-        
+
+        @plugin_factor.register
+
         @param klass: class to be registered as a plugin
-        @param fqn: fully qualified name 
+        @param fqn: fully qualified name
         @return klass
         """
         if fqn is None:

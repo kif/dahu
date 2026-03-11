@@ -4,8 +4,6 @@
 
 """Test suite for all dahu modules."""
 
-from __future__ import with_statement, print_function
-
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "jerome.kieffer@esrf.eu"
 __license__ = "MIT"
@@ -15,11 +13,11 @@ __data__ = "10/06/2016"
 import sys
 import unittest
 from .utilstest import getLogger
-logger = getLogger(__file__)
-
 from . import test_job
 from . import test_plugin
 from . import test_cache
+
+logger = getLogger(__file__)
 
 
 def suite():

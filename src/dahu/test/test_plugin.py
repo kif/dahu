@@ -6,15 +6,15 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22/02/2022"
+__date__ = "11/03/2026"
 __status__ = "production"
 
 import unittest
 from . import utilstest
-logger = utilstest.getLogger("test_plugin")
 from ..plugin import Plugin, plugin_from_function
 from ..factory import plugin_factory
 from ..job import Job
+logger = utilstest.getLogger("test_plugin")
 
 
 class TestPlugin(unittest.TestCase):
@@ -42,12 +42,12 @@ class TestPlugin(unittest.TestCase):
         print(dir(p))
         print(p.__class__.__module__)
         p.wait_for(42) #this job does not exist, fails with a warning:
-        
+
         # Test synchonization with finished job
         j = Job("example.square", {"x": 5})
         j.start()
         p.wait_for(j.id)
-        
+
         #Test failure when it does not start (timeout)
         p.TIMEOUT=0.2
         j = Job("example.square", {"x": 6})
@@ -57,11 +57,11 @@ class TestPlugin(unittest.TestCase):
             logger.debug("Failed as expected with: %s", err)
         else:
             raise RuntimeError("Expected to fail !")
-        
-        
-        
 
-        
+
+
+
+
 
 
 def suite():
