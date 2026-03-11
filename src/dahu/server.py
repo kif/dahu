@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 # coding: utf-8
-from __future__ import with_statement, print_function, absolute_import, division
 
 """
 Data Analysis RPC server over Tango:
@@ -11,31 +10,23 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "04/06/2025"
+__date__ = "11/03/2026"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
 import sys
 import os
-import json
 import threading
 import logging
 import time
-import types
-import multiprocessing
-import six
-if six.PY2:
-    from Queue import Queue
-else:
-    from queue import Queue
+from queue import Queue
+import PyTango
+from .job import Job, plugin_factory
 
 logger = logging.getLogger("dahu.server")
 # set loglevel at least at INFO
 if logger.getEffectiveLevel() > logging.INFO:
     logger.setLevel(logging.INFO)
-
-import PyTango
-from .job import Job, plugin_factory
 
 try:
     from rfoo.utils import rconsole
@@ -120,7 +111,14 @@ class DahuDS(PyTango.LatestDeviceImpl):
         res = ["List of all plugin currently loaded (use initPlugin to loaded additional plugins):"]
         plugins = list(plugin_factory.registry.keys())
         plugins.sort()
-        return os.linesep.join(res + [f' {i} : {plugin_factory.registry[i].__doc__.split("\n")[0]}' for i in plugins])
+        plugins_doc = {}
+        for i in plugins:
+            for j in plugin_factory.registry[i].__doc__.split(os.linesep):
+                doc = j.strip()
+                if doc:  # Non empty line in docstring
+                    break
+            plugins_doc[i] = doc
+        return os.linesep.join(res + [f' {i} : {doc}' for i, j in plugins_doc.items()])
 
     def initPlugin(self, name):
         """
@@ -351,5 +349,5 @@ class DahuDSClass(PyTango.DeviceClass):
 
     def __init__(self, name):
         PyTango.DeviceClass.__init__(self, name)
-        self.set_type(name);
+        self.set_type(name)
         logger.debug("In DahuDSClass  constructor")
