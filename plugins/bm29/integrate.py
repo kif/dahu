@@ -32,9 +32,9 @@ import h5py
 import pyFAI
 import freesas
 import freesas.cormap
-
+from .nexus import Nexus, get_isotime
 from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, get_integrator, KeyCache, \
-                    method, polarization_factor, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
+                    method, polarization_factor,SAXS_STYLE, NORMAL_STYLE, \
                     create_nexus_sample
 from .ispyb import IspybConnector, NumpyEncoder
 from .icat import send_icat

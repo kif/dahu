@@ -44,8 +44,9 @@ import scipy.signal
 import scipy.ndimage
 import sklearn
 from sklearn.decomposition import NMF
-from .common import Ispyb, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
+from .common import Ispyb, SAXS_STYLE, NORMAL_STYLE, \
                     Sample, create_nexus_sample
+from .nexus import Nexus, get_isotime
 from .ispyb import IspybConnector
 from .icat import send_icat
 from typing import NamedTuple

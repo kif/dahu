@@ -40,8 +40,9 @@ from freesas.bift import BIFT
 from freesas.app.extract_ascii import write_ascii
 from scipy.optimize import minimize
 from .common import Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
-                    polarization_factor, method, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
+                    polarization_factor, method, SAXS_STYLE, NORMAL_STYLE, \
                     Sample, create_nexus_sample
+from .nexus import Nexus, get_isotime
 from .ispyb import IspybConnector, NumpyEncoder
 from .memcached import to_memcached
 from .icat import send_icat

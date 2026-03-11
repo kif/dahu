@@ -29,7 +29,8 @@ import pyFAI
 from pyFAI.method_registry import IntegrationMethod
 from pyFAI.io.ponifile import PoniFile
 from pyFAI.io.diffmap_config import DiffmapConfig, WorkerConfig, MotorRange, ListDataSet, DataSet
-from .common import Sample, Ispyb, Nexus, get_isotime, SAXS_STYLE, create_nexus_sample
+from .common import Sample, Ispyb, SAXS_STYLE, create_nexus_sample
+from .nexus import Nexus, get_isotime
 
 
 matplotlib.use("Agg")

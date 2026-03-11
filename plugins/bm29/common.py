@@ -25,6 +25,7 @@ import numpy
 from dahu.cache import DataCache
 from hdf5plugin import Bitshuffle, Zfp
 import pyFAI
+import pyFAI.integrator.load_engines  #noqa
 import pyFAI.units
 from pyFAI.method_registry import IntegrationMethod
 import fabio
