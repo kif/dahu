@@ -10,9 +10,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/03/2026"
+__date__ = "17/03/2026"
 __status__ = "development"
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 import time
 import os
@@ -570,7 +570,8 @@ class HPLC(Plugin):
         I_sub = self.to_pyarch["subtracted_I"]
         sigma = self.to_pyarch["subtracted_Stdev"]
 
-        f_grp = nxs.new_class(top_grp, f"{fraction.start}-{fraction.stop}", "NXprocess")
+        time = self.to_pyarch["time"]
+        f_grp = nxs.new_class(top_grp, f"{time[fraction.start]:.0f}s-{time[fraction.stop]:.0f}s", "NXprocess")
         f_grp["sequence_index"] = self.sequence_index()
         f_grp["first_frame"] = fraction.start
         f_grp["last_frame"] = fraction.stop
