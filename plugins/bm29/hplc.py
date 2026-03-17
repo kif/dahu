@@ -24,6 +24,7 @@ import copy
 import zipfile
 from urllib3.util import parse_url
 from dahu.plugin import Plugin
+
 # from dahu.utils import fully_qualified_name
 import logging
 import numpy
@@ -44,29 +45,29 @@ import scipy.signal
 import scipy.ndimage
 import sklearn
 from sklearn.decomposition import NMF
-from .common import Ispyb, SAXS_STYLE, NORMAL_STYLE, \
-                    Sample, create_nexus_sample
+from .common import Ispyb, SAXS_STYLE, NORMAL_STYLE, Sample, create_nexus_sample
 from .nexus import Nexus, get_isotime
 from .ispyb import IspybConnector
 from .icat import send_icat
 from typing import NamedTuple
 import matplotlib.pyplot
 from freesas.plot import hplc_plot
+
 logger = logging.getLogger("bm29.hplc")
 matplotlib.use("Agg")
 
 
-
 class NexusJuice(NamedTuple):
     """All information of an integration file"""
+
     filename: str
     h5path: str
-    npt:int
+    npt: int
     unit: pyFAI.units.Unit
     idx: numpy.ndarray
     Isum: numpy.ndarray
     q: numpy.ndarray
-    I: numpy.ndarray  #noqa
+    I: numpy.ndarray  # noqa
     sigma: numpy.ndarray
     poni: str
     mask: numpy.ndarray
@@ -75,10 +76,10 @@ class NexusJuice(NamedTuple):
     method: tuple
     sample: Sample
     timestamps: numpy.ndarray
-    diode: numpy.ndarray|None = None
+    diode: numpy.ndarray | None = None
+
 
 # NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps")
-
 
 
 def smooth_chromatogram(signal, window):
@@ -94,8 +95,8 @@ def smooth_chromatogram(signal, window):
     # w2 = int(6*sigma)
     # if w2%2 == 0: w2+=1
     # print(wmin, sigma, w2)
-#     g = scipy.signal.gaussian(wodd, wodd/4)
-#     g /= g.sum()
+    #     g = scipy.signal.gaussian(wodd, wodd/4)
+    #     g /= g.sum()
 
     # small kernel smoothing to remove steps induced by medfilt
     # smth2 = scipy.signal.convolve(signal, g,"same")
@@ -126,13 +127,13 @@ def search_peaks(signal, wmin=10, scale=0.9):
                     if q > p:
                         start = smth[:q]
                     else:
-                        start = smth[p - q:p]
+                        start = smth[p - q : p]
                     if p + q >= signal.size:
                         stop = smth[-q:]
                     else:
-                        stop = smth[p:q + p]
+                        stop = smth[p : q + p]
                     pos = numpy.argmin(abs(start - stop))
-                    res[p + pos - q: p + pos] = 1
+                    res[p + pos - q : p + pos] = 1
         w *= scale
     return scipy.ndimage.label(res)
 
@@ -152,7 +153,12 @@ def build_background(intensity, std=None, keep=0.3):
     """
     U, S, V = numpy.linalg.svd(intensity.T, full_matrices=False)
     bg1 = numpy.median(V[0]) * S[0] * U[:, 0]
-    Pscore = [freesas.cormap.measure_longest(numpy.ascontiguousarray(bg1 - i, dtype=numpy.float64)) for i in intensity]
+    Pscore = [
+        freesas.cormap.measure_longest(
+            numpy.ascontiguousarray(bg1 - i, dtype=numpy.float64)
+        )
+        for i in intensity
+    ]
     orderd = numpy.argsort(Pscore)
     nkeep = int(math.ceil(keep * intensity.shape[0]))
     to_keep = numpy.sort(orderd[:nkeep])
@@ -201,7 +207,7 @@ def save_zip(filename, config, intensity, sigma):
 
 
 class HPLC(Plugin):
-    """ Rebuild the complete chromatogram and perform basic analysis on it.
+    """Rebuild the complete chromatogram and perform basic analysis on it.
 
         Typical JSON file:
     {
@@ -220,6 +226,7 @@ class HPLC(Plugin):
       "plugin_name": "bm29.hplc"
     }
     """
+
     NMF_COMP = 5
     "Default number of Non-negative matrix factorization components. Correspond to the number of spices"
 
@@ -246,20 +253,26 @@ class HPLC(Plugin):
         for job_id in self.input.get("wait_for", []):
             self.wait_for(job_id)
 
-        self.input_files = [os.path.abspath(i) for i in self.input.get("integrated_files", "")]
+        self.input_files = [
+            os.path.abspath(i) for i in self.input.get("integrated_files", "")
+        ]
 
         self.output_file = self.input.get("output_file")
         if not self.output_file:
-            dirname, basename = os.path.split(os.path.commonprefix(self.input_files) + "_hplc.h5")
+            dirname, basename = os.path.split(
+                os.path.commonprefix(self.input_files) + "_hplc.h5"
+            )
             dirname = os.path.dirname(dirname)
-#            dirname = os.path.join(dirname, "processed")
+            #            dirname = os.path.join(dirname, "processed")
             dirname = os.path.join(dirname, "hplc")
             self.output_file = os.path.join(dirname, basename)
             if not os.path.isdir(dirname):
                 try:
                     os.makedirs(dirname)
                 except Exception as err:
-                    self.log_warning(f"Unable to create dir {dirname}. {type(err)}: {err}")
+                    self.log_warning(
+                        f"Unable to create dir {dirname}. {type(err)}: {err}"
+                    )
 
             self.log_warning("No output file provided, using " + self.output_file)
         self.nmf_components = int(self.input.get("nmf_components", self.NMF_COMP))
@@ -270,9 +283,11 @@ class HPLC(Plugin):
                 self.uv_data = UVJuice.from_file(uv_datafile)
             except Exception as err:
                 self.uv_data = None
-                self.log_warning(f"Unable to parse {uv_datafile}; {err.__class__.__name__}: {err}")
+                self.log_warning(
+                    f"Unable to parse {uv_datafile}; {err.__class__.__name__}: {err}"
+                )
 
-        #Manage gallery here
+        # Manage gallery here
         dirname = os.path.dirname(self.output_file)
         gallery = os.path.join(dirname, "gallery")
         if not os.path.isdir(gallery):
@@ -308,25 +323,33 @@ class HPLC(Plugin):
 
     def create_nexus(self):
         nxs = Nexus(self.output_file, mode="w")
-        entry_grp = nxs.new_entry("entry", self.input.get("plugin_name", "dahu"),
-                              title='BioSaxs HPLC experiment',
-                              force_time=get_isotime())
+        entry_grp = nxs.new_entry(
+            "entry",
+            self.input.get("plugin_name", "dahu"),
+            title="BioSaxs HPLC experiment",
+            force_time=get_isotime(),
+        )
         entry_grp["version"] = __version__
         nxs.h5.attrs["default"] = entry_grp.name.strip("/")
 
-    # Configuration
+        # Configuration
         cfg_grp = nxs.new_class(entry_grp, "configuration", "NXnote")
-        cfg_grp.create_dataset("data", data=json.dumps(self.input, indent=2, separators=(",\r\n", ":\t")))
+        cfg_grp.create_dataset(
+            "data", data=json.dumps(self.input, indent=2, separators=(",\r\n", ":\t"))
+        )
         cfg_grp.create_dataset("format", data="text/json")
 
-    # Process 0: Measurement group
+        # Process 0: Measurement group
         input_grp = nxs.new_class(entry_grp, "0_measurement", "NXcollection")
         input_grp["sequence_index"] = self.sequence_index()
 
         for idx, filename in enumerate(self.input_files):
             juice = self.read_nexus(filename)
             if juice is not None:
-                rel_path = os.path.relpath(os.path.abspath(filename), os.path.dirname(os.path.abspath(self.output_file)))
+                rel_path = os.path.relpath(
+                    os.path.abspath(filename),
+                    os.path.dirname(os.path.abspath(self.output_file)),
+                )
                 input_grp["LImA_%04i" % idx] = h5py.ExternalLink(rel_path, juice.h5path)
                 self.juices.append(juice)
 
@@ -337,23 +360,23 @@ class HPLC(Plugin):
         # Sample: outsourced !
         create_nexus_sample(nxs, entry_grp, self.juices[0].sample)
 
-
         nframes = max(i.idx.max() for i in self.juices) + 1
         nbin = q.size
 
-        I = numpy.zeros((nframes, nbin), dtype=numpy.float32)  #noqa
+        I = numpy.zeros((nframes, nbin), dtype=numpy.float32)  # noqa
         sigma = numpy.zeros((nframes, nbin), dtype=numpy.float32)
         Isum = numpy.zeros(nframes)
 
         ids = numpy.arange(nframes)
         idx = numpy.concatenate([i.idx for i in self.juices])
-        timestamps = self.to_pyarch["time"] = numpy.concatenate([i.timestamps for i in self.juices])
+        timestamps = self.to_pyarch["time"] = numpy.concatenate(
+            [i.timestamps for i in self.juices]
+        )
         I[idx] = numpy.vstack([i.I for i in self.juices])
         Isum[idx] = numpy.concatenate([i.Isum for i in self.juices])
         sigma[idx] = numpy.vstack([i.sigma for i in self.juices])
 
-
-    # Process 0.5: preprocessing
+        # Process 0.5: preprocessing
         medfilt_order = self.input.get("diode_medfilt", 0)
         if medfilt_order >= 2:
             preproc_grp = nxs.new_class(entry_grp, "0_pre-process", "NXprocess")
@@ -362,17 +385,27 @@ class HPLC(Plugin):
             preproc_grp["filter_size"] = medfilt_order
             diode_raw = numpy.concatenate([i.diode for i in self.juices])
             # diode_smooth = scipy.signal.medfilt(diode_raw, medfilt_order)
-            diode_smooth = scipy.ndimage.median_filter(diode_raw, medfilt_order, mode="mirror")
-            noise = 100 * (((diode_raw-diode_smooth)**2).mean())**0.5 / diode_raw.mean()
-            preproc_grp.create_dataset("noise", data=noise).attrs["unit"]=r"%"
-            preproc_grp.create_dataset("diode_raw", data=diode_raw).attrs["interpretation"] = "spectrum"
-            preproc_grp.create_dataset("diode_smooth", data=diode_smooth).attrs["interpretation"] = "spectrum"
-            scale = diode_raw/diode_smooth
-            I *= numpy.atleast_2d(scale).T  #noqa
+            diode_smooth = scipy.ndimage.median_filter(
+                diode_raw, medfilt_order, mode="mirror"
+            )
+            noise = (
+                100
+                * (((diode_raw - diode_smooth) ** 2).mean()) ** 0.5
+                / diode_raw.mean()
+            )
+            preproc_grp.create_dataset("noise", data=noise).attrs["unit"] = r"%"
+            preproc_grp.create_dataset("diode_raw", data=diode_raw).attrs[
+                "interpretation"
+            ] = "spectrum"
+            preproc_grp.create_dataset("diode_smooth", data=diode_smooth).attrs[
+                "interpretation"
+            ] = "spectrum"
+            scale = diode_raw / diode_smooth
+            I *= numpy.atleast_2d(scale).T  # noqa
             Isum *= scale
             sigma *= numpy.atleast_2d(scale).T
 
-    # Process 1: Chromatogram
+        # Process 1: Chromatogram
         chroma_grp = nxs.new_class(entry_grp, "1_chromatogram", "NXprocess")
         chroma_grp["sequence_index"] = self.sequence_index()
 
@@ -381,12 +414,18 @@ class HPLC(Plugin):
             uv_data = nxs.new_class(chroma_grp, "UV-Vis", "NXdata")
             uv_data.attrs["title"] = "UV-Vis - Chromatogram"
             uv_data["sequence_index"] = self.sequence_index()
-            absorbance = uv_data.create_dataset("absorbance", data=self.uv_data.absorbance)
+            absorbance = uv_data.create_dataset(
+                "absorbance", data=self.uv_data.absorbance
+            )
             absorbance.attrs["unit"] = "∅"
             absorbance.attrs["interpretation"] = "spectrum"
             absorbance.attrs["SILX_style"] = NORMAL_STYLE
-            uv_data.create_dataset("timestamps", data=self.uv_data.timestamps).attrs["unit"] = "s"
-            uv_data.create_dataset("wavelengths", data=self.uv_data.wavelengths).attrs["unit"] = "nm"
+            uv_data.create_dataset("timestamps", data=self.uv_data.timestamps).attrs[
+                "unit"
+            ] = "s"
+            uv_data.create_dataset("wavelengths", data=self.uv_data.wavelengths).attrs[
+                "unit"
+            ] = "nm"
             uv_data.attrs["signal"] = "absorbance"
             uv_data.attrs["axes"] = ["wavelengths", "timestamps"]
 
@@ -404,18 +443,24 @@ class HPLC(Plugin):
 
         frame_ds.attrs["long_name"] = "frame index"
         hplc_data.attrs["signal"] = "sum"
-        hplc_data.attrs["axes"] = "timestamps" #"frame_ids"
+        hplc_data.attrs["axes"] = "timestamps"  # "frame_ids"
         chroma_grp.attrs["default"] = posixpath.relpath(hplc_data.name, chroma_grp.name)
         entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
-        time_ds = hplc_data.create_dataset("timestamps", data=timestamps, dtype=numpy.float64)
+        time_ds = hplc_data.create_dataset(
+            "timestamps", data=timestamps, dtype=numpy.float64
+        )
         time_ds.attrs["interpretation"] = "spectrum"
         time_ds.attrs["long_name"] = "Time stamps (s)"
 
         integration_data = nxs.new_class(chroma_grp, "result", "NXdata")
         chroma_grp.attrs["title"] = str(self.juices[0].sample)
 
-        int_ds = integration_data.create_dataset("I", data=numpy.ascontiguousarray(I, dtype=numpy.float32))
-        std_ds = integration_data.create_dataset("errors", data=numpy.ascontiguousarray(sigma, dtype=numpy.float32))
+        int_ds = integration_data.create_dataset(
+            "I", data=numpy.ascontiguousarray(I, dtype=numpy.float32)
+        )
+        std_ds = integration_data.create_dataset(
+            "errors", data=numpy.ascontiguousarray(sigma, dtype=numpy.float32)
+        )
         q_ds = integration_data.create_dataset("q", data=self.juices[0].q)
         q_ds.attrs["interpretation"] = "spectrum"
         q_ds.attrs["unit"] = unit_name
@@ -431,10 +476,11 @@ class HPLC(Plugin):
         int_ds.attrs["scale"] = "log"
         std_ds.attrs["interpretation"] = "spectrum"
 
-        save_zip(os.path.splitext(self.output_file)[0]+".zip",
-                 self.juices[0], I, sigma)
+        save_zip(
+            os.path.splitext(self.output_file)[0] + ".zip", self.juices[0], I, sigma
+        )
 
-    # Process 2: SVD decomposition
+        # Process 2: SVD decomposition
         svd_grp = nxs.new_class(entry_grp, "2_SVD", "NXprocess")
         svd_grp["sequence_index"] = self.sequence_index()
         logi = numpy.arcsinh(I.T)
@@ -443,7 +489,7 @@ class HPLC(Plugin):
         # Number of Eignevector to keep:
         svd_grp["Ref"] = "https://arxiv.org/pdf/1305.5870.pdf"
         beta = nframes / nbin if nframes <= nbin else 1.0
-        omega = 0.56 * beta ** 3 - 0.95 * beta ** 2 + 1.82 * beta + 1.43
+        omega = 0.56 * beta**3 - 0.95 * beta**2 + 1.82 * beta + 1.43
         tau = numpy.median(S) * omega
         r = numpy.sum(S > tau)
 
@@ -454,13 +500,17 @@ class HPLC(Plugin):
         U[:, nflip] = -U[:, nflip]
 
         eigen_data = nxs.new_class(svd_grp, "eigenvectors", "NXdata")
-        eigen_ds = eigen_data.create_dataset("U", data=numpy.ascontiguousarray(U.T[:r], dtype=numpy.float32))
+        eigen_ds = eigen_data.create_dataset(
+            "U", data=numpy.ascontiguousarray(U.T[:r], dtype=numpy.float32)
+        )
         eigen_ds.attrs["interpretation"] = "spectrum"
         eigen_data.attrs["signal"] = "U"
         eigen_data.attrs["SILX_style"] = SAXS_STYLE
 
         chroma_data = nxs.new_class(svd_grp, "chromatogram", "NXdata")
-        chroma_ds = chroma_data.create_dataset("V", data=numpy.ascontiguousarray(V[:r], dtype=numpy.float32))
+        chroma_ds = chroma_data.create_dataset(
+            "V", data=numpy.ascontiguousarray(V[:r], dtype=numpy.float32)
+        )
         chroma_ds.attrs["interpretation"] = "spectrum"
         chroma_data.attrs["signal"] = "V"
         chroma_data.attrs["SILX_style"] = NORMAL_STYLE
@@ -468,13 +518,12 @@ class HPLC(Plugin):
         svd_grp.create_dataset("eigenvalues", data=S[:r], dtype=numpy.float32)
         svd_grp.attrs["default"] = posixpath.relpath(chroma_data.name, svd_grp.name)
 
-    # Process 3: NMF matrix decomposition
+        # Process 3: NMF matrix decomposition
         nmf_grp = nxs.new_class(entry_grp, "3_NMF", "NXprocess")
         nmf_grp["sequence_index"] = self.sequence_index()
         nmf_grp["program"] = "sklearn.decomposition.NMF"
         nmf_grp["version"] = sklearn.__version__
-        nmf = NMF(n_components=self.nmf_components, init='nndsvd',
-                  max_iter=1000)
+        nmf = NMF(n_components=self.nmf_components, init="nndsvd", max_iter=1000)
         try:
             W = nmf.fit_transform(I.T)
         except ValueError as err:
@@ -482,7 +531,9 @@ class HPLC(Plugin):
             nmf_grp[err.__class__.__name__] = str(err)
         else:
             eigen_data = nxs.new_class(nmf_grp, "eigenvectors", "NXdata")
-            eigen_ds = eigen_data.create_dataset("W", data=numpy.ascontiguousarray(W.T, dtype=numpy.float32))
+            eigen_ds = eigen_data.create_dataset(
+                "W", data=numpy.ascontiguousarray(W.T, dtype=numpy.float32)
+            )
             eigen_ds.attrs["interpretation"] = "spectrum"
             eigen_data.attrs["signal"] = "W"
             eigen_data.attrs["SILX_style"] = SAXS_STYLE
@@ -492,21 +543,27 @@ class HPLC(Plugin):
 
             H = nmf.components_
             chroma_data = nxs.new_class(nmf_grp, "chromatogram", "NXdata")
-            chroma_ds = chroma_data.create_dataset("H", data=numpy.ascontiguousarray(H, dtype=numpy.float32))
+            chroma_ds = chroma_data.create_dataset(
+                "H", data=numpy.ascontiguousarray(H, dtype=numpy.float32)
+            )
             chroma_ds.attrs["interpretation"] = "spectrum"
             chroma_data.attrs["signal"] = "H"
             chroma_data.attrs["SILX_style"] = NORMAL_STYLE
             nmf_grp.attrs["default"] = posixpath.relpath(chroma_data.name, nmf_grp.name)
 
-    # Process 5: Background estimation
+        # Process 5: Background estimation
         bg_grp = nxs.new_class(entry_grp, "4_background", "NXprocess")
         bg_grp["sequence_index"] = self.sequence_index()
         bg_grp["keep"] = keep = 0.3
-        bg_grp["keep"].attrs["info"] = "Fraction of curves to be considered as background"
+        bg_grp["keep"].attrs["info"] = (
+            "Fraction of curves to be considered as background"
+        )
         bg_avg, bg_std, to_keep = build_background(I, sigma, keep=keep)
         to_keep = numpy.ascontiguousarray(to_keep, dtype=numpy.int32)
         kept_ds = bg_grp.create_dataset("kept", data=to_keep)
-        kept_ds.attrs["info"] = "Index of curves used to calculate the background scattering"
+        kept_ds.attrs["info"] = (
+            "Index of curves used to calculate the background scattering"
+        )
         self.to_pyarch["buffer_frames"] = to_keep
         self.to_pyarch["buffer_I"] = bg_avg
         self.to_pyarch["buffer_Stdev"] = bg_std
@@ -514,18 +571,23 @@ class HPLC(Plugin):
         bg_data.attrs["signal"] = "I"
         bg_data.attrs["SILX_style"] = SAXS_STYLE
         bg_data.attrs["axes"] = radial_unit
-        bg_ds = bg_data.create_dataset("I", data=numpy.ascontiguousarray(bg_avg, dtype=numpy.float32))
+        bg_ds = bg_data.create_dataset(
+            "I", data=numpy.ascontiguousarray(bg_avg, dtype=numpy.float32)
+        )
         bg_ds.attrs["interpretation"] = "spectrum"
-        bg_q_ds = bg_data.create_dataset(radial_unit,
-                                         data=numpy.ascontiguousarray(q, dtype=numpy.float32))
+        bg_q_ds = bg_data.create_dataset(
+            radial_unit, data=numpy.ascontiguousarray(q, dtype=numpy.float32)
+        )
         bg_q_ds.attrs["units"] = unit_name
         radius_unit = "nm" if "nm" in unit_name else "Å"
         bg_q_ds.attrs["long_name"] = f"Scattering vector q ({radius_unit}⁻¹)"
-        bg_std_ds = bg_data.create_dataset("errors", data=numpy.ascontiguousarray(bg_std, dtype=numpy.float32))
+        bg_std_ds = bg_data.create_dataset(
+            "errors", data=numpy.ascontiguousarray(bg_std, dtype=numpy.float32)
+        )
         bg_std_ds.attrs["interpretation"] = "spectrum"
         bg_grp.attrs["default"] = posixpath.relpath(bg_data.name, bg_grp.name)
         I_sub = I - bg_avg
-        Istd_sub = numpy.sqrt(sigma ** 2 + bg_std ** 2)
+        Istd_sub = numpy.sqrt(sigma**2 + bg_std**2)
 
         self.to_pyarch["scattering_I"] = I
         self.to_pyarch["scattering_Stdev"] = sigma
@@ -533,7 +595,7 @@ class HPLC(Plugin):
         self.to_pyarch["subtracted_Stdev"] = Istd_sub
         self.to_pyarch["sum_I"] = Isum
 
-    # Process 5: fraction of chromatogram analysis
+        # Process 5: fraction of chromatogram analysis
         fraction_grp = nxs.new_class(entry_grp, "5_SEC_fractions", "NXprocess")
         fraction_grp["sequence_index"] = self.sequence_index()
         fraction_grp["minimum_size"] = window = 10
@@ -541,13 +603,17 @@ class HPLC(Plugin):
         fractions, nfractions = search_peaks(Isum, window)
         self.to_pyarch["merge_frames"] = numpy.zeros((nfractions, 2), dtype=numpy.int32)
         self.to_pyarch["merge_I"] = numpy.zeros((nfractions, nbin), dtype=numpy.float32)
-        self.to_pyarch["merge_Stdev"] = numpy.zeros((nfractions, nbin), dtype=numpy.float32)
+        self.to_pyarch["merge_Stdev"] = numpy.zeros(
+            (nfractions, nbin), dtype=numpy.float32
+        )
 
         if nfractions:
-            for i, fraction in enumerate(scipy.ndimage.find_objects(fractions, nfractions)):
+            for i, fraction in enumerate(
+                scipy.ndimage.find_objects(fractions, nfractions)
+            ):
                 self.one_fraction(fraction[0], i, nxs, fraction_grp)
 
-    # Process 6: All other calculation for ISPyB:
+        # Process 6: All other calculation for ISPyB:
         t = self.build_ispyb_group(nxs, entry_grp)
         self.log_warning(f"Ispyb structure creation took {t:.3f}s")
 
@@ -571,7 +637,11 @@ class HPLC(Plugin):
         sigma = self.to_pyarch["subtracted_Stdev"]
 
         time = self.to_pyarch["time"]
-        f_grp = nxs.new_class(top_grp, f"{time[fraction.start]:.0f}s-{time[fraction.stop]:.0f}s", "NXprocess")
+        f_grp = nxs.new_class(
+            top_grp,
+            f"{time[fraction.start]:.0f}s-{time[fraction.stop]:.0f}s",
+            "NXprocess",
+        )
         f_grp["sequence_index"] = self.sequence_index()
         f_grp["first_frame"] = fraction.start
         f_grp["last_frame"] = fraction.stop
@@ -582,21 +652,27 @@ class HPLC(Plugin):
         avg_data = nxs.new_class(f_grp, "1_average", "NXdata")
         avg_data["sequence_index"] = self.sequence_index()
         avg_data.attrs["SILX_style"] = SAXS_STYLE
-        avg_data.attrs["title"] = f"{sample.name}, frames {fraction.start}-{fraction.stop} averaged, buffer subtracted"
+        avg_data.attrs["title"] = (
+            f"{sample.name}, frames {fraction.start}-{fraction.stop} averaged, buffer subtracted"
+        )
         avg_data.attrs["signal"] = "I"
         avg_data.attrs["axes"] = radial_unit
         f_grp.attrs["default"] = posixpath.relpath(avg_data.name, f_grp.name)
-        avg_q_ds = avg_data.create_dataset(radial_unit,
-                                           data=numpy.ascontiguousarray(q, dtype=numpy.float32))
+        avg_q_ds = avg_data.create_dataset(
+            radial_unit, data=numpy.ascontiguousarray(q, dtype=numpy.float32)
+        )
         avg_q_ds.attrs["units"] = unit_name
         radius_unit = "nm" if "nm" in unit_name else "Å"
         avg_q_ds.attrs["long_name"] = f"Scattering vector q ({radius_unit}⁻¹)"
         I_frc = I_sub[fraction].mean(axis=0)
         fsig2 = sigma[fraction] ** 2
         sigma_frc = numpy.sqrt(fsig2.sum(axis=0)) / fsig2.shape[0]
-        ai2_int_ds = avg_data.create_dataset("I", data=numpy.ascontiguousarray(I_frc, dtype=numpy.float32))
-        ai2_std_ds = avg_data.create_dataset("errors",
-                                             data=numpy.ascontiguousarray(sigma_frc, dtype=numpy.float32))
+        ai2_int_ds = avg_data.create_dataset(
+            "I", data=numpy.ascontiguousarray(I_frc, dtype=numpy.float32)
+        )
+        ai2_std_ds = avg_data.create_dataset(
+            "errors", data=numpy.ascontiguousarray(sigma_frc, dtype=numpy.float32)
+        )
 
         ai2_int_ds.attrs["interpretation"] = "spectrum"
         ai2_int_ds.attrs["units"] = "arbitrary"
@@ -610,7 +686,7 @@ class HPLC(Plugin):
         self.to_pyarch["merge_I"][index] = I_frc
         self.to_pyarch["merge_Stdev"][index] = sigma_frc
 
-    # Process 4: Guinier analysis
+        # Process 4: Guinier analysis
         guinier_grp = nxs.new_class(f_grp, "2_Guinier_analysis", "NXprocess")
         guinier_grp["sequence_index"] = self.sequence_index()
         guinier_grp["program"] = "freesas.autorg"
@@ -622,7 +698,7 @@ class HPLC(Plugin):
         guinier_data = nxs.new_class(guinier_grp, "result", "NXdata")
         guinier_data.attrs["SILX_style"] = NORMAL_STYLE
         guinier_data.attrs["title"] = "Guinier analysis"
-    # Stage4 processing: autorg and auto_gpa
+        # Stage4 processing: autorg and auto_gpa
         sasm = numpy.vstack((q, I_frc, sigma_frc)).T
         try:
             gpa = auto_gpa(sasm)
@@ -699,7 +775,7 @@ class HPLC(Plugin):
             guinier = None
             guinier_data["source"] = "None"
 
-    # Stage #4 Guinier plot generation:
+        # Stage #4 Guinier plot generation:
 
         q, I, err = sasm.T[:3]  # noqa
         mask = (I > 0) & numpy.isfinite(I) & (q > 0) & numpy.isfinite(q)
@@ -708,7 +784,7 @@ class HPLC(Plugin):
         mask = mask.astype(bool)
         if guinier:
             intercept = numpy.log(guinier.I0)
-            slope = -guinier.Rg ** 2 / 3.0
+            slope = -(guinier.Rg**2) / 3.0
             invalid = numpy.where(q > 1.5 / guinier.Rg)[0]
             if invalid.size:
                 end = invalid[0]
@@ -736,13 +812,17 @@ class HPLC(Plugin):
         guinier_data_attrs["signal"] = "logI"
         guinier_data_attrs["axes"] = "q2"
         guinier_data_attrs["auxiliary_signals"] = "fit"
-        guinier_grp.attrs["default"] = posixpath.relpath(guinier_data.name, guinier_grp.name)
+        guinier_grp.attrs["default"] = posixpath.relpath(
+            guinier_data.name, guinier_grp.name
+        )
         if guinier is None:
             f_grp.attrs["default"] = posixpath.relpath(avg_data.name, f_grp.name)
-            self.log_error("No Guinier region found, data of dubious quality", do_raise=False)
+            self.log_error(
+                "No Guinier region found, data of dubious quality", do_raise=False
+            )
             return
 
-    # Process 5: Kratky plot
+        # Process 5: Kratky plot
         kratky_grp = nxs.new_class(f_grp, "3_dimensionless_Kratky_plot", "NXprocess")
         kratky_grp["sequence_index"] = self.sequence_index()
         kratky_grp["program"] = "freesas.autorg"
@@ -751,9 +831,11 @@ class HPLC(Plugin):
         kratky_data = nxs.new_class(kratky_grp, "result", "NXdata")
         kratky_data.attrs["SILX_style"] = NORMAL_STYLE
         kratky_data.attrs["title"] = "Dimensionless Kratky plots"
-        kratky_grp.attrs["default"] = posixpath.relpath(kratky_data.name, kratky_grp.name)
+        kratky_grp.attrs["default"] = posixpath.relpath(
+            kratky_data.name, kratky_grp.name
+        )
 
-    # Stage #5 Kratky plot generation:
+        # Stage #5 Kratky plot generation:
         Rg = guinier.Rg
         I0 = guinier.I0
         xdata = q * Rg
@@ -771,7 +853,7 @@ class HPLC(Plugin):
         kratky_data_attrs["signal"] = k_ds.name
         kratky_data_attrs["axes"] = qRg_ds.name
 
-    # stage 6: Rambo-Tainer invariant
+        # stage 6: Rambo-Tainer invariant
         rti_grp = nxs.new_class(f_grp, "4_invariants", "NXprocess")
         rti_grp["sequence_index"] = self.sequence_index()
         rti_grp["program"] = "freesas.invariants"
@@ -807,8 +889,10 @@ class HPLC(Plugin):
         volume_ds.attrs["unit"] = "nm³"
         volume_ds.attrs["formula"] = "Porod: V = 2*π²I₀²/(sum_q I(q)q² dq)"
 
-    # stage 7: Pair distribution function, what is the equivalent of datgnom
-        bift_grp = nxs.new_class(f_grp, "5_indirect_Fourier_transformation", "NXprocess")
+        # stage 7: Pair distribution function, what is the equivalent of datgnom
+        bift_grp = nxs.new_class(
+            f_grp, "5_indirect_Fourier_transformation", "NXprocess"
+        )
         bift_grp["sequence_index"] = self.sequence_index()
         bift_grp["program"] = "freesas.bift"
         bift_grp["version"] = freesas.version
@@ -818,7 +902,7 @@ class HPLC(Plugin):
         bift_data.attrs["title"] = "Pair distance distribution function p(r)"
 
         cfg_grp = nxs.new_class(bift_grp, "configuration", "NXcollection")
-    # Process stage7, i.e. perform the IFT
+        # Process stage7, i.e. perform the IFT
         try:
             bo = BIFT(q, I, err)
             cfg_grp["Rg"] = guinier.Rg
@@ -833,22 +917,25 @@ class HPLC(Plugin):
             cfg_grp["alpha_inf"] = 1 / alpha_max
             cfg_grp["alpha_scan_steps"] = 11
 
-            key = bo.grid_scan(Dmax, Dmax, 1,
-                               1.0 / alpha_max, alpha_max, 11, npt)
+            key = bo.grid_scan(Dmax, Dmax, 1, 1.0 / alpha_max, alpha_max, 11, npt)
             Dmax, alpha = key[:2]
             # Then scan on Dmax:
             cfg_grp["Dmax_sup"] = guinier.Rg * 4
             cfg_grp["Dmax_inf"] = guinier.Rg * 2
             cfg_grp["Dmax_scan_steps"] = 5
-            key = bo.grid_scan(guinier.Rg * 2, guinier.Rg * 4, 5,
-                               alpha, alpha, 1, npt)
+            key = bo.grid_scan(guinier.Rg * 2, guinier.Rg * 4, 5, alpha, alpha, 1, npt)
             Dmax, alpha = key[:2]
             if bo.evidence_cache[key].converged:
                 bo.update_wisdom()
                 use_wisdom = True
             else:
                 use_wisdom = False
-            res = minimize(bo.opti_evidence, (Dmax, log(alpha)), args=(npt, use_wisdom), method="powell")
+            res = minimize(
+                bo.opti_evidence,
+                (Dmax, log(alpha)),
+                args=(npt, use_wisdom),
+                method="powell",
+            )
             cfg_grp["Powell_steps"] = res.nfev
             cfg_grp["Monte-Carlo_steps"] = 0
             stats = bo.calc_stats()
@@ -871,12 +958,16 @@ class HPLC(Plugin):
             bift_grp["I0"] = stats.I0_avg
             bift_grp["I0_error"] = stats.I0_std
             # Now the plot:
-            r_ds = bift_data.create_dataset("r", data=stats.radius.astype(numpy.float32))
+            r_ds = bift_data.create_dataset(
+                "r", data=stats.radius.astype(numpy.float32)
+            )
             r_ds.attrs["interpretation"] = "spectrum"
 
             r_ds.attrs["unit"] = radius_unit
             r_ds.attrs["long_name"] = f"radius r({radius_unit})"
-            p_ds = bift_data.create_dataset("p(r)", data=stats.density_avg.astype(numpy.float32))
+            p_ds = bift_data.create_dataset(
+                "p(r)", data=stats.density_avg.astype(numpy.float32)
+            )
             p_ds.attrs["interpretation"] = "spectrum"
             bift_data["errors"] = stats.density_std
             bift_data.attrs["signal"] = "p(r)"
@@ -885,7 +976,9 @@ class HPLC(Plugin):
             r = stats.radius
             T = numpy.outer(q, r / pi)
             T = (4 * pi * (r[-1] - r[0]) / (len(r) - 1)) * numpy.sinc(T)
-            bift_ds = avg_data.create_dataset("BIFT", data=T.dot(stats.density_avg).astype(numpy.float32))
+            bift_ds = avg_data.create_dataset(
+                "BIFT", data=T.dot(stats.density_avg).astype(numpy.float32)
+            )
             bift_ds.attrs["interpretation"] = "spectrum"
             avg_data.attrs["auxiliary_signals"] = "BIFT"
             bift_grp.attrs["default"] = posixpath.relpath(bift_data.name, bift_grp.name)
@@ -905,28 +998,55 @@ class HPLC(Plugin):
                 dataset[mask] = 0.0
             return numpy.ascontiguousarray(dataset, dtype=dtype)
 
-        keys = ["buffer_frames", "buffer_I", "buffer_Stdev", "Dmax", "gnom", "I0", "I0_Stdev", "mass", "mass_Stdev", "merge_frames", "merge_I", "merge_Stdev",
-                "q", "Qr", "Qr_Stdev", "quality", "Rg", "Rg_Stdev", "scattering_I", "scattering_Stdev", "subtracted_I", "subtracted_Stdev", "sum_I",
-                "time", "total", "Vc", "Vc_Stdev", "volume"]
-        keys_extra = {"Dmax": "Maximum diameter from IFT, skipped",
-                      "gnom": "Radius of gyration from IFT, skipped",
-                      "I0": "Forward scattering from GPA",
-                      "I0_Stdev": "Uncertainty on forward scattering",
-                      "mass": "Estimated protein weight from RT analysis",
-                      "mass_Stdev": "Uncertainty on the mass",
-                      "Qr": "RT invariant",
-                      "Qr_Stdev":"Uncertainty on RT invariant",
-                      "quality": "Quality estimated from GPA",
-                      "Rg": "radius of gyration obtained from GPA",
-                      "Rg_Stdev": "uncertainty on Rg",
-                      "total": "skipped",
-                      "Vc": "Volume of correlation obtained from RT",
-                      "Vc_Stdev": "Uncertainty on volume",
-                      "volume": "Molecular volume obtained from Porrod analysis",
-                      "sum_I": "Total scattering of the frame",
-                      "time": "Timestamps",
-
-                      }
+        keys = [
+            "buffer_frames",
+            "buffer_I",
+            "buffer_Stdev",
+            "Dmax",
+            "gnom",
+            "I0",
+            "I0_Stdev",
+            "mass",
+            "mass_Stdev",
+            "merge_frames",
+            "merge_I",
+            "merge_Stdev",
+            "q",
+            "Qr",
+            "Qr_Stdev",
+            "quality",
+            "Rg",
+            "Rg_Stdev",
+            "scattering_I",
+            "scattering_Stdev",
+            "subtracted_I",
+            "subtracted_Stdev",
+            "sum_I",
+            "time",
+            "total",
+            "Vc",
+            "Vc_Stdev",
+            "volume",
+        ]
+        keys_extra = {
+            "Dmax": "Maximum diameter from IFT, skipped",
+            "gnom": "Radius of gyration from IFT, skipped",
+            "I0": "Forward scattering from GPA",
+            "I0_Stdev": "Uncertainty on forward scattering",
+            "mass": "Estimated protein weight from RT analysis",
+            "mass_Stdev": "Uncertainty on the mass",
+            "Qr": "RT invariant",
+            "Qr_Stdev": "Uncertainty on RT invariant",
+            "quality": "Quality estimated from GPA",
+            "Rg": "radius of gyration obtained from GPA",
+            "Rg_Stdev": "uncertainty on Rg",
+            "total": "skipped",
+            "Vc": "Volume of correlation obtained from RT",
+            "Vc_Stdev": "Uncertainty on volume",
+            "volume": "Molecular volume obtained from Porrod analysis",
+            "sum_I": "Total scattering of the frame",
+            "time": "Timestamps",
+        }
         start_time = time.perf_counter()
         ispyb_grp = nxs.new_class(top_grp, "6_ISPyB ", "NXcollection")
         ispyb_grp["sequence_index"] = self.sequence_index()
@@ -937,29 +1057,64 @@ class HPLC(Plugin):
 
         q = self.juices[0].q.astype(numpy.float64)
         ds = ispyb_grp.create_dataset("q", data=normalize(q, dtype=numpy.float32))
-        ds.attrs["info"] = "Scattering vector length, common for all scattering intensities"
+        ds.attrs["info"] = (
+            "Scattering vector length, common for all scattering intensities"
+        )
 
-        ds = ispyb_grp.create_dataset("buffer_frames", data=self.to_pyarch["buffer_frames"])
-        ds.attrs["info"] = "Index of frames used to calculate the background scattring (buffer frames)"
-        ds = ispyb_grp.create_dataset("buffer_I", data=normalize(self.to_pyarch["buffer_I"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset(
+            "buffer_frames", data=self.to_pyarch["buffer_frames"]
+        )
+        ds.attrs["info"] = (
+            "Index of frames used to calculate the background scattring (buffer frames)"
+        )
+        ds = ispyb_grp.create_dataset(
+            "buffer_I", data=normalize(self.to_pyarch["buffer_I"], dtype=numpy.float32)
+        )
         ds.attrs["info"] = "Averaged background scattering signal (buffer)"
-        ds = ispyb_grp.create_dataset("buffer_Stdev", data=normalize(self.to_pyarch["buffer_Stdev"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset(
+            "buffer_Stdev",
+            data=normalize(self.to_pyarch["buffer_Stdev"], dtype=numpy.float32),
+        )
         ds.attrs["info"] = "Standard deviation of background scattering signal (buffer)"
-        ds = ispyb_grp.create_dataset("merge_frames", data=normalize(self.to_pyarch["merge_frames"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset(
+            "merge_frames",
+            data=normalize(self.to_pyarch["merge_frames"], dtype=numpy.float32),
+        )
         ds.attrs["info"] = "Frames merged for each fraction"
-        ds = ispyb_grp.create_dataset("merge_I", data=normalize(self.to_pyarch["merge_I"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset(
+            "merge_I", data=normalize(self.to_pyarch["merge_I"], dtype=numpy.float32)
+        )
         ds.attrs["info"] = "Scattering from merged frames in each fraction"
-        ds = ispyb_grp.create_dataset("merge_Stdev", data=normalize(self.to_pyarch["merge_Stdev"], dtype=numpy.float32))
-        ds.attrs["info"] = "Uncertainties on scattering from merged frames in each fraction"
+        ds = ispyb_grp.create_dataset(
+            "merge_Stdev",
+            data=normalize(self.to_pyarch["merge_Stdev"], dtype=numpy.float32),
+        )
+        ds.attrs["info"] = (
+            "Uncertainties on scattering from merged frames in each fraction"
+        )
         "", "", "", ""
-        ds = ispyb_grp.create_dataset("scattering_I", data=normalize(self.to_pyarch["scattering_I"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset(
+            "scattering_I",
+            data=normalize(self.to_pyarch["scattering_I"], dtype=numpy.float32),
+        )
         ds.attrs["info"] = "Scattering of each individual frame"
-        ds = ispyb_grp.create_dataset("scattering_Stdev", data=normalize(self.to_pyarch["scattering_Stdev"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset(
+            "scattering_Stdev",
+            data=normalize(self.to_pyarch["scattering_Stdev"], dtype=numpy.float32),
+        )
         ds.attrs["info"] = "Uncertainties on the scattering of each individual frame"
-        ds = ispyb_grp.create_dataset("subtracted_I", data=normalize(self.to_pyarch["subtracted_I"], dtype=numpy.float32))
+        ds = ispyb_grp.create_dataset(
+            "subtracted_I",
+            data=normalize(self.to_pyarch["subtracted_I"], dtype=numpy.float32),
+        )
         ds.attrs["info"] = "Background subtracted scattering of each individual frame"
-        ds = ispyb_grp.create_dataset("subtracted_Stdev", data=normalize(self.to_pyarch["subtracted_Stdev"], dtype=numpy.float32))
-        ds.attrs["info"] = "Uncertainties on background subtracted scattering of each individual frame"
+        ds = ispyb_grp.create_dataset(
+            "subtracted_Stdev",
+            data=normalize(self.to_pyarch["subtracted_Stdev"], dtype=numpy.float32),
+        )
+        ds.attrs["info"] = (
+            "Uncertainties on background subtracted scattering of each individual frame"
+        )
 
         for k1 in keys_extra:
             if k1 not in self.to_pyarch:
@@ -981,17 +1136,23 @@ class HPLC(Plugin):
             except Exception:
                 guinier = rti = porod = None
             if guinier is not None:
-                for k, v in zip(["Rg", "Rg_Stdev", "I0", "I0_Stdev", "quality"],
-                               ['Rg', 'sigma_Rg', 'I0', 'sigma_I0', 'quality']):
+                for k, v in zip(
+                    ["Rg", "Rg_Stdev", "I0", "I0_Stdev", "quality"],
+                    ["Rg", "sigma_Rg", "I0", "sigma_I0", "quality"],
+                ):
                     self.to_pyarch[k][i] = guinier.__getattribute__(v)
             if rti is not None:
-                for k, v in zip(["Vc", "Vc_Stdev", "Qr", "Qr_Stdev", "mass", "mass_Stdev"],
-                                ['Vc', 'sigma_Vc', 'Qr', 'sigma_Qr', 'mass', 'sigma_mass']):
+                for k, v in zip(
+                    ["Vc", "Vc_Stdev", "Qr", "Qr_Stdev", "mass", "mass_Stdev"],
+                    ["Vc", "sigma_Vc", "Qr", "sigma_Qr", "mass", "sigma_mass"],
+                ):
                     self.to_pyarch[k][i] = rti.__getattribute__(v)
             if porod is not None:
                 self.to_pyarch["volume"][i] = porod
         for k, v in keys_extra.items():
-            ds = ispyb_grp.create_dataset(k, data=normalize(self.to_pyarch[k], dtype=numpy.float32))
+            ds = ispyb_grp.create_dataset(
+                k, data=normalize(self.to_pyarch[k], dtype=numpy.float32)
+            )
             ds.attrs["info"] = v
 
         # create all symbolic links at the top level for Ispyb compatibility
@@ -1002,7 +1163,7 @@ class HPLC(Plugin):
 
     @staticmethod
     def read_nexus(filename):
-        "return some NexusJuice from a HDF5 file "
+        "return some NexusJuice from a HDF5 file"
         with Nexus(filename, "r") as nxsr:
             entry_name = nxsr.h5.attrs["default"]
             entry_grp = nxsr.h5[entry_name]
@@ -1015,7 +1176,7 @@ class HPLC(Plugin):
             idx = nxdata_grp[axis][()]
             integrated = nxdata_grp.parent["result"]
             signal = integrated.attrs["signal"]
-            I = integrated[signal][()]  #noqa
+            I = integrated[signal][()]  # noqa
             axes = integrated.attrs["axes"][-1]
             q = integrated[axes][()]
             sigma = integrated["errors"][()]
@@ -1027,26 +1188,46 @@ class HPLC(Plugin):
             if not os.path.exists(poni):
                 poni = str(integration_grp["configuration/data"][()]).strip()
             polarization = integration_grp["configuration/polarization_factor"][()]
-            method = IntegrationMethod.select_method(**json.loads(integration_grp["configuration/integration_method"][()]))[0]
+            method = IntegrationMethod.select_method(
+                **json.loads(integration_grp["configuration/integration_method"][()])
+            )[0]
             instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
             detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]
             mask = detector_grp["pixel_mask"].attrs["filename"]
             mono_grp = nxsr.get_class(instrument_grp, class_type="NXmonochromator")[0]
             energy = mono_grp["energy"][()]
-#             img_grp = nxsr.get_class(entry_grp["3_time_average"], class_type="NXdata")[0]
-#             image2d = img_grp["intensity_normed"][()]
-#             error2d = img_grp["intensity_std"][()]
+            #             img_grp = nxsr.get_class(entry_grp["3_time_average"], class_type="NXdata")[0]
+            #             image2d = img_grp["intensity_normed"][()]
+            #             error2d = img_grp["intensity_std"][()]
             # Read the sample description:
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
             sample_name = posixpath.split(sample_grp.name)[-1]
 
             buffer = sample_grp["buffer"][()] if "buffer" in sample_grp else ""
-            concentration = sample_grp["concentration"][()] if "concentration" in sample_grp else ""
-            description = sample_grp["description"][()] if "description" in sample_grp else ""
+            concentration = (
+                sample_grp["concentration"][()] if "concentration" in sample_grp else ""
+            )
+            description = (
+                sample_grp["description"][()] if "description" in sample_grp else ""
+            )
             hplc = sample_grp["hplc"][()] if "hplc" in sample_grp else ""
-            temperature = sample_grp["temperature"][()] if "temperature" in sample_grp else ""
-            temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
-            sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
+            temperature = (
+                sample_grp["temperature"][()] if "temperature" in sample_grp else ""
+            )
+            temperature_env = (
+                sample_grp["temperature_env"][()]
+                if "temperature_env" in sample_grp
+                else ""
+            )
+            sample = Sample(
+                sample_name,
+                description,
+                buffer,
+                concentration,
+                hplc,
+                temperature_env,
+                temperature,
+            )
             meas_grp = nxsr.get_class(entry_grp, class_type="NXdata")[0]
             timestamps = []
             for ts_name in ("timestamps", "time-stamps"):
@@ -1058,18 +1239,40 @@ class HPLC(Plugin):
             else:
                 diode = []
 
-        return NexusJuice(filename, h5path, npt, unit, idx, Isum, q, I, sigma, poni, mask, energy, polarization, method, sample, timestamps, diode)
+        return NexusJuice(
+            filename,
+            h5path,
+            npt,
+            unit,
+            idx,
+            Isum,
+            q,
+            I,
+            sigma,
+            poni,
+            mask,
+            energy,
+            polarization,
+            method,
+            sample,
+            timestamps,
+            diode,
+        )
         "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps diode"
 
     def build_plot(self):
         """Create a chromatogram in the gallery"""
-        gallery = os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery")
-        filename = os.path.join(gallery, 'chromatogram.png')
+        gallery = os.path.join(
+            os.path.dirname(os.path.abspath(self.output_file)), "gallery"
+        )
+        filename = os.path.join(gallery, "chromatogram.png")
         if not os.path.isdir(gallery):
             try:
                 os.makedirs(gallery)
             except Exception as err:
-                self.log_warning(f"Unable to create directory {gallery}; {err.__class__.__name__}: {err}")
+                self.log_warning(
+                    f"Unable to create directory {gallery}; {err.__class__.__name__}: {err}"
+                )
                 return
         sample = self.to_pyarch.get("sample_name", "sample")
         chromatogram = self.to_pyarch.get("sum_I")
@@ -1078,21 +1281,22 @@ class HPLC(Plugin):
             fractions = self.to_pyarch.get("merge_frames")
             if fractions is not None:
                 fractions.sort()
-            hplc_plot(chromatogram,
-                      timestamps=self.to_pyarch.get("time"),
-                      fractions=fractions,
-                      title=f"Chromatograms of {sample}",
-                      filename=filename,
-                      img_format="png",
-                      uv_data=self.uv_data)
+            hplc_plot(
+                chromatogram,
+                timestamps=self.to_pyarch.get("time"),
+                fractions=fractions,
+                title=f"Chromatograms of {sample}",
+                filename=filename,
+                img_format="png",
+                uv_data=self.uv_data,
+            )
             self.output["chromatogram_file"] = filename
-
 
     def send_to_ispyb(self):
         """Data sent to ISPyB are:
-            * hdf5File
-            * jsonFile built from HDF5
-            * hplcPlot various plots generated
+        * hdf5File
+        * jsonFile built from HDF5
+        * hplcPlot various plots generated
         """
         if self.ispyb and self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
@@ -1105,17 +1309,25 @@ class HPLC(Plugin):
         to_icat["experiment_type"] = "hplc"
         to_icat["sample"] = self.juices[0].sample
         if "volume" in to_icat:
-                to_icat.pop("volume")
+            to_icat.pop("volume")
         metadata = {"scanType": "hplc"}
-        gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery")
-        self.save_csv(os.path.join(gallery, "chromatogram.csv"), to_icat.get("sum_I"), to_icat.get("Rg"))
-        return send_icat(sample=self.juices[0].sample,
-                         raw=os.path.dirname(os.path.abspath(self.input_files[0])),
-                         path=os.path.dirname(os.path.abspath(self.output_file)),
-                         data=to_icat,
-                         dataset="HPLC",
-                         gallery=gallery,
-                         metadata=metadata)
+        gallery = self.ispyb.gallery or os.path.join(
+            os.path.dirname(os.path.abspath(self.output_file)), "gallery"
+        )
+        self.save_csv(
+            os.path.join(gallery, "chromatogram.csv"),
+            to_icat.get("sum_I"),
+            to_icat.get("Rg"),
+        )
+        return send_icat(
+            sample=self.juices[0].sample,
+            raw=os.path.dirname(os.path.abspath(self.input_files[0])),
+            path=os.path.dirname(os.path.abspath(self.output_file)),
+            data=to_icat,
+            dataset="HPLC",
+            gallery=gallery,
+            metadata=metadata,
+        )
 
     def save_csv(self, filename, sum_I, Rg):
         dirname = os.path.dirname(filename)
@@ -1125,11 +1337,7 @@ class HPLC(Plugin):
         idx = 0
         for I, rg in zip(sum_I, Rg):  # noqa
             lines.append(f"{idx},{I},{rg}")
-            idx+=1
+            idx += 1
         lines.append("")
         with open(filename, "w") as csv:
             csv.write(os.linesep.join(lines))
-
-
-
-
