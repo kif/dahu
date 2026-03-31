@@ -486,7 +486,7 @@ class HPLC(Plugin):
         logi = numpy.arcsinh(I.T)
         U, S, V = numpy.linalg.svd(logi, full_matrices=False)
 
-        # Number of Eignevector to keep:
+        # Number of Eigenvector to keep:
         svd_grp["Ref"] = "https://arxiv.org/pdf/1305.5870.pdf"
         beta = nframes / nbin if nframes <= nbin else 1.0
         omega = 0.56 * beta**3 - 0.95 * beta**2 + 1.82 * beta + 1.43
