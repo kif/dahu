@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/03/2026"
+__date__ = "31/03/2026"
 __status__ = "development"
 __version__ = "0.4.1"
 
@@ -637,9 +637,10 @@ class HPLC(Plugin):
         sigma = self.to_pyarch["subtracted_Stdev"]
 
         time = self.to_pyarch["time"]
+        time_slice = f"{time[fraction.start]:.0f}s-{time[min(fraction.stop, time.size-1)]:.0f}s"
         f_grp = nxs.new_class(
             top_grp,
-            f"{time[fraction.start]:.0f}s-{time[fraction.stop]:.0f}s",
+            time_slice,
             "NXprocess",
         )
         f_grp["sequence_index"] = self.sequence_index()
@@ -653,7 +654,7 @@ class HPLC(Plugin):
         avg_data["sequence_index"] = self.sequence_index()
         avg_data.attrs["SILX_style"] = SAXS_STYLE
         avg_data.attrs["title"] = (
-            f"{sample.name}, frames {fraction.start}-{fraction.stop} averaged, buffer subtracted"
+            f"{sample.name}, frames {fraction.start}-{fraction.stop} averaged ({time_slice}), buffer subtracted"
         )
         avg_data.attrs["signal"] = "I"
         avg_data.attrs["axes"] = radial_unit
