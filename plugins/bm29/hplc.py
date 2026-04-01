@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "31/03/2026"
+__date__ = "01/04/2026"
 __status__ = "development"
 __version__ = "0.4.1"
 
@@ -377,22 +377,20 @@ class HPLC(Plugin):
         sigma[idx] = numpy.vstack([i.sigma for i in self.juices])
 
         # Process 0.5: preprocessing
+        diode_raw = numpy.concatenate([i.diode for i in self.juices])
         medfilt_order = self.input.get("diode_medfilt", 0)
         if medfilt_order >= 2:
             preproc_grp = nxs.new_class(entry_grp, "0_pre-process", "NXprocess")
             preproc_grp["sequence_index"] = self.sequence_index()
             preproc_grp["filter_used"] = "scipy.ndimage.median_filter"
             preproc_grp["filter_size"] = medfilt_order
-            diode_raw = numpy.concatenate([i.diode for i in self.juices])
+
             # diode_smooth = scipy.signal.medfilt(diode_raw, medfilt_order)
             diode_smooth = scipy.ndimage.median_filter(
-                diode_raw, medfilt_order, mode="mirror"
-            )
-            noise = (
-                100
-                * (((diode_raw - diode_smooth) ** 2).mean()) ** 0.5
-                / diode_raw.mean()
-            )
+                                    diode_raw, medfilt_order,
+                                    mode="mirror")
+            noise = (100.0 * (((diode_raw - diode_smooth) ** 2).mean()) ** 0.5 /
+                                    diode_raw.mean())
             preproc_grp.create_dataset("noise", data=noise).attrs["unit"] = r"%"
             preproc_grp.create_dataset("diode_raw", data=diode_raw).attrs[
                 "interpretation"
@@ -404,6 +402,9 @@ class HPLC(Plugin):
             I *= numpy.atleast_2d(scale).T  # noqa
             Isum *= scale
             sigma *= numpy.atleast_2d(scale).T
+            diode = diode_smooth
+        else:
+            diode = diode_raw
 
         # Process 1: Chromatogram
         chroma_grp = nxs.new_class(entry_grp, "1_chromatogram", "NXprocess")
@@ -440,6 +441,15 @@ class HPLC(Plugin):
         sum_ds.attrs["SILX_style"] = NORMAL_STYLE
         frame_ds = hplc_data.create_dataset("frame_ids", data=ids, dtype=numpy.uint32)
         frame_ds.attrs["interpretation"] = "spectrum"
+
+        sum_ds = hplc_data.create_dataset("diode", data=diode, dtype=numpy.float32)
+        sum_ds.attrs["interpretation"] = "spectrum"
+        sum_ds.attrs["long_name"] = "Beam-stop diode signal"
+        sum_ds.attrs["SILX_style"] = NORMAL_STYLE
+
+        frame_ds = hplc_data.create_dataset("frame_ids", data=ids, dtype=numpy.uint32)
+        frame_ds.attrs["interpretation"] = "spectrum"
+
 
         frame_ds.attrs["long_name"] = "frame index"
         hplc_data.attrs["signal"] = "sum"
