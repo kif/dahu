@@ -439,8 +439,6 @@ class HPLC(Plugin):
         sum_ds.attrs["interpretation"] = "spectrum"
         sum_ds.attrs["long_name"] = "Summed Intensity"
         sum_ds.attrs["SILX_style"] = NORMAL_STYLE
-        frame_ds = hplc_data.create_dataset("frame_ids", data=ids, dtype=numpy.uint32)
-        frame_ds.attrs["interpretation"] = "spectrum"
 
         sum_ds = hplc_data.create_dataset("diode", data=diode, dtype=numpy.float32)
         sum_ds.attrs["interpretation"] = "spectrum"
@@ -449,9 +447,8 @@ class HPLC(Plugin):
 
         frame_ds = hplc_data.create_dataset("frame_ids", data=ids, dtype=numpy.uint32)
         frame_ds.attrs["interpretation"] = "spectrum"
-
-
         frame_ds.attrs["long_name"] = "frame index"
+
         hplc_data.attrs["signal"] = "sum"
         hplc_data.attrs["axes"] = "timestamps"  # "frame_ids"
         chroma_grp.attrs["default"] = posixpath.relpath(hplc_data.name, chroma_grp.name)
