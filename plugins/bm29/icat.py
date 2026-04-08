@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/03/2026"
+__date__ = "08/04/2026"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -57,7 +57,6 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     :return: data sent to icat as a dict
     """
     gallery = _ensure_gallery(gallery)
-    print(gallery)
     tmp = gallery.strip("/").split("/")
     idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")]
     if idx_process:
@@ -162,6 +161,5 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
               "path":path,
               "metadata":metadata,
               "raw":raw}
-    #print(kwargs)
     icat_client.store_processed_data(**kwargs)
     return kwargs
