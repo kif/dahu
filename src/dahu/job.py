@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 #
 """
-Data Analysis RPC server over Tango: 
+Data Analysis RPC server over Tango:
 
 Contains the Job class which handles jobs.
 A static part of the class contains statistics of the class
@@ -12,7 +12,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/02/2025"
+__date__ = "11/03/2026"
 __status__ = "production"
 
 from threading import Thread, Semaphore
@@ -24,11 +24,11 @@ import six
 import json
 import logging
 import traceback
-logger = logging.getLogger("dahu.job")
-# logger.setLevel(logging.DEBUG)
 from . import utils
 from .factory import plugin_factory
 from .utils import NumpyEncoder
+logger = logging.getLogger("dahu.job")
+# logger.setLevel(logging.DEBUG)
 
 # Python 2to3 compatibility
 StringTypes = (six.binary_type, six.text_type)

@@ -1,6 +1,6 @@
 # coding: utf-8
 #
-#    Copyright (C) 2012-2016 European Synchrotron Radiation Facility, Grenoble, France
+#    Copyright (C) 2012-2026 European Synchrotron Radiation Facility, Grenoble, France
 #
 #    Principal author:       Jérôme Kieffer (Jerome.Kieffer@ESRF.eu)
 #
@@ -27,33 +27,26 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "jerome.kieffer@esrf.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "04/12/2024"
+__date__ = "11/03/2026"
 
-PACKAGE = "dahu"
-DATA_KEY = "DAHU_DATA"
-
-if __name__ == "__main__":
-    __name__ = "dahu.test"
 
 import os
 import sys
 import getpass
-import subprocess
-import threading
 import unittest
 import logging
-try:  # Python3
-    from urllib.request import urlopen, ProxyHandler, build_opener, URLError
-except ImportError:  # Python2
-    from urllib2 import urlopen, ProxyHandler, build_opener, URLError
-# import urllib2
+from urllib.request import urlopen, ProxyHandler, build_opener, URLError
 import numpy
 import shutil
 import json
 import tempfile
+from argparse import ArgumentParser
+import threading
+
+PACKAGE = "dahu"
+DATA_KEY = "DAHU_DATA"
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger("%s.utilstest" % PACKAGE)
-
 TEST_HOME = os.path.dirname(os.path.abspath(__file__))
 
 
@@ -134,9 +127,9 @@ class UtilsTest(object):
                 imagename = "2252/testimages.tar.bz2 unzip it "
             raise RuntimeError(f"""Could not automatically download test images!
 If you are behind a firewall, please set both environment variable http_proxy and https_proxy.
-This even works under windows ! 
-Otherwise please try to download the images manually from: 
-{cls.url_base}/{imagename} 
+This even works under windows !
+Otherwise please try to download the images manually from:
+{cls.url_base}/{imagename}
 and put it in in test/testimages.""")
 
     @classmethod
@@ -221,10 +214,7 @@ Otherwise, please try to download the images manually from:
         Parse the command line to analyse options ... returns options
         """
         if cls.options is None:
-            try:
-                from argparse import ArgumentParser
-            except:
-                from pyFAI.third_party.argparse import ArgumentParser
+
 
             parser = ArgumentParser(usage="Tests for %s" % cls.name)
             parser.add_argument("-d", "--debug", dest="debug", help="run in debugging mode",
@@ -365,9 +355,9 @@ def diff_crv(ref, obt, comment=""):
         fig = plt.figure()
         ax1 = fig.add_subplot(1, 2, 1)
         ax2 = fig.add_subplot(1, 2, 2)
-        im_ref = ax1.plot(ref, label="%s ref" % comment)
-        im_obt = ax1.plot(obt, label="%s obt" % comment)
-        im_delta = ax2.plot(delta, label="delta")
+        ax1.plot(ref, label="%s ref" % comment)
+        ax1.plot(obt, label="%s obt" % comment)
+        ax2.plot(delta, label="delta")
         fig.show()
         from pyFAI.utils import input
         input()
@@ -398,3 +388,7 @@ class ParameterisedTestCase(unittest.TestCase):
             for name in testnames:
                 suite.addTest(testcase_klass(name, param=param))
         return suite
+
+
+if __name__ == "__main__":
+    __name__ = "dahu.test"

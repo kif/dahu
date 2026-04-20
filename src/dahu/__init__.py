@@ -24,7 +24,7 @@
 # ###########################################################################*/
 
 """
-Data Analysis Highly tailored for Upbl09a 
+Data Analysis Highly tailored for Upbl09a
 """
 
 from __future__ import with_statement, print_function, absolute_import, division
@@ -33,18 +33,18 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "03/02/2025"
+__date__ = "11/03/2026"
 __status__ = "production"
 
 import os
+from . import utils as utils
+from .factory import plugin_factory as plugin_factory
+from . import plugin as plugin
+from . import job as job
+
 project = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
 try:
     from .version import __date__ as date  # noqa
     from .version import version, version_info, hexversion, strictversion, citation  # noqa
 except ImportError:
     raise RuntimeError("Do NOT use %s from its sources: build it and use the built version" % project)
-
-from . import utils
-from .factory import plugin_factory
-from . import plugin
-from . import job

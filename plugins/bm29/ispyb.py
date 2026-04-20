@@ -4,24 +4,28 @@
 """Data Analysis plugin for BM29: BioSaxs
 
 Everything to send data to Ispyb
- 
+
 """
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "24/02/2025" 
+__date__ = "09/03/2026"
 __status__ = "development"
-version = "0.2.3"
+__version__ = "0.2.3"
+
 
 import logging
-logger = logging.getLogger("bm29.ispyb")
 import os
 import shutil
 import json
 import tempfile
 import numpy
+from freesas.plot import kratky_plot, guinier_plot, scatter_plot, density_plot
+import matplotlib.pyplot
+
+logger = logging.getLogger("bm29.ispyb")
 try:
     from suds.client import Client
     from suds.transport.https import HttpAuthenticated
@@ -34,10 +38,8 @@ except ImportError:
     print("iCat connection will no work")
     IcatClient = None
 
-import matplotlib.pyplot
+
 matplotlib.use("Agg")
-from freesas.containers import RG_RESULT, RT_RESULT, StatsResult
-from freesas.plot import kratky_plot, guinier_plot, scatter_plot, density_plot, hplc_plot
 
 
 class NumpyEncoder(json.JSONEncoder):
@@ -91,7 +93,7 @@ class IspybConnector:
 
         self.experiment_id = experiment_id
         self.run_number = run_number
-        
+
 
     def __repr__(self):
         return f"Ispyb connector to {self._url}"
@@ -99,7 +101,7 @@ class IspybConnector:
     def send_icat(self, proposal=None, beamline=None, sample=None, dataset=None, path=None, raw=None,  data=None):
         """
         DEPRECATED CODE !
-        
+
         :param proposal: mx1324
         :param beamline: name of the beamline
         :param sample: sample name as registered in icat
@@ -123,9 +125,9 @@ class IspybConnector:
                 dataset = tmp[idx_process+1]
             if path is None:
                 path = os.path.dirname(self.gallery)
-            if raw is None:            
+            if raw is None:
                 raw = os.path.abspath(self.gallery[:self.gallery.lower().index("process")])
-        elif tmp[idx_process] == "PROCESSED_DATA":           
+        elif tmp[idx_process] == "PROCESSED_DATA":
             if proposal is None:
                 proposal = tmp[idx_process-3]
             if beamline is None:
@@ -136,11 +138,11 @@ class IspybConnector:
                 dataset = tmp[idx_process+2]
             if path is None:
                 path = os.path.dirname(self.gallery)
-            if raw is None:            
+            if raw is None:
                 raw = os.path.dirname(os.path.dirname(os.path.abspath(self.gallery.replace("PROCESSED_DATA", "RAW_DATA"))))
         else:
             logger.error("Unrecognized path layout")
-        
+
         metadata = {"definition": "SAXS",
                     "Sample_name": sample}
         for k,v in data.items():
@@ -171,19 +173,19 @@ class IspybConnector:
         tomerge = data.get("merged")
         if tomerge:
             metadata["SAXS_frames_averaged"] = f"{tomerge[0]}-{tomerge[1]}"
-        
+
         volume = data.get("volume")
         if volume:
-            metadata["SAXS_porod_volume"] = str(volume) 
+            metadata["SAXS_porod_volume"] = str(volume)
         #Other metadata one may collect ...
         metadata["SAXS_experiment_type"]= data.get("experiment_type", "UNKNOWN")
         metadata["datasetName"] = dataset
         icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
-        kwargs = {"beamline":beamline, 
-                  "proposal":proposal, 
-                  "dataset":dataset, 
-                  "path":path, 
-                  "metadata":metadata, 
+        kwargs = {"beamline":beamline,
+                  "proposal":proposal,
+                  "dataset":dataset,
+                  "path":path,
+                  "metadata":metadata,
                   "raw":[raw]}
         icat_client.store_processed_data(**kwargs)
         return kwargs
@@ -228,7 +230,17 @@ class IspybConnector:
                 os.makedirs(dest)
             except Exception as err:
                 logger.error("Unable to create directory %s: %s: %s", dest, type(err), err)
-        os.stat(dest) #this is to enforce the mounting of the directory
+            else:
+                # Once the directory is pretendily created, write something in is an delete it.
+                delete_me = os.path.join(dest, "delete.me")
+                res = os.system(f"touch {delete_me}")
+                if res:
+                    logger.error(f"`touch {delete_me}` return error {res}, directory creation did probably not work as expected !")
+                try:
+                    os.remove(delete_me)
+                except FileNotFoundError:
+                    logger.error(f"`rm {delete_me}` raised FileNotFoundError, directory creation did probably not work as expected !")
+        os.stat(dest)  # this is to enforce the mounting of the directory
         if isinstance(index, int):
             filename = os.path.join(dest, "%s_%04d%s" % (basename, index, ext))
         else:
@@ -371,19 +383,6 @@ class IspybConnector:
         :param data: a dict with all information to be saved in Ispyb
         """
         sample = data.get("sample_name", "sample")
-        #gallery
-        gallery = os.path.join(self.gallery, 'chromatogram.png')
-        chromatogram = data.get("sum_I")
-        
-        if chromatogram is not None:
-            fractions = data.get("merge_frames")
-            if fractions is not None:
-                fractions.sort()
-            hplc_plot(chromatogram, fractions,
-                      title=f"Chromatogram of {sample}", 
-                      filename=gallery, 
-                      img_format="png", )
-
         hdf5_file = data.get("hdf5_filename")
         filename = self._mk_filename("hplc", ".", sample, ext=".h5")
         filename = os.path.abspath(filename)

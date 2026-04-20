@@ -6,14 +6,14 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22/02/2022"
+__date__ = "11/03/2026"
 __status__ = "production"
 
 import os
 import unittest
 from . import utilstest
-logger = utilstest.getLogger(__name__)
 from .. import job
+logger = utilstest.getLogger(__name__)
 
 
 class TestJob(unittest.TestCase):

@@ -68,12 +68,12 @@ then
             bookworm)
                 debian_version=12
                 ;;
-	    trixie)
-		debian_version=13
-		;;
-	    sid)
-		debian_version=13
-		;;
+	        trixie)
+		    debian_version=13
+		    ;;
+	        sid)
+		    debian_version=13
+		    ;;
         esac
     fi
 
@@ -109,6 +109,7 @@ optional arguments:
     --debian10      Simulate a debian 10 Buster system
     --debian11      Simulate a debian 11 Bullseye system
     --debian12      Simulate a debian 12 Bookworm system
+    --debian13      Simulate a debian 13 Trixie system
 "
 
 install=0

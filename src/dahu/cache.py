@@ -3,16 +3,16 @@
 #
 
 """
-Data Analysis RPC server over Tango: 
+Data Analysis RPC server over Tango:
 
-Class Cache for storing the data in a Borg  
+Class Cache for storing the data in a Borg
 """
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "22/02/2022" 
+__date__ = "11/03/2026"
 __status__ = "production"
 
 import os
@@ -23,10 +23,10 @@ logger = logging.getLogger("dahu.cache")
 
 class DataCache(dict):
     """
-    Class behaves like a dict with a finite size, used to cache some data for some time 
+    Class behaves like a dict with a finite size, used to cache some data for some time
     then discard them when other things are stored.
-    
-    This class can be configured as a borg (singleton-like): 
+
+    This class can be configured as a borg (singleton-like):
     It always returns the same values regardless to the instance of the object
     """
     __shared_state = {}
@@ -36,7 +36,7 @@ class DataCache(dict):
         """
         Constructor of DataCache
         :param max_size: number of element to keep in memory
-        :param borg: set to false to have the behavour of a normal class. By default, this is a Borg, all instances have the same content. 
+        :param borg: set to false to have the behavour of a normal class. By default, this is a Borg, all instances have the same content.
         """
         if borg:
             self.__dict__ = self.__shared_state
@@ -55,7 +55,7 @@ class DataCache(dict):
             self.dict = {}
             self.max_size = max_size
             self._sem = Semaphore()
-            
+
     def __repr__(self):
         """
         """
@@ -130,8 +130,8 @@ class DataCache(dict):
             logger.debug("DataCache.pop %s", key)
             try:
                 index = self.ordered.index(key)
-            except:
-                raise KeyError
+            except Exception as err:
+                raise KeyError from err
             self.ordered.pop(index)
             myData = self.dict.pop(key)
         return myData
