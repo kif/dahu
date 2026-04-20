@@ -377,7 +377,7 @@ class HPLC(Plugin):
         Isum[idx] = numpy.concatenate([i.Isum for i in self.juices])
         sigma[idx] = numpy.vstack([i.sigma for i in self.juices])
 
-        if timestamps:
+        if len(timestamps):
             self._time_digits = len(f"{timestamps[-1]:.0f}")
         else:
             self._time_digits = 1
