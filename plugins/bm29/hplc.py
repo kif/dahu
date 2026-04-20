@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "01/04/2026"
+__date__ = "20/04/2026"
 __status__ = "development"
 __version__ = "0.4.1"
 
@@ -241,6 +241,7 @@ class HPLC(Plugin):
         self.to_pyarch = {}
         self.ispyb = None
         self._pid = 0
+        self._time_digits = 0
 
     def sequence_index(self):
         value = self._pid
@@ -375,6 +376,11 @@ class HPLC(Plugin):
         I[idx] = numpy.vstack([i.I for i in self.juices])
         Isum[idx] = numpy.concatenate([i.Isum for i in self.juices])
         sigma[idx] = numpy.vstack([i.sigma for i in self.juices])
+
+        if timestamps:
+            self._time_digits = len(f"{timestamps[-1]:.0f}")
+        else:
+            self._time_digits = 1
 
         # Process 0.5: preprocessing
         diode_raw = numpy.concatenate([i.diode for i in self.juices])
@@ -644,7 +650,11 @@ class HPLC(Plugin):
         sigma = self.to_pyarch["subtracted_Stdev"]
 
         time = self.to_pyarch["time"]
-        time_slice = f"{time[fraction.start]:.0f}s-{time[min(fraction.stop, time.size-1)]:.0f}s"
+
+        template = f"%{self._time_digits}.0fs-%{self._time_digits}.0fs"
+        time_slice = template % (time[fraction.start],
+                                 time[min(fraction.stop, time.size-1)])
+        # time_slice = f"{time[fraction.start]:.0f}s-{time[min(fraction.stop, time.size-1)]:.0f}s"
         f_grp = nxs.new_class(
             top_grp,
             time_slice,
