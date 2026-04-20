@@ -651,7 +651,7 @@ class HPLC(Plugin):
 
         time = self.to_pyarch["time"]
 
-        template = f"%{self._time_digits}.0fs-%{self._time_digits}.0fs"
+        template = f"%0{self._time_digits}.0fs-%0{self._time_digits}.0fs"
         time_slice = template % (time[fraction.start],
                                  time[min(fraction.stop, time.size-1)])
         # time_slice = f"{time[fraction.start]:.0f}s-{time[min(fraction.stop, time.size-1)]:.0f}s"
