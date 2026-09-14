@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """Data Analysis plugin for BM29: BioSaxs
 
@@ -15,20 +14,22 @@ __date__ = "09/03/2026"
 __status__ = "development"
 __version__ = "0.0.2"
 
-import os
-from pathlib import Path
-from collections import namedtuple
-from typing import NamedTuple
 import json
 import logging
+import os
+from collections import namedtuple
+from pathlib import Path
+from typing import NamedTuple
+
+import fabio
 import numpy
+import pyFAI
+import pyFAI.integrator.load_engines
+import pyFAI.units
 from dahu.cache import DataCache
 from hdf5plugin import Bitshuffle, Zfp
-import pyFAI
-import pyFAI.integrator.load_engines  #noqa
-import pyFAI.units
 from pyFAI.method_registry import IntegrationMethod
-import fabio
+
 logger = logging.getLogger("bm29.common")
 
 #cmp contains the compression options, shared by all plugins. Used mainly for images

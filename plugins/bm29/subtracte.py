@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """Data Analysis plugin for BM29: BioSaxs
 
@@ -15,37 +14,50 @@ __date__ = "09/03/2026"
 __status__ = "development"
 __version__ = "0.4.0"
 
+import copy
+import json
+import logging
 import os
 import posixpath
-import json
-import copy
 import zipfile
 from math import log, pi
 from typing import NamedTuple
-from urllib3.util import parse_url
-import numpy
-from dahu.plugin import Plugin
-from dahu.utils import fully_qualified_name
-import logging
-import h5py
-import pyFAI
-import pyFAI.integrator.azimuthal
-from pyFAI.containers import Integrate1dResult
-from pyFAI.method_registry import IntegrationMethod
+
 import freesas
 import freesas.cormap
 import freesas.invariants
-from freesas.autorg import auto_gpa, autoRg, auto_guinier
-from freesas.bift import BIFT
+import h5py
+import numpy
+import pyFAI
+import pyFAI.integrator.azimuthal
+from dahu.plugin import Plugin
+from dahu.utils import fully_qualified_name
 from freesas.app.extract_ascii import write_ascii
+from freesas.autorg import auto_gpa, auto_guinier, autoRg
+from freesas.bift import BIFT
+from pyFAI.containers import Integrate1dResult
+from pyFAI.method_registry import IntegrationMethod
 from scipy.optimize import minimize
-from .common import Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
-                    polarization_factor, method, SAXS_STYLE, NORMAL_STYLE, \
-                    Sample, create_nexus_sample
-from .nexus import Nexus, get_isotime
+from urllib3.util import parse_url
+
+from .common import (
+    NORMAL_STYLE,
+    SAXS_STYLE,
+    Ispyb,
+    KeyCache,
+    Sample,
+    cmp_float,
+    create_nexus_sample,
+    get_equivalent_frames,
+    get_integrator,
+    method,
+    polarization_factor,
+)
+from .icat import send_icat
 from .ispyb import IspybConnector, NumpyEncoder
 from .memcached import to_memcached
-from .icat import send_icat
+from .nexus import Nexus, get_isotime
+
 logger = logging.getLogger("bm29.subtract")
 try:
     import numexpr
@@ -60,7 +72,7 @@ class NexusJuice(NamedTuple):
     npt: int
     unit: str
     q: numpy.ndarray
-    I: numpy.ndarray  # noqa
+    I: numpy.ndarray
     sigma: numpy.ndarray
     poni:str
     mask: numpy.ndarray
