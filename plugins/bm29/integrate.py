@@ -244,15 +244,15 @@ class IntegrateMultiframe(Plugin):
                     if "measurement" in entry:
                         measurement = entry["measurement"]
                     else:
-                        self.log_error("No measurement in entry: %s of data_file: %s" % (entry, self.input_file))
+                        self.log_error(f"No measurement in entry: {entry} of data_file: {self.input_file}")
                     self._input_frames = measurement["data"][...]
                     try:
                         self._start_time = entry["start_time"][()]
                         self._end_time = entry["end_time"][()]
                     except Exception as err:
-                        self.log_error("Unable to read time %s: %s" % (type(err), str(err)), do_raise=False)
+                        self.log_error(f"Unable to read time {type(err)}: {err!s}", do_raise=False)
             except Exception as err:
-                self.log_error("Unable to read images %s: %s" % (type(err), str(err)), do_raise=True)
+                self.log_error(f"Unable to read images {type(err)}: {err!s}", do_raise=True)
         return self._input_frames
 
     def process(self):
@@ -300,9 +300,8 @@ class IntegrateMultiframe(Plugin):
     def create_nexus(self):
         "create the nexus result file with basic structure"
         dirname = os.path.dirname(self.output_file)
-        if dirname:
-            if not os.path.isdir(dirname):
-                os.makedirs(dirname)
+        if dirname and not os.path.isdir(dirname):
+            os.makedirs(dirname)
         creation_time = os.stat(self.input_file).st_ctime
         nxs = self.nxs = Nexus(self.output_file, mode="w", creator="dahu")
 
@@ -390,7 +389,7 @@ class IntegrateMultiframe(Plugin):
                 if "measurement" in entry:
                     measurement = entry["measurement"]
                 else:
-                    self.log_error("No measurement in entry: %s of data_file: %s" % (entry, self.input_file))
+                    self.log_error(f"No measurement in entry: {entry} of data_file: {self.input_file}")
                 h5path = measurement["data"].name
             rel_path = os.path.relpath(os.path.abspath(self.input_file), os.path.dirname(os.path.abspath(self.output_file)))
             measurement_grp["images"] = detector_grp["frames"] = h5py.ExternalLink(rel_path, h5path)
