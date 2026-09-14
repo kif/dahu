@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding: utf-8
 
 #Example on how to launch it:
 #PYTHONPATH=build/lib.linux-x86_64-2.6/ TANGO_HOST=saxs1:20000 python scripts/dahu_server.py GPU1
@@ -18,14 +17,16 @@ __date__ = "11/03/2026"
 __status__ = "beta"
 __docformat__ = 'restructuredtext'
 
-import sys
-import os
-import tempfile
 import logging
+import os
+import sys
+import tempfile
 from argparse import ArgumentParser
+
 import PyTango
-from  .. import utils as dahu_utils
-from ..server import DahuDSClass, DahuDS
+
+from .. import utils as dahu_utils
+from ..server import DahuDS, DahuDSClass
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("dahu_server")

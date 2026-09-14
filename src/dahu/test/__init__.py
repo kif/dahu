@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# coding: utf-8
 #
 #    Project: Azimuthal integration
 #             https://github.com/pyFAI/pyFAI
@@ -35,6 +34,7 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "11/03/2026"
 
 import unittest
+
 from . import test_all
 
 

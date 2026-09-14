@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 
 """
@@ -15,17 +14,18 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "25/11/2024"
 __status__ = "production"
 
-import os
-import logging
 import cProfile
+import logging
+import os
 import time
+
 from .factory import plugin_factory
 from .utils import get_workdir
 
 logger = logging.getLogger("dahu.plugin")
 
 
-class Plugin(object):
+class Plugin:
     """
     A plugin is instanciated
 
@@ -71,7 +71,6 @@ class Plugin(object):
         """
         main processing of the plugin
         """
-        pass
 
     def teardown(self):
         """

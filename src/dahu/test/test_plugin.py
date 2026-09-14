@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 
 __authors__ = ["Jérôme Kieffer"]
@@ -10,10 +9,12 @@ __date__ = "11/03/2026"
 __status__ = "production"
 
 import unittest
-from . import utilstest
-from ..plugin import Plugin, plugin_from_function
+
 from ..factory import plugin_factory
 from ..job import Job
+from ..plugin import Plugin, plugin_from_function
+from . import utilstest
+
 logger = utilstest.getLogger("test_plugin")
 
 

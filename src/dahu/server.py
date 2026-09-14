@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# coding: utf-8
 
 """
 Data Analysis RPC server over Tango:
@@ -14,13 +13,15 @@ __date__ = "11/03/2026"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
-import sys
-import os
-import threading
 import logging
+import os
+import sys
+import threading
 import time
 from queue import Queue
+
 import PyTango
+
 from .job import Job, plugin_factory
 
 logger = logging.getLogger("dahu.server")
@@ -142,7 +143,6 @@ class DahuDS(PyTango.LatestDeviceImpl):
 
         @param  jobId: ID of the job to stop
         """
-        pass
 
     def quitDahu(self):
         logger.debug("In %s.quitDahu()" % self.get_name())

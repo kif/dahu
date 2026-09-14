@@ -4,14 +4,16 @@
 Reprocess a job using the current
 """
 
-import os
 import json
 import logging
+import os
 import time
 from argparse import ArgumentParser
+
 import dahu.factory
+
 from ..job import Job
-from ..utils import get_workdir, NumpyEncoder
+from ..utils import NumpyEncoder, get_workdir
 
 logging.basicConfig()
 

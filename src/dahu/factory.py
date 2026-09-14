@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 
 """
@@ -15,13 +14,15 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "11/03/2026"
 __status__ = "production"
 
+import importlib.util
+import logging
 import os
 import os.path as op
-import logging
 from collections import OrderedDict
 from threading import Semaphore
-from .utils import get_workdir, fully_qualified_name
-import importlib.util
+
+from .utils import fully_qualified_name, get_workdir
+
 logger = logging.getLogger("dahu.factory")
 
 
@@ -38,7 +39,7 @@ def load_source(module_name, file_path):
 dahu_root = os.path.dirname(os.path.abspath(__file__))
 
 
-class Factory(object):
+class Factory:
     """
     This is a factory, it instanciates a plugin from it name
     """

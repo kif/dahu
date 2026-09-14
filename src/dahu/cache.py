@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 
 """
@@ -15,9 +14,10 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "11/03/2026"
 __status__ = "production"
 
-import os
 import logging
+import os
 from threading import Semaphore
+
 logger = logging.getLogger("dahu.cache")
 
 

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 
 """
@@ -16,12 +15,12 @@ __date__ = "08/10/2020"
 __status__ = "production"
 
 
-import time
+import json
 import os
 import tempfile
-import json
-import numpy
+import time
 
+import numpy
 
 workdir = None
 

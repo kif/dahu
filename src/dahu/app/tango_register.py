@@ -1,15 +1,14 @@
-import sys
-import logging
 import argparse
+import logging
+import sys
+
 import PyTango
 
 logger = logging.getLogger("dahu_server")
 
 
 def get_uri(proxy):
-    return "tango://{}:{}/{}".format(
-        proxy.get_db_host(), proxy.get_db_port(), proxy.dev_name()
-    )
+    return f"tango://{proxy.get_db_host()}:{proxy.get_db_port()}/{proxy.dev_name()}"
 
 
 logging.basicConfig(level=logging.INFO)

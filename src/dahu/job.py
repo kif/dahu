@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 """
 Data Analysis RPC server over Tango:
@@ -15,18 +14,21 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "11/03/2026"
 __status__ = "production"
 
-from threading import Thread, Semaphore
-import time
-import os
-import sys
 import gc
-import six
 import json
 import logging
+import os
+import sys
+import time
 import traceback
+from threading import Semaphore, Thread
+
+import six
+
 from . import utils
 from .factory import plugin_factory
 from .utils import NumpyEncoder
+
 logger = logging.getLogger("dahu.job")
 # logger.setLevel(logging.DEBUG)
 

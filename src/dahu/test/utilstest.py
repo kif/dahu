@@ -1,4 +1,3 @@
-# coding: utf-8
 #
 #    Copyright (C) 2012-2026 European Synchrotron Radiation Facility, Grenoble, France
 #
@@ -30,18 +29,19 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "11/03/2026"
 
 
-import os
-import sys
 import getpass
-import unittest
-import logging
-from urllib.request import urlopen, ProxyHandler, build_opener, URLError
-import numpy
-import shutil
 import json
+import logging
+import os
+import shutil
+import sys
 import tempfile
-from argparse import ArgumentParser
 import threading
+import unittest
+from argparse import ArgumentParser
+from urllib.request import ProxyHandler, URLError, build_opener, urlopen
+
+import numpy
 
 PACKAGE = "dahu"
 DATA_KEY = "DAHU_DATA"
@@ -58,7 +58,7 @@ def copy(infile, outfile):
         shutil.copy(infile, outfile)
 
 
-class UtilsTest(object):
+class UtilsTest:
     """
     Static class providing useful stuff for preparing tests.
     """
@@ -149,7 +149,7 @@ and put it in in test/testimages.""")
             try:
                 with open(cls.testimages, "w") as fp:
                     json.dump(image_list, fp, indent=4)
-            except IOError:
+            except OSError:
                 logger.debug("Unable to save JSON list")
         logger.info("UtilsTest.getimage('%s')" % imagename)
         if not os.path.exists(cls.image_home):
@@ -182,8 +182,8 @@ and put it in in test/testimages.""")
             try:
                 with open(fullimagename, "wb") as outfile:
                     outfile.write(data)
-            except IOError:
-                raise IOError("unable to write downloaded \
+            except OSError:
+                raise OSError("unable to write downloaded \
                     data to disk at %s" % cls.image_home)
 
             if not os.path.isfile(fullimagename):
@@ -370,7 +370,7 @@ class ParameterisedTestCase(unittest.TestCase):
         http://eli.thegreenplace.net/2011/08/02/python-unit-testing-parametrized-test-cases/
     """
     def __init__(self, methodName='runTest', param=None):
-        super(ParameterisedTestCase, self).__init__(methodName)
+        super().__init__(methodName)
         self.param = param
 
     @staticmethod

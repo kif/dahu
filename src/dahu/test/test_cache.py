@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 
 __authors__ = ["Jérôme Kieffer"]
@@ -10,8 +9,10 @@ __date__ = "11/03/2026"
 __status__ = "production"
 
 import unittest
-from . import utilstest
+
 from ..cache import DataCache
+from . import utilstest
+
 logger = utilstest.getLogger(__name__)
 
 class TestCache(unittest.TestCase):

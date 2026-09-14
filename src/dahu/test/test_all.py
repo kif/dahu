@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 
 """Test suite for all dahu modules."""
@@ -12,10 +11,9 @@ __data__ = "10/06/2016"
 
 import sys
 import unittest
+
+from . import test_cache, test_job, test_plugin
 from .utilstest import getLogger
-from . import test_job
-from . import test_plugin
-from . import test_cache
 
 logger = getLogger(__file__)
 

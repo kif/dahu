@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 
 __authors__ = ["Jérôme Kieffer"]
@@ -11,8 +10,10 @@ __status__ = "production"
 
 import os
 import unittest
-from . import utilstest
+
 from .. import job
+from . import utilstest
+
 logger = utilstest.getLogger(__name__)
 
 

@@ -1,4 +1,3 @@
-# coding: utf-8
 # /*##########################################################################
 #
 # Copyright (c) 2013-2024 European Synchrotron Radiation Facility
@@ -27,7 +26,6 @@
 Data Analysis Highly tailored for Upbl09a
 """
 
-from __future__ import with_statement, print_function, absolute_import, division
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
@@ -37,10 +35,11 @@ __date__ = "11/03/2026"
 __status__ = "production"
 
 import os
+
+from . import job as job
+from . import plugin as plugin
 from . import utils as utils
 from .factory import plugin_factory as plugin_factory
-from . import plugin as plugin
-from . import job as job
 
 project = os.path.basename(os.path.dirname(os.path.abspath(__file__)))
 try:
