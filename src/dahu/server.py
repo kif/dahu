@@ -66,10 +66,10 @@ class DahuDS(PyTango.LatestDeviceImpl):
 
     def delete_device(self):
 
-        logger.debug("[Device delete_device method] for device %s" % self.get_name())
+        logger.debug(f"[Device delete_device method] for device {self.get_name()}")
 
     def init_device(self):
-        logger.debug("In %s.init_device()" % self.get_name())
+        logger.debug(f"In {self.get_name()}.init_device()")
 
         self.set_state(PyTango.DevState.ON)
         self.get_device_properties(self.get_device_class())
@@ -81,7 +81,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
         pass
 
     def read_attr_hardware(self, data):
-        logger.debug("In %s.read_attr_hardware()" % self.get_name())
+        logger.debug(f"In {self.get_name()}.read_attr_hardware()")
 
     def read_jobSuccess(self, attr):
         attr.set_value(self.last_success)
@@ -108,7 +108,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
         """
         List all plugin currently loaded .... with a brief description
         """
-        logger.debug("In %s.listPlugins" % (self.get_name()))
+        logger.debug(f"In {self.get_name()}.listPlugins")
         res = ["List of all plugin currently loaded (use initPlugin to loaded additional plugins):"]
         plugins = list(plugin_factory.registry.keys())
         plugins.sort()
@@ -125,12 +125,12 @@ class DahuDS(PyTango.LatestDeviceImpl):
         """
         Creates a job with the given plugin
         """
-        logger.debug("In %s.initPlugin(%s)" % (self.get_name(), name))
+        logger.debug(f"In {self.get_name()}.initPlugin({name})")
         err = None
         try:
             plugin = plugin_factory(name)
         except Exception as error:
-            err = "plugin %s failed to be instanciated: %s" % (name, error)
+            err = f"plugin {name} failed to be instanciated: {error}"
             logger.error(err)
         if plugin is None or err:
             return f"Plugin not found: {name}, {err}"
@@ -145,7 +145,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
         """
 
     def quitDahu(self):
-        logger.debug("In %s.quitDahu()" % self.get_name())
+        logger.debug(f"In {self.get_name()}.quitDahu()")
         logger.info("Quitting DahuDS")
         sys.exit()
 
@@ -156,7 +156,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
         @param argin: 2-list [<Dahu plugin to execute>, <JSON serialized dict>]
         @return: jobID which is an int (-1 for error)
         """
-        logger.debug("In %s.startJob()" % self.get_name())
+        logger.debug(f"In {self.get_name()}.startJob()")
         name, data_input = argin[:2]
         if data_input.strip() == "":
             return -1
@@ -183,7 +183,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
 
         @param job: instance of dahu.job.Job
         """
-        logger.debug("In %s.finished_processing id:%s (%s)" % (self.get_name(), job.id, job.status))
+        logger.debug(f"In {self.get_name()}.finished_processing id:{job.id} ({job.status})")
 #         self._ncpu_sem.release()
         job.clean(wait=False)
         if job.status == job.STATE_SUCCESS:
@@ -241,7 +241,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
         with self.stat_lock:
             fStartStat = time.time()
             self.last_stats = Job.stats()
-            self.last_stats += os.linesep + "Statistics collected on %s, the collect took: %.3fs" % (time.asctime(), time.time() - fStartStat)
+            self.last_stats += os.linesep + f"Statistics collected on {time.asctime()}, the collect took: {time.time() - fStartStat:.3f}s"
             self.push_change_event("statisticsCollected", self.last_stats)
 
     def getStatistics(self):

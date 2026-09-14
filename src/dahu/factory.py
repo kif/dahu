@@ -68,7 +68,7 @@ class Factory:
     def add_directory(self, directory):
         abs_dir = os.path.abspath(directory)
         if not os.path.isdir(directory):
-            logger.warning("No such directory: %s" % directory)
+            logger.warning(f"No such directory: {directory}")
             return
         python_files = []
         for i in os.listdir(abs_dir):
@@ -88,7 +88,7 @@ class Factory:
         starting from the FQN package.class,
         """
         if "." not in plugin_name:
-            logger.error("plugin name have to be fully qualified, here: %s" % plugin_name)
+            logger.error(f"plugin name have to be fully qualified, here: {plugin_name}")
             return
         splitted = plugin_name.split(".")
         module_name = ".".join(splitted[:-1])
@@ -101,7 +101,7 @@ class Factory:
                 elif op.isfile(dst+".py"):
                     fname = dst+".py"
                 else:
-                    raise RuntimeError("Unable to find module source for %s in %s"%(module_name, dirname))
+                    raise RuntimeError(f"Unable to find module source for {module_name} in {dirname}")
                 logger.info("load %s from %s",module_name, fname)
                 mod = load_source(module_name, os.path.join(dirname, fname))
                 with self.reg_sem:
@@ -121,7 +121,7 @@ class Factory:
             self.search_plugin(plugin_name)
         if plugin_name not in self.registry:
             logger.error("Plugin directories have been searched but plugin"
-                         " %s was not found" % plugin_name)
+                         f" {plugin_name} was not found")
         else:
             return self.registry[plugin_name]()
 
@@ -140,7 +140,7 @@ class Factory:
         """
         if fqn is None:
             fqn = fully_qualified_name(klass)
-        logger.debug("Registering plugin %s as %s" % (klass, fqn))
+        logger.debug(f"Registering plugin {klass} as {fqn}")
         with cls.reg_sem:
             cls.registry[fqn] = klass
         return klass

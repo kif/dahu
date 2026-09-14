@@ -37,7 +37,7 @@ class TestJob(unittest.TestCase):
         self.assertEqual(j.output_data["result"], 25, "result OK")
 
     def callback(self, *args, **kwargs):
-        logger.info("callback actually called with  arguments %s and kwargs %s" % (args, kwargs))
+        logger.info(f"callback actually called with  arguments {args} and kwargs {kwargs}")
         assert len(args) == 1
         self.called = True
 

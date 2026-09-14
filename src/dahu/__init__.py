@@ -46,4 +46,4 @@ try:
     from .version import __date__ as date  # noqa
     from .version import version, version_info, hexversion, strictversion, citation  # noqa
 except ImportError:
-    raise RuntimeError("Do NOT use %s from its sources: build it and use the built version" % project)
+    raise RuntimeError(f"Do NOT use {project} from its sources: build it and use the built version")

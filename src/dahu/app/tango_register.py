@@ -22,7 +22,7 @@ def register(
     device_class="DahuDS",
 ):
     """Register a TANGO device of particular device class"""
-    dev_name = "/".join([domain, family, member])
+    dev_name = f"{domain}/{family}/{member}"
     db = PyTango.Database()
     try:
         proxy = PyTango.DeviceProxy(dev_name)
@@ -30,7 +30,7 @@ def register(
         dev_info = PyTango.DbDevInfo()
         dev_info.name = dev_name
         dev_info._class = device_class
-        dev_info.server = "/".join([device_class, server_instance])
+        dev_info.server = f"{device_class}/{server_instance}"
         db.add_device(dev_info)
         proxy = PyTango.DeviceProxy(dev_name)
         logger.info("Registered a new TANGO device '%s'", get_uri(proxy))

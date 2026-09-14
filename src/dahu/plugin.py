@@ -83,7 +83,7 @@ class Plugin:
             self.__profiler.disable()
             name = "%05i_%s.%s.profile" % (self.input.get("job_id", 0), self.__class__.__module__, self.__class__.__name__)
             profile_file = os.path.join(get_workdir(), name)
-            self.log_error("Profiling information in %s" % profile_file, do_raise=False)
+            self.log_error(f"Profiling information in {profile_file}", do_raise=False)
             self.__profiler.dump_stats(profile_file)
 
     def get_info(self):
@@ -102,10 +102,10 @@ class Plugin:
         Way to log errors and raise error
         """
         if do_raise:
-            err = "ERROR in %s: %s" % (self.get_name(), txt)
+            err = f"ERROR in {self.get_name()}: {txt}"
             logger.error(err)
         else:
-            err = "Warning in %s: %s" % (self.get_name(), txt)
+            err = f"Warning in {self.get_name()}: {txt}"
             logger.warning(err)
         self._logging.append(err)
         if do_raise:
@@ -115,7 +115,7 @@ class Plugin:
         """
         Way to log warning
         """
-        err = "Warning in %s: %s" % (self.get_name(), txt)
+        err = f"Warning in {self.get_name()}: {txt}"
         logger.warning(err)
         self._logging.append(err)
 
@@ -185,7 +185,7 @@ def plugin_from_function(function):
     :param function: any function
     :return: plugin name to be used by the plugin_factory to get an instance
     """
-    logger.debug("creating plugin from function %s" % function.__name__)
+    logger.debug(f"creating plugin from function {function.__name__}")
     class_name = function.__module__ + "." + function.__name__
     klass = type(class_name, (PluginFromFunction,),
                  {'function': staticmethod(function),

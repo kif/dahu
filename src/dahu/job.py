@@ -89,13 +89,15 @@ class Job(Thread):
     if not os.path.isdir(_storage_dir):
         os.makedirs(_storage_dir)
 
-    def __init__(self, name="plugin.Plugin", input_data={}):
+    def __init__(self, name="plugin.Plugin", input_data=None):
         """
         Constructor of the class Job
 
         :param name: name of the plugin to be instanciated
         :param input_data: Should be a dictionary or a JSON string representing that dictionary
         """
+        if input_data is None:
+            input_data = {}
         Thread.__init__(self)
         self._status = Job.STATE_UNINITIALIZED
         self._name = name
@@ -140,11 +142,11 @@ class Job(Thread):
         try:
             self._plugin = plugin_factory(self._name)
         except Exception as error:
-            self._log_error("plugin %s failed to be instanciated, raised: %s" % (self._name, error))
+            self._log_error(f"plugin {self._name} failed to be instanciated, raised: {error}")
             self._run_callbacks()
         else:
             if self._plugin is None:
-                self._log_error("plugin %s failed to be instanciated." % self._name)
+                self._log_error(f"plugin {self._name} failed to be instanciated.")
                 logger.debug(plugin_factory.registry)
             else:
                 # finally launch the new thread.
@@ -217,12 +219,11 @@ class Job(Thread):
                     method()
                 except Exception as error:
                     import traceback
-                    err_msg = [traceback.format_exc(limit=10), ""
-                               "Error %s while calling %s.%s" %
-                               (error, self._plugin.__class__.__name__, what)]
+                    err_msg = [traceback.format_exc(limit=10), (""
+                               f"Error {error} while calling {self._plugin.__class__.__name__}.{what}")]
                     self._log_error(os.linesep.join(err_msg))
         else:
-            logger.error("No such method %s in class %s" % (what, self._plugin.__class__.__name__))
+            logger.error(f"No such method {what} in class {self._plugin.__class__.__name__}")
 
     def _run_callbacks(self):
         self._update_runtime()
@@ -231,17 +232,17 @@ class Job(Thread):
                 try:
                     cb(self)
                 except Exception as error:
-                    self._log_error("Error while calling %s: %s" % (cb, error))
+                    self._log_error(f"Error while calling {cb}: {error}")
 
     def _log_error(self, msg):
         """
         log an error message in the output
         """
         exc_type, exc_value, exc_traceback = sys.exc_info()
-        err_msg = [msg, "%s: %s" % (exc_type, exc_value)]
+        err_msg = [msg, f"{exc_type}: {exc_value}"]
         for line in traceback.extract_tb(exc_traceback):
             err_msg.append("  File \"%s\", line %d, in %s" % (line[0], line[1], line[2]))
-            err_msg.append("\t\t%s" % line[3])
+            err_msg.append(f"\t\t{line[3]}")
         with self._sem:
             self._status = self.STATE_FAILURE
             if "error" not in self._output_data:
@@ -263,7 +264,7 @@ class Job(Thread):
                 if "__call__" in dir(method):
                     self._callbacks.append(method)
                 else:
-                    logger.error("Non callable callback method: %s" % method)
+                    logger.error(f"Non callable callback method: {method}")
 
     def clean(self, force=False, wait=True):
         """
@@ -273,7 +274,7 @@ class Job(Thread):
         :param wait: wait for job to be finished
 
         """
-        logger.debug("In clean %s" % (self._plugin))
+        logger.debug(f"In clean {self._plugin}")
         if wait and self.is_alive():
             self.join()
         if self._plugin is not None:
@@ -423,7 +424,7 @@ class Job(Thread):
         if jobId in cls._dictJobs:
             strRet = cls._dictJobs[jobId]._status
         else:
-            strRet = "Unable to retrieve such job: %s" % jobId
+            strRet = f"Unable to retrieve such job: {jobId}"
             logger.warning(strRet)
         return strRet
 
@@ -443,7 +444,7 @@ class Job(Thread):
         if jobId in cls._dictJobs:
             return cls._dictJobs[jobId]
         else:
-            logger.warning("Unable to retrieve such Job: %s" % jobId)
+            logger.warning(f"Unable to retrieve such Job: {jobId}")
 
     getJobFromId = getJobFromID
 
@@ -462,9 +463,9 @@ class Job(Thread):
         if jobId in cls._dictJobs:
             job = cls._dictJobs[jobId]
             job.cleanJob(forceGC)
-            strRet = "Job %s cleaned" % jobId
+            strRet = f"Job {jobId} cleaned"
         else:
-            strRet = "Unable to retrieve such Job: %s" % jobId
+            strRet = f"Unable to retrieve such Job: {jobId}"
             logger.warning(strRet)
         return strRet
 
@@ -501,7 +502,7 @@ class Job(Thread):
                         else:
                             output = job._output_data
         else:
-            output = "No such job: %s" % jobId
+            output = f"No such job: {jobId}"
         return output or none
 
     getDataOutputFromID = getDataOutputFromId
@@ -537,7 +538,7 @@ class Job(Thread):
                         else:
                             output = job._input_data
         else:
-            output = "No such job: %s" % jobId
+            output = f"No such job: {jobId}"
         return output or none
 
     getDataInputFromID = getDataInputFromId
@@ -568,7 +569,7 @@ class Job(Thread):
                   for k in keys]
         total_jobs = max(1, len(keys))
         lout.append("_" * 80)
-        lout.append("%s\t|\t%s\t\t\t|\t%s\t|\t%s (sec)" % ("Id", "Name", "Status", "Run-time"))
+        lout.append("{}\t|\t{}\t\t\t|\t{}\t|\t{} (sec)".format("Id", "Name", "Status", "Run-time"))
         lout.append("_" * 80)
         wall_time = 0.0
         sum_xy = 0.0
@@ -580,17 +581,17 @@ class Job(Thread):
                 sum_x += ajob[0]
                 sum_xx += ajob[0] * ajob[0]
                 sum_xy += ajob[0] * ajob[3]
-            lout.append("%s\t|\t%s\t|\t%s\t|\t%s" % tuple(ajob))
+            lout.append("{}\t|\t{}\t|\t{}\t|\t{}".format(*tuple(ajob)))
         lout.append("_" * 80)
-        lout.append("Total execution time (Wall): %.3fs, Execution time: %.3fs. SpeedUp: %.3f" % (wall_time, run_time, wall_time / run_time))
-        lout.append("Average execution time (Wall/N): %.3fs, Average throughput: %.3fs" % (wall_time / total_jobs, run_time / total_jobs))
+        lout.append(f"Total execution time (Wall): {wall_time:.3f}s, Execution time: {run_time:.3f}s. SpeedUp: {wall_time / run_time:.3f}")
+        lout.append(f"Average execution time (Wall/N): {wall_time / total_jobs:.3f}s, Average throughput: {run_time / total_jobs:.3f}s")
         if len(keys) > 1:
             slope = (total_jobs * sum_xy - sum_x * wall_time) / (len(keys) * sum_xx - sum_x * sum_x)
             ord0 = (wall_time - slope * sum_x) / len(keys)
         else:
             slope = 0.0
             ord0 = wall_time
-        lout.append("Regression of execution time: ExecTime = %.3f + %f * NbJob" % (ord0, slope))
+        lout.append(f"Regression of execution time: ExecTime = {ord0:.3f} + {slope:f} * NbJob")
         sout = os.linesep.join(lout)
         logger.info(sout)
         return sout

@@ -61,7 +61,7 @@ class DataCache(dict):
         """
         out = ["{"]
         for key in self.ordered:
-            out.append(" '%s': %s," % (key, self.dict[key]))
+            out.append(f" '{key}': {self.dict[key]},")
         out.append("}")
         return os.linesep.join(out)
 

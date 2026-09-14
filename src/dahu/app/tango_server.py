@@ -87,10 +87,10 @@ def main(argv=None):
         U.server_init()
         U.server_run()
     except PyTango.DevFailed as err:
-        logger.error('PyTango --> Received a DevFailed exception: %s' % err)
+        logger.error(f'PyTango --> Received a DevFailed exception: {err}')
         return -1
     except Exception as err:
-        logger.error('PyTango --> An unforeseen exception occurred....%s' % err)
+        logger.error(f'PyTango --> An unforeseen exception occurred....{err}')
         return -1
     return 0
 

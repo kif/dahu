@@ -73,7 +73,7 @@ def get_workdir(basedir=None):
             # likely the time has already been added
             workdir = os.path.abspath(basedir)
         else:
-            subdir = "dahu_%s" % get_isotime(for_path=True)
+            subdir = f"dahu_{get_isotime(for_path=True)}"
             workdir = os.path.join(basedir, subdir)
         if not os.path.isdir(workdir):
             os.makedirs(workdir)
