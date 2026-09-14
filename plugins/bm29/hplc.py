@@ -38,7 +38,6 @@ import pyFAI.integrator.azimuthal
 import pyFAI.units
 import scipy.ndimage
 import scipy.signal
-import sklearn
 from dahu.plugin import Plugin
 from freesas.app.extract_ascii import write_ascii
 from freesas.autorg import auto_gpa, auto_guinier, autoRg
@@ -47,7 +46,6 @@ from freesas.containers import UVJuice
 from freesas.plot import hplc_plot
 from pyFAI.method_registry import IntegrationMethod
 from scipy.optimize import minimize
-from sklearn.decomposition import NMF
 from urllib3.util import parse_url
 
 from .common import NORMAL_STYLE, SAXS_STYLE, Ispyb, Sample, create_nexus_sample
@@ -56,6 +54,12 @@ from .ispyb import IspybConnector
 from .nexus import Nexus, get_isotime
 
 logger = logging.getLogger("bm29.hplc")
+try:
+    import sklearn
+    from sklearn.decomposition import NMF
+except ImportError:
+    logger.error("Scikit-learn module is missing, the NMF decomposition will be skipped")
+    sklearn = NMF = None
 matplotlib.use("Agg")
 
 
@@ -539,34 +543,38 @@ class HPLC(Plugin):
         nmf_grp = nxs.new_class(entry_grp, "3_NMF", "NXprocess")
         nmf_grp["sequence_index"] = self.sequence_index()
         nmf_grp["program"] = "sklearn.decomposition.NMF"
-        nmf_grp["version"] = sklearn.__version__
-        nmf = NMF(n_components=self.nmf_components, init="nndsvd", max_iter=1000)
-        try:
-            W = nmf.fit_transform(I.T)
-        except ValueError as err:
-            self.log_warning(f"NMF data decomposition failed with: {err}")
-            nmf_grp[err.__class__.__name__] = str(err)
+        if NMF is None:
+            self.log_warning("NMF data decomposition skipped: scikit-learn is missing")
+            nmf_grp["ImportError"] = "scikit-learn is missing"
         else:
-            eigen_data = nxs.new_class(nmf_grp, "eigenvectors", "NXdata")
-            eigen_ds = eigen_data.create_dataset(
-                "W", data=numpy.ascontiguousarray(W.T, dtype=numpy.float32)
-            )
-            eigen_ds.attrs["interpretation"] = "spectrum"
-            eigen_data.attrs["signal"] = "W"
-            eigen_data.attrs["SILX_style"] = SAXS_STYLE
+            nmf_grp["version"] = sklearn.__version__
+            nmf = NMF(n_components=self.nmf_components, init="nndsvd", max_iter=1000)
+            try:
+                W = nmf.fit_transform(I.T)
+            except ValueError as err:
+                self.log_warning(f"NMF data decomposition failed with: {err}")
+                nmf_grp[err.__class__.__name__] = str(err)
+            else:
+                eigen_data = nxs.new_class(nmf_grp, "eigenvectors", "NXdata")
+                eigen_ds = eigen_data.create_dataset(
+                    "W", data=numpy.ascontiguousarray(W.T, dtype=numpy.float32)
+                )
+                eigen_ds.attrs["interpretation"] = "spectrum"
+                eigen_data.attrs["signal"] = "W"
+                eigen_data.attrs["SILX_style"] = SAXS_STYLE
 
-            eigen_ds.attrs["units"] = "arbitrary"
-            eigen_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
+                eigen_ds.attrs["units"] = "arbitrary"
+                eigen_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
 
-            H = nmf.components_
-            chroma_data = nxs.new_class(nmf_grp, "chromatogram", "NXdata")
-            chroma_ds = chroma_data.create_dataset(
-                "H", data=numpy.ascontiguousarray(H, dtype=numpy.float32)
-            )
-            chroma_ds.attrs["interpretation"] = "spectrum"
-            chroma_data.attrs["signal"] = "H"
-            chroma_data.attrs["SILX_style"] = NORMAL_STYLE
-            nmf_grp.attrs["default"] = posixpath.relpath(chroma_data.name, nmf_grp.name)
+                H = nmf.components_
+                chroma_data = nxs.new_class(nmf_grp, "chromatogram", "NXdata")
+                chroma_ds = chroma_data.create_dataset(
+                    "H", data=numpy.ascontiguousarray(H, dtype=numpy.float32)
+                )
+                chroma_ds.attrs["interpretation"] = "spectrum"
+                chroma_data.attrs["signal"] = "H"
+                chroma_data.attrs["SILX_style"] = NORMAL_STYLE
+                nmf_grp.attrs["default"] = posixpath.relpath(chroma_data.name, nmf_grp.name)
 
         # Process 5: Background estimation
         bg_grp = nxs.new_class(entry_grp, "4_background", "NXprocess")
