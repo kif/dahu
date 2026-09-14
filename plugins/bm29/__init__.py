@@ -15,14 +15,21 @@ __date__ = "05/05/2025"
 __status__ = "development"
 __version__ = "0.2.0"
 
-from dahu.factory import register
+from dahu.factory import optional_plugin, register
 
-from .hplc import HPLC
-from .integrate import IntegrateMultiframe
-from .mesh import Mesh
-from .subtracte import SubtractBuffer
+# One block per plugin: a missing dependency disables only the plugin concerned.
+with optional_plugin("bm29.integratemultiframe"):
+    from .integrate import IntegrateMultiframe
+    register(IntegrateMultiframe, fqn="bm29.integratemultiframe")
 
-register(IntegrateMultiframe, fqn="bm29.integratemultiframe")
-register(SubtractBuffer, fqn="bm29.subtractbuffer")
-register(HPLC, fqn="bm29.hplc")
-register(Mesh, fqn="bm29.mesh")
+with optional_plugin("bm29.subtractbuffer"):
+    from .subtracte import SubtractBuffer
+    register(SubtractBuffer, fqn="bm29.subtractbuffer")
+
+with optional_plugin("bm29.hplc"):
+    from .hplc import HPLC
+    register(HPLC, fqn="bm29.hplc")
+
+with optional_plugin("bm29.mesh"):
+    from .mesh import Mesh
+    register(Mesh, fqn="bm29.mesh")
