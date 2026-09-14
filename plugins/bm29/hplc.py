@@ -170,18 +170,20 @@ def build_background(intensity, std=None, keep=0.3):
     return bg_avg, bg_std, to_keep
 
 
-def save_zip(filename, config, intensity, sigma):
+def save_zip(filename, config, intensity, sigma, dat_template=None):
     """Save a stack of intensity into a zipfile with each frames in a dat-file.
 
     :param filename: name of the zip-file
-    :param confif: this is some NexusJuice namedtuple. we use only q and the sample description.
+    :param config: this is some NexusJuice namedtuple. we use only q and the sample description.
     :param intensity: 2D array with the intensity of the stack of curves
     :param sigma: 2D array with the uncertainties of the stack of frames
+    :param dat_template: template for the zipped filenames: by default "{basename(filename)}_%04i.dat"
     :return: nothing
     """
-    basename = os.path.basename(filename)
-    base = os.path.splitext(basename)[0]
-    destz = base + "_%04i.dat"
+    if dat_template is None:
+        basename = os.path.basename(filename)
+        base = os.path.splitext(basename)[0]
+        dat_template =  base + "_%04i.dat"
     common = {"q": config.q}
     if config.sample:
         sample = config.sample
@@ -203,7 +205,7 @@ def save_zip(filename, config, intensity, sigma):
         res.append(r)
     with zipfile.ZipFile(filename, "w") as z:
         for idx, frame in enumerate(res):
-            z.writestr(destz % idx, write_ascii(frame))
+            z.writestr(dat_template % idx, write_ascii(frame))
 
 
 class HPLC(Plugin):
