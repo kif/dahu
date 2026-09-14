@@ -102,7 +102,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
         return Job.getStatusFromID(jobId)
 
     def cleanJob(self, jobId):
-        return Job.cleanJobFromID(jobId)
+        return Job.clean_job_from_id(jobId)
 
     def listPlugins(self):
         """

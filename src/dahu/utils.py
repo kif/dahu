@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-#
-
 """
 Data Analysis RPC server over Tango:  
 

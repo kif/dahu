@@ -449,7 +449,7 @@ class Job(Thread):
     getJobFromId = getJobFromID
 
     @classmethod
-    def cleanJobfromId(cls, jobId, forceGC=True):
+    def clean_job_from_id(cls, jobId, forceGC=True):
         """
         Frees the memory associated with the top level plugin
 
@@ -462,14 +462,18 @@ class Job(Thread):
             jobId = len(cls._dictJobs) + jobId + 1
         if jobId in cls._dictJobs:
             job = cls._dictJobs[jobId]
-            job.cleanJob(forceGC)
+            job.clean(forceGC)
             strRet = f"Job {jobId} cleaned"
         else:
             strRet = f"Unable to retrieve such Job: {jobId}"
             logger.warning(strRet)
         return strRet
 
-    cleanJobfromID = cleanJobfromId
+    # Deprecated aliases, kept for backward compatibility with existing code:
+    cleanJobfromId = clean_job_from_id
+    cleanJobfromID = clean_job_from_id
+    cleanJobFromId = clean_job_from_id
+    cleanJobFromID = clean_job_from_id
 
     @classmethod
     def getDataOutputFromId(cls, jobId, as_JSON=False):
