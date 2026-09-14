@@ -14,6 +14,7 @@ __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "11/03/2026"
 __status__ = "production"
 
+import contextlib
 import importlib.util
 import logging
 import os
@@ -45,6 +46,7 @@ class Factory:
     """
     registry = {}
     modules = {}
+    unavailable = {}  # key: fqn of the plugin, value: reason why it could not be registered
     plugin_dirs = OrderedDict()  # key: directory name, value=list of modules
     reg_sem = Semaphore()
 
@@ -144,6 +146,35 @@ class Factory:
         with cls.reg_sem:
             cls.registry[fqn] = klass
         return klass
+
+@contextlib.contextmanager
+def optional_plugin(fqn):
+    """Isolate the import and the registration of a single plugin.
+
+    Any failure disables only this plugin, not the other ones defined in the same
+    package. Meant to be used in the `__init__.py` of a beamline, one block per
+    plugin exposed::
+
+        with optional_plugin("bm29.hplc"):
+            from .hplc import HPLC
+            register(HPLC, fqn="bm29.hplc")
+
+    The reason for a failure is logged and kept in `Factory.unavailable[fqn]`.
+
+    @param fqn: fully qualified name of the plugin being registered
+    """
+    try:
+        yield
+    except Exception as error:
+        reason = f"{type(error).__name__}: {error}"
+        logger.error(f"Plugin {fqn} is unavailable, {reason}")
+        logger.debug("Traceback:", exc_info=True)
+        with Factory.reg_sem:
+            Factory.unavailable[fqn] = reason
+    else:
+        with Factory.reg_sem:
+            Factory.unavailable.pop(fqn, None)
+
 
 plugin_factory = Factory(get_workdir())
 register = plugin_factory.register

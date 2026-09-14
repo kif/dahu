@@ -41,10 +41,40 @@ class TestJob(unittest.TestCase):
         assert len(args) == 1
         self.called = True
 
+    def test_clean_job_from_id(self):
+        "Cleaning a job frees the plugin and leaves the data readable from disk"
+        j = job.Job("example.square", {"x": 5})
+        j.start()
+        j.join()
+        self.assertEqual(j.status, j.STATE_SUCCESS, "job succeeded")
+
+        msg = job.Job.clean_job_from_id(j.id)
+        self.assertEqual(msg, f"Job {j.id} cleaned", "job cleaned")
+        self.assertTrue(j.data_on_disk, "input and output serialized on disk")
+        for ext in (".inp", ".out"):
+            self.assertTrue(os.path.isfile(j.data_on_disk + ext), f"{ext} file written")
+        output = job.Job.getDataOutputFromId(j.id)
+        self.assertEqual(output["result"], 25, "output still readable once cleaned")
+
+        unknown = job.Job.clean_job_from_id(j.id + 1000)
+        self.assertIn("Unable to retrieve", unknown, "unknown job does not raise")
+
+    def test_clean_job_from_id_aliases(self):
+        "The camelCase spellings are kept for backward compatibility"
+        aliases = ("cleanJobfromId", "cleanJobfromID",
+                   "cleanJobFromId", "cleanJobFromID")
+        for name in aliases:
+            self.assertTrue(hasattr(job.Job, name), f"Job.{name} exists")
+            self.assertIs(getattr(job.Job, name).__func__,
+                          job.Job.clean_job_from_id.__func__,
+                          f"Job.{name} is clean_job_from_id")
+
 
 def suite():
     testSuite = unittest.TestSuite()
     testSuite.addTest(TestJob("test_plugin_from_function"))
+    testSuite.addTest(TestJob("test_clean_job_from_id"))
+    testSuite.addTest(TestJob("test_clean_job_from_id_aliases"))
     return testSuite
 
 if __name__ == '__main__':
