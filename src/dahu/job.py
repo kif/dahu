@@ -245,11 +245,13 @@ class Job(Thread):
         """
         log an error message in the output
         """
+        err_msg = [msg]
         exc_type, exc_value, exc_traceback = sys.exc_info()
-        err_msg = [msg, f"{exc_type}: {exc_value}"]
-        for line in traceback.extract_tb(exc_traceback):
-            err_msg.append("  File \"%s\", line %d, in %s" % (line[0], line[1], line[2]))
-            err_msg.append(f"\t\t{line[3]}")
+        if exc_type is not None:  # there is no exception when a plugin is missing
+            err_msg.append(f"{exc_type}: {exc_value}")
+            for line in traceback.extract_tb(exc_traceback):
+                err_msg.append("  File \"%s\", line %d, in %s" % (line[0], line[1], line[2]))
+                err_msg.append(f"\t\t{line[3]}")
         with self._sem:
             self._status = self.STATE_FAILURE
             if "error" not in self._output_data:

@@ -60,7 +60,8 @@ download = 'https://github.com/kif/dahu/releases'
 tracker = 'https://github.com/kif/dahu/issues'
 
 [project.scripts]
-dahu_server = 'dahu.app.tango_server:main'
+dahu-server = 'dahu.app.tango_server:main'
+dahu_server = 'dahu.app.tango_server:main'  # kept for backward compatibility
 dahu-reprocess = 'dahu.app.reprocess:main'
 dahu-register = 'dahu.app.tango_register:main'
 

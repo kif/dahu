@@ -64,6 +64,9 @@ class TestJob(unittest.TestCase):
         j.start()  # synchronous: the thread is never started in this case
         self.assertEqual(j.status, j.STATE_FAILURE, "job ended in failure")
         self.assertTrue(self.called, "callback called despite the missing plugin")
+        error = os.linesep.join(j.output_data["error"])
+        self.assertIn("failed to be instanciated", error, "the cause is reported")
+        self.assertNotIn("None: None", error, "no phony exception in the message")
 
     def test_abort(self):
         "A running job can be stopped, and only while it is running"

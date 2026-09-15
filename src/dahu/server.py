@@ -164,11 +164,6 @@ class DahuDS(PyTango.LatestDeviceImpl):
         logger.debug(f"In {self.get_name()}.abort({jobId})")
         return Job.abort_job_from_id(jobId)
 
-    def quitDahu(self):
-        logger.debug(f"In {self.get_name()}.quitDahu()")
-        logger.info("Quitting DahuDS")
-        sys.exit()
-
     def startJob(self, argin):
         """
         Starts a job
