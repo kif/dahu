@@ -148,6 +148,7 @@ class Job(Thread):
             if self._plugin is None:
                 self._log_error(f"plugin {self._name} failed to be instanciated.")
                 logger.debug(plugin_factory.registry)
+                self._run_callbacks()
             else:
                 # finally launch the new thread.
                 Thread.start(self)

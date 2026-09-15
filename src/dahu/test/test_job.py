@@ -41,6 +41,15 @@ class TestJob(unittest.TestCase):
         assert len(args) == 1
         self.called = True
 
+    def test_callbacks_on_missing_plugin(self):
+        "A job which fails to instanciate its plugin must still run its callbacks"
+        self.called = False
+        j = job.Job("nosuch.plugin", {})
+        j.connect_callback(self.callback)
+        j.start()  # synchronous: the thread is never started in this case
+        self.assertEqual(j.status, j.STATE_FAILURE, "job ended in failure")
+        self.assertTrue(self.called, "callback called despite the missing plugin")
+
     def test_clean_job_from_id(self):
         "Cleaning a job frees the plugin and leaves the data readable from disk"
         j = job.Job("example.square", {"x": 5})
@@ -73,6 +82,7 @@ class TestJob(unittest.TestCase):
 def suite():
     testSuite = unittest.TestSuite()
     testSuite.addTest(TestJob("test_plugin_from_function"))
+    testSuite.addTest(TestJob("test_callbacks_on_missing_plugin"))
     testSuite.addTest(TestJob("test_clean_job_from_id"))
     testSuite.addTest(TestJob("test_clean_job_from_id_aliases"))
     return testSuite
