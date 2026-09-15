@@ -156,8 +156,13 @@ class DahuDS(PyTango.LatestDeviceImpl):
         """
         Aborts a job
 
+        The plugin has to honour it: it is expected to check `is_aborted`.
+
         @param  jobId: ID of the job to stop
+        @return: True if the job was running and has been asked to stop
         """
+        logger.debug(f"In {self.get_name()}.abort({jobId})")
+        return Job.abort_job_from_id(jobId)
 
     def quitDahu(self):
         logger.debug(f"In {self.get_name()}.quitDahu()")

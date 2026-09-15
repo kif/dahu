@@ -162,12 +162,18 @@ class Job(Thread):
         Tell the job to stop !
 
         Needs to be implemented into the plugin !
+
+        :return: True if the job was running and has been asked to stop
         """
-        if self._status == self.STATE_RUNNING:
-            with self._sem:
-                self._status = self.STATE_ABORTED
-                self._output_data[self._status] = utils.get_isotime()
-                self._run_("abort")
+        if self._status != self.STATE_RUNNING:
+            logger.warning(f"Job {self._jobId} is {self._status}, not aborting it")
+            return False
+        with self._sem:
+            self._status = self.STATE_ABORTED
+            self._output_data[self._status] = utils.get_isotime()
+        # outside of the semaphore: the plugin may fail and log the error
+        self._run_("abort")
+        return True
 
     def run(self):
         """
@@ -448,6 +454,22 @@ class Job(Thread):
             logger.warning(f"Unable to retrieve such Job: {jobId}")
 
     getJobFromId = getJobFromID
+
+    @classmethod
+    def abort_job_from_id(cls, jobId):
+        """
+        Ask a running job to stop
+
+        The plugin has to honour it: it is expected to check `is_aborted`.
+
+        :param jobId: the Job identification number
+        :type jobId: int
+        :return: True if the job was running and has been asked to stop
+        """
+        job = cls.getJobFromID(jobId)
+        if job is None:
+            return False
+        return job.abort()
 
     @classmethod
     def clean_job_from_id(cls, jobId, forceGC=True):

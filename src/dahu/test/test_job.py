@@ -9,12 +9,27 @@ __date__ = "11/03/2026"
 __status__ = "production"
 
 import os
+import time
 import unittest
 
 from .. import job
+from ..factory import Factory, register
+from ..plugin import Plugin
 from . import utilstest
 
 logger = utilstest.getLogger(__name__)
+
+DAEMON_FQN = "test_job.daemon"
+
+
+class Daemon(Plugin):
+    "Plugin looping until it is aborted, used to test the abort command"
+
+    def process(self):
+        deadline = time.perf_counter() + 10  # safety net, should never be reached
+        while not self.is_aborted and time.perf_counter() < deadline:
+            time.sleep(0.01)
+        self.output["aborted"] = self.is_aborted
 
 
 class TestJob(unittest.TestCase):
@@ -50,6 +65,31 @@ class TestJob(unittest.TestCase):
         self.assertEqual(j.status, j.STATE_FAILURE, "job ended in failure")
         self.assertTrue(self.called, "callback called despite the missing plugin")
 
+    def test_abort(self):
+        "A running job can be stopped, and only while it is running"
+        register(Daemon, fqn=DAEMON_FQN)
+        try:
+            j = job.Job(DAEMON_FQN, {})
+            j.start()
+            deadline = time.perf_counter() + 5
+            while j.status != j.STATE_RUNNING and time.perf_counter() < deadline:
+                time.sleep(0.01)
+            self.assertEqual(j.status, j.STATE_RUNNING, "job is running")
+
+            self.assertTrue(job.Job.abort_job_from_id(j.id), "job aborted")
+            # Job.join() does not wait once the status is `aborted`
+            deadline = time.perf_counter() + 5
+            while j.is_alive() and time.perf_counter() < deadline:
+                time.sleep(0.01)
+            self.assertFalse(j.is_alive(), "the plugin honoured the abort")
+            self.assertEqual(j.status, j.STATE_ABORTED, "job is aborted")
+            self.assertTrue(j.output_data.get("aborted"), "plugin saw the abort")
+
+            self.assertFalse(job.Job.abort_job_from_id(j.id), "no re-abort")
+            self.assertFalse(job.Job.abort_job_from_id(j.id + 500), "unknown job")
+        finally:
+            Factory.registry.pop(DAEMON_FQN, None)
+
     def test_clean_job_from_id(self):
         "Cleaning a job frees the plugin and leaves the data readable from disk"
         j = job.Job("example.square", {"x": 5})
@@ -83,6 +123,7 @@ def suite():
     testSuite = unittest.TestSuite()
     testSuite.addTest(TestJob("test_plugin_from_function"))
     testSuite.addTest(TestJob("test_callbacks_on_missing_plugin"))
+    testSuite.addTest(TestJob("test_abort"))
     testSuite.addTest(TestJob("test_clean_job_from_id"))
     testSuite.addTest(TestJob("test_clean_job_from_id_aliases"))
     return testSuite
