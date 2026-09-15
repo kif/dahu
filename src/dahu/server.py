@@ -36,6 +36,19 @@ except ImportError:
     logger.debug("No socket opened for debugging -> please install rfoo")
 
 
+def summarize(docstring):
+    """Extract a one line description out of a docstring
+
+    :param docstring: the docstring of a plugin, possibly None
+    :return: the first non empty line of it
+    """
+    for line in (docstring or "").splitlines():
+        line = line.strip()
+        if line:
+            return line
+    return "no documentation"
+
+
 class DahuDS(PyTango.LatestDeviceImpl):
     """
     Tango device server launcher for Dahu server.
@@ -110,29 +123,31 @@ class DahuDS(PyTango.LatestDeviceImpl):
         """
         logger.debug(f"In {self.get_name()}.listPlugins")
         res = ["List of all plugin currently loaded (use initPlugin to loaded additional plugins):"]
-        plugins = list(plugin_factory.registry.keys())
-        plugins.sort()
-        plugins_doc = {}
-        for i in plugins:
-            for j in plugin_factory.registry[i].__doc__.split(os.linesep):
-                doc = j.strip()
-                if doc:  # Non empty line in docstring
-                    break
-            plugins_doc[i] = doc
-        return os.linesep.join(res + [f' {i} : {doc}' for i, j in plugins_doc.items()])
+        for name in sorted(plugin_factory.registry):
+            res.append(f" {name} : {summarize(plugin_factory.registry[name].__doc__)}")
+        unavailable = plugin_factory.unavailable
+        if unavailable:
+            res.append("")
+            res.append("Plugins which failed to be loaded:")
+            for name in sorted(unavailable):
+                res.append(f" {name} : {unavailable[name]}")
+        return os.linesep.join(res)
 
     def initPlugin(self, name):
         """
         Creates a job with the given plugin
         """
         logger.debug(f"In {self.get_name()}.initPlugin({name})")
-        err = None
+        plugin = err = None
         try:
             plugin = plugin_factory(name)
         except Exception as error:
-            err = f"plugin {name} failed to be instanciated: {error}"
-            logger.error(err)
-        if plugin is None or err:
+            err = f"{type(error).__name__}: {error}"
+            logger.error(f"plugin {name} failed to be instanciated, {err}")
+        if plugin is None:
+            if err is None:
+                # the plugin may have been disabled at registration time
+                err = plugin_factory.unavailable.get(name.lower(), "no such plugin")
             return f"Plugin not found: {name}, {err}"
         else:
             return f"Plugin loaded: {name}{os.linesep}{plugin.__doc__}"

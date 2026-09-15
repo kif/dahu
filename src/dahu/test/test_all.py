@@ -12,7 +12,7 @@ __data__ = "10/06/2016"
 import sys
 import unittest
 
-from . import test_cache, test_factory, test_job, test_plugin
+from . import test_cache, test_factory, test_job, test_plugin, test_server
 from .utilstest import getLogger
 
 logger = getLogger(__file__)
@@ -24,6 +24,7 @@ def suite():
     testSuite.addTest(test_plugin.suite())
     testSuite.addTest(test_cache.suite())
     testSuite.addTest(test_factory.suite())
+    testSuite.addTest(test_server.suite())
     return testSuite
 
 if __name__ == '__main__':
