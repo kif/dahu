@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/03/2026"
+__date__ = "16/09/2026"
 __status__ = "development"
 __version__ = "0.4.0"
 
@@ -596,7 +596,7 @@ class SubtractBuffer(Plugin):
 
         q2 = q[mask] ** 2
         logI = numpy.log(I_ary[mask])
-        dlogI = err[mask] / logI
+        dlogI = err[mask] / I_ary[mask]
         q2_ds = guinier_data.create_dataset("q2", data=q2.astype(numpy.float32))
         q2_ds.attrs["unit"] = radius_unit + "⁻²"
         q2_ds.attrs["long_name"] = "q² (%s⁻²)" % radius_unit
