@@ -54,6 +54,7 @@ from .common import (
     get_integrator,
     method,
     polarization_factor,
+    str_
 )
 from .icat import send_icat
 from .ispyb import IspybConnector, NumpyEncoder
@@ -110,7 +111,7 @@ def save_zip(filename, sample_juice, buffer_juices):
 
         if sample.buffer:
             common["buffer"] = sample.buffer
-            destz_buffer += sample.buffer if isinstance(sample.buffer, str) else sample.buffer.decode()
+            destz_buffer += str_(sample.buffer)
         else:
             destz_buffer += "buffer"
 
@@ -832,8 +833,8 @@ class SubtractBuffer(Plugin):
 
             buffer = str_(sample_grp["buffer"][()] if "buffer" in sample_grp else "")
             concentration = sample_grp["concentration"][()] if "concentration" in sample_grp else ""
-            description = sample_grp["description"][()] if "description" in sample_grp else ""
-            hplc = sample_grp["hplc"][()] if "hplc" in sample_grp else ""
+            description = str_(sample_grp["description"][()]) if "description" in sample_grp else ""
+            hplc = str_(sample_grp["hplc"][()]) if "hplc" in sample_grp else ""
             temperature = sample_grp["temperature"][()] if "temperature" in sample_grp else ""
             temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
             sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
@@ -883,8 +884,3 @@ class SubtractBuffer(Plugin):
 
         return to_memcached(dico)
 
-def str_(smth):
-    if isinstance(smth, bytes):
-        return smth.decode()
-    else:
-        return str(smth)

@@ -58,6 +58,7 @@ from .common import (
     Sample,
     SequenceIndex,
     create_nexus_sample,
+    str_
 )
 from .icat import send_icat
 from .ispyb import IspybConnector
@@ -361,7 +362,7 @@ class HPLC(Plugin):
 
         q = self.juices[0].q
         unit = self.juices[0].unit
-        radial_unit, unit_name = str(unit).split("_", 1)
+        radial_unit, unit_name = str_(unit).split("_", 1)
 
         # Sample: outsourced !
         create_nexus_sample(nxs, entry_grp, self.juices[0].sample)
@@ -471,7 +472,7 @@ class HPLC(Plugin):
         time_ds.attrs["long_name"] = "Time stamps (s)"
 
         integration_data = nxs.new_class(chroma_grp, "result", "NXdata")
-        chroma_grp.attrs["title"] = str(self.juices[0].sample)
+        chroma_grp.attrs["title"] = str_(self.juices[0].sample)
 
         int_ds = integration_data.create_dataset(
             "I", data=numpy.ascontiguousarray(I, dtype=numpy.float32)
@@ -546,7 +547,7 @@ class HPLC(Plugin):
             W = nmf.fit_transform(I.T)
         except ValueError as err:
             self.log_warning(f"NMF data decomposition failed with: {err}")
-            nmf_grp[err.__class__.__name__] = str(err)
+            nmf_grp[err.__class__.__name__] = str_(err)
         else:
             eigen_data = nxs.new_class(nmf_grp, "eigenvectors", "NXdata")
             eigen_ds = eigen_data.create_dataset(
@@ -649,7 +650,7 @@ class HPLC(Plugin):
         q = self.juices[0].q
         unit = self.juices[0].unit
         sample = self.juices[0].sample
-        radial_unit, unit_name = str(unit).split("_", 1)
+        radial_unit, unit_name = str_(unit).split("_", 1)
 
         I_sub = self.to_pyarch["subtracted_I"]
         sigma = self.to_pyarch["subtracted_Stdev"]
@@ -1207,9 +1208,9 @@ class HPLC(Plugin):
             npt = len(q)
             unit = pyFAI.units.to_unit(axes + "_" + integrated[axes].attrs["units"])
             integration_grp = nxdata_grp.parent
-            poni = str(integration_grp["configuration/file_name"][()]).strip()
+            poni = str_(integration_grp["configuration/file_name"][()]).strip()
             if not os.path.exists(poni):
-                poni = str(integration_grp["configuration/data"][()]).strip()
+                poni = str_(integration_grp["configuration/data"][()]).strip()
             polarization = integration_grp["configuration/polarization_factor"][()]
             method = IntegrationMethod.select_method(
                 **json.loads(integration_grp["configuration/integration_method"][()])
@@ -1226,12 +1227,12 @@ class HPLC(Plugin):
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
             sample_name = posixpath.split(sample_grp.name)[-1]
 
-            buffer = sample_grp["buffer"][()] if "buffer" in sample_grp else ""
+            buffer = str_(sample_grp["buffer"][()]) if "buffer" in sample_grp else ""
             concentration = (
                 sample_grp["concentration"][()] if "concentration" in sample_grp else ""
             )
             description = (
-                sample_grp["description"][()] if "description" in sample_grp else ""
+                str_(sample_grp["description"][()]) if "description" in sample_grp else ""
             )
             hplc = sample_grp["hplc"][()] if "hplc" in sample_grp else ""
             temperature = (

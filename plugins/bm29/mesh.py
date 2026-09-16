@@ -37,7 +37,7 @@ from pyFAI.method_registry import IntegrationMethod
 
 from dahu.plugin import Plugin
 
-from .common import SAXS_STYLE, Ispyb, Sample, SequenceIndex, create_nexus_sample
+from .common import SAXS_STYLE, Ispyb, Sample, SequenceIndex, create_nexus_sample, str_
 from .nexus import Nexus, get_isotime
 
 matplotlib.use("Agg")
@@ -133,7 +133,7 @@ class Scan:
         return (self.slow_motor_step + 1, self.fast_motor_step + 1)
 
     @classmethod
-    def parse(cls, text):
+    def parse(cls, text:str):
         """Alternative constructor,
         :param text: string containing the bliss command (starting with `amesh`)
         :return: instance of the dataclass
@@ -173,8 +173,7 @@ def input_from_master(master_file):
             title = entry.get("title", "")
             if isinstance(title, h5py.Dataset):
                 title = title[()]
-            if isinstance(title, bytes):
-                title = title.decode()
+            title = str_(title)
             if title:
                 scan = Scan.parse(title)
             if scan is None:
@@ -532,11 +531,9 @@ class Mesh(Plugin):
             npt = len(q)
             unit = pyFAI.units.to_unit(axes + "_" + integrated[axes].attrs["units"])
             integration_grp = nxdata_grp.parent
-            poni = str(integration_grp["configuration/file_name"][()]).strip()
+            poni = str_(integration_grp["configuration/file_name"][()]).strip()
             if not os.path.exists(poni):
-                poni = integration_grp["configuration/data"][()]
-                if isinstance(poni, bytes):
-                    poni = poni.decode()
+                poni = str_(integration_grp["configuration/data"][()])
                 poni = json.loads(poni)
             polarization = integration_grp["configuration/polarization_factor"][()]
             method = IntegrationMethod.select_method(**json.loads(integration_grp["configuration/integration_method"][()]))[0]
@@ -550,9 +547,9 @@ class Mesh(Plugin):
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
             sample_name = posixpath.split(sample_grp.name)[-1]
 
-            buffer = sample_grp["buffer"][()] if "buffer" in sample_grp else ""
+            buffer = str_(sample_grp["buffer"][()]) if "buffer" in sample_grp else ""
             concentration = sample_grp["concentration"][()] if "concentration" in sample_grp else ""
-            description = sample_grp["description"][()] if "description" in sample_grp else ""
+            description = str_(sample_grp["description"][()]) if "description" in sample_grp else ""
             hplc = sample_grp["hplc"][()] if "hplc" in sample_grp else ""
             temperature = sample_grp["temperature"][()] if "temperature" in sample_grp else ""
             temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
