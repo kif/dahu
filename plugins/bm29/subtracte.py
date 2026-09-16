@@ -506,7 +506,7 @@ class SubtractBuffer(Plugin):
     # Process 4: Guinier analysis
         seq = self.seq()
         guinier_grp = nxs.new_class(entry_grp, f"{seq}_Guinier_analysis", "NXprocess")
-        guinier_grp["sequence_index"] = self.seq()
+        guinier_grp["sequence_index"] = seq
         guinier_grp["program"] = "freesas.autorg"
         guinier_grp["version"] = freesas.version
         guinier_grp["date"] = get_isotime()

@@ -136,7 +136,7 @@ class EquivalentFrames(NamedTuple):
 class SequenceIndex:
     "Increment by one each time one calls it"
     def __init__(self, start:int=0):
-        self.idx = 0
+        self.idx = start
 
     def __call__(self)->int:
         value = self.idx
