@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "08/04/2026"
+__date__ = "16/09/2026"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -97,7 +97,7 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
 
     if metadata is None:
         metadata = {}
-    metadata["definition"] = "SAXS",
+    metadata["definition"] = "SAXS"
    # metadata["Sample_name"] = sample
 
     for k,v in data.items():
@@ -128,8 +128,8 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     bift = data.get("bift")
     if bift:
         metadata["SAXS_rg"] =  f"{bift.Rg_avg:.1f}±{bift.Rg_std:.1f}"
-        metadata["SAXS_rg_std"] =  f"{bift.Rg_avg:.1f}"
-        metadata["SAXS_rg_avg"] =  f"{bift.Rg_std:.1f}"
+        metadata["SAXS_rg_avg"] =  f"{bift.Rg_avg:.1f}"
+        metadata["SAXS_rg_std"] =  f"{bift.Rg_std:.1f}"
         metadata["SAXS_d_max"] = f"{bift.Dmax_avg:.1f}±{bift.Dmax_std:.1f}"
         metadata["SAXS_chi2r"] = f"{bift.chi2r_avg:.2f}"
         metadata["SAXS_chi2r_error"] = f"{bift.chi2r_std:.2f}"
