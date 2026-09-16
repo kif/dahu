@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """Data Analysis plugin for BM29: BioSaxs
 
@@ -15,6 +14,7 @@ __status__ = "development"
 __version__ = "0.3.0"
 
 import socket
+
 try:
     import memcache
 except (ImportError, ModuleNotFoundError):

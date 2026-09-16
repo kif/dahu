@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """Data Analysis plugin for BM29: BioSaxs
 
@@ -15,37 +14,52 @@ __date__ = "16/09/2026"
 __status__ = "development"
 __version__ = "0.4.0"
 
+import copy
+import json
+import logging
 import os
 import posixpath
-import json
-import copy
 import zipfile
 from math import log, pi
 from typing import NamedTuple
-from urllib3.util import parse_url
-import numpy
-from dahu.plugin import Plugin
-from dahu.utils import fully_qualified_name
-import logging
-import h5py
-import pyFAI
-import pyFAI.integrator.azimuthal
-from pyFAI.containers import Integrate1dResult
-from pyFAI.method_registry import IntegrationMethod
+
 import freesas
 import freesas.cormap
 import freesas.invariants
-from freesas.autorg import auto_gpa, autoRg, auto_guinier
-from freesas.bift import BIFT
+import h5py
+import numpy
+import pyFAI
+import pyFAI.integrator.azimuthal
 from freesas.app.extract_ascii import write_ascii
+from freesas.autorg import auto_gpa, auto_guinier, autoRg
+from freesas.bift import BIFT
+from pyFAI.containers import Integrate1dResult
+from pyFAI.method_registry import IntegrationMethod
 from scipy.optimize import minimize
-from .common import Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
-                    polarization_factor, method, SAXS_STYLE, NORMAL_STYLE, \
-                    Sample, create_nexus_sample
-from .nexus import Nexus, get_isotime
+from urllib3.util import parse_url
+
+from dahu.plugin import Plugin
+from dahu.utils import fully_qualified_name
+
+from .common import (
+    NORMAL_STYLE,
+    SAXS_STYLE,
+    Ispyb,
+    KeyCache,
+    Sample,
+    SequenceIndex,
+    cmp_float,
+    create_nexus_sample,
+    get_equivalent_frames,
+    get_integrator,
+    method,
+    polarization_factor,
+)
+from .icat import send_icat
 from .ispyb import IspybConnector, NumpyEncoder
 from .memcached import to_memcached
-from .icat import send_icat
+from .nexus import Nexus, get_isotime
+
 logger = logging.getLogger("bm29.subtract")
 try:
     import numexpr
@@ -60,7 +74,7 @@ class NexusJuice(NamedTuple):
     npt: int
     unit: str
     q: numpy.ndarray
-    I: numpy.ndarray  # noqa
+    I: numpy.ndarray
     sigma: numpy.ndarray
     poni:str
     mask: numpy.ndarray
@@ -172,6 +186,7 @@ class SubtractBuffer(Plugin):
         self.ispyb = None
         self.to_pyarch = {}
         self.to_memcached = {}  # data to be shared via memcached
+        self.seq = SequenceIndex(0)
 
     def setup(self, kwargs=None):
         logger.debug("SubtractBuffer.setup")
@@ -242,7 +257,7 @@ class SubtractBuffer(Plugin):
         self.to_pyarch["basename"] = os.path.splitext(os.path.basename(self.sample_file))[0]
         try:
             self.create_nexus()
-        except Exception as err:
+        except Exception:
             # try to register in test-mode
             if self.input.get("test_mode", True):
                 try:
@@ -250,7 +265,7 @@ class SubtractBuffer(Plugin):
                 except Exception as err2:
                     import traceback
                     self.log_warning(f"Processing failed and unable to send remaining data to ISPyB: {type(err2)} {err2}\n{traceback.format_exc(limit=10)}")
-                raise(err)
+                raise
         else:
             self.send_to_ispyb()
             self.send_to_icat()
@@ -301,8 +316,9 @@ class SubtractBuffer(Plugin):
         cfg_grp.create_dataset("format", data="text/json")
 
     # Process 0: Measurement group
-        input_grp = nxs.new_class(entry_grp, "0_measurement", "NXcollection")
-        input_grp["sequence_index"] = 0
+        seq = self.seq()
+        input_grp = nxs.new_class(entry_grp, f"{seq}_measurement", "NXcollection")
+        input_grp["sequence_index"] = seq
         rel_path = os.path.relpath(os.path.abspath(self.sample_file), os.path.dirname(os.path.abspath(self.output_file)))
         input_grp["sample"] = h5py.ExternalLink(rel_path, self.sample_juice.h5path)
 
@@ -322,8 +338,9 @@ class SubtractBuffer(Plugin):
                  self.buffer_juices)
 
     # Process 1: CorMap
-        cormap_grp = nxs.new_class(entry_grp, "1_correlation_mapping", "NXprocess")
-        cormap_grp["sequence_index"] = 1
+        seq = self.seq()
+        cormap_grp = nxs.new_class(entry_grp, f"{seq}_correlation_mapping", "NXprocess")
+        cormap_grp["sequence_index"] = seq
         cormap_grp["program"] = "freesas.cormap"
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
@@ -363,8 +380,9 @@ class SubtractBuffer(Plugin):
         cormap_grp.attrs["default"] = posixpath.relpath(cormap_data.name, cormap_grp.name)
 
     # Process 2: Image processing: subtraction with standard deviation
-        average_grp = nxs.new_class(entry_grp, "2_buffer_subtraction", "NXprocess")
-        average_grp["sequence_index"] = 2
+        seq = self.seq()
+        average_grp = nxs.new_class(entry_grp, f"{seq}_buffer_subtraction", "NXprocess")
+        average_grp["sequence_index"] = seq
         average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
         average_data = nxs.new_class(average_grp, "result", "NXdata")
@@ -424,15 +442,16 @@ class SubtractBuffer(Plugin):
             self.to_pyarch["buffer"] = res2
 
     # Process 3: Azimuthal integration of the subtracted image
-        ai2_grp = nxs.new_class(entry_grp, "3_azimuthal_integration", "NXprocess")
-        ai2_grp["sequence_index"] = 3
+        seq = self.seq()
+        ai2_grp = nxs.new_class(entry_grp, f"{seq}_azimuthal_integration", "NXprocess")
+        ai2_grp["sequence_index"] = seq
         ai2_grp["program"] = "pyFAI"
         ai2_grp["version"] = pyFAI.version
         ai2_grp["date"] = get_isotime()
         radial_unit, unit_name = str(key_cache.unit).split("_", 1)
         ai2_data = nxs.new_class(ai2_grp, "result", "NXdata")
         ai2_data.attrs["SILX_style"] = SAXS_STYLE
-        ai2_data.attrs["title"] = "%s, subtracted" % self.sample_juice.sample.name
+        ai2_data.attrs["title"] = f"{self.sample_juice.sample.name}, subtracted"
         ai2_data.attrs["signal"] = "I"
         ai2_data.attrs["axes"] = radial_unit
         ai2_grp.attrs["default"] = posixpath.relpath(ai2_data.name, ai2_grp.name)
@@ -485,8 +504,9 @@ class SubtractBuffer(Plugin):
         entry_grp.attrs["default"] = posixpath.relpath(ai2_data.name, entry_grp.name)
 
     # Process 4: Guinier analysis
-        guinier_grp = nxs.new_class(entry_grp, "4_Guinier_analysis", "NXprocess")
-        guinier_grp["sequence_index"] = 4
+        seq = self.seq()
+        guinier_grp = nxs.new_class(entry_grp, f"{seq}_Guinier_analysis", "NXprocess")
+        guinier_grp["sequence_index"] = seq
         guinier_grp["program"] = "freesas.autorg"
         guinier_grp["version"] = freesas.version
         guinier_grp["date"] = get_isotime()
@@ -502,7 +522,7 @@ class SubtractBuffer(Plugin):
         try:
             gpa = auto_gpa(sasm)
         except Exception as error:
-            guinier_gpa["Failed"] = "%s: %s" % (error.__class__.__name__, error)
+            guinier_gpa["Failed"] = f"{error.__class__.__name__}: {error}"
             gpa = None
         else:
             #  "Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
@@ -520,7 +540,7 @@ class SubtractBuffer(Plugin):
         try:
             guinier = auto_guinier(sasm)
         except Exception as error:
-            guinier_guinier["Failed"] = "%s: %s" % (error.__class__.__name__, error)
+            guinier_guinier["Failed"] = f"{error.__class__.__name__}: {error}"
             guinier = None
         else:
             #  "Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
@@ -540,7 +560,7 @@ class SubtractBuffer(Plugin):
         try:
             autorg = autoRg(sasm)
         except Exception as err:
-            guinier_autorg["Failed"] = "%s: %s" % (err.__class__.__name__, err)
+            guinier_autorg["Failed"] = f"{err.__class__.__name__}: {err}"
             autorg = None
         else:
             if autorg.Rg < 0:
@@ -599,7 +619,7 @@ class SubtractBuffer(Plugin):
         dlogI = err[mask] / I_ary[mask]
         q2_ds = guinier_data.create_dataset("q2", data=q2.astype(numpy.float32))
         q2_ds.attrs["unit"] = radius_unit + "⁻²"
-        q2_ds.attrs["long_name"] = "q² (%s⁻²)" % radius_unit
+        q2_ds.attrs["long_name"] = f"q² ({radius_unit}⁻²)"
         q2_ds.attrs["interpretation"] = "spectrum"
         lnI_ds = guinier_data.create_dataset("logI", data=logI.astype(numpy.float32))
         lnI_ds.attrs["long_name"] = "log(I)"
@@ -622,8 +642,9 @@ class SubtractBuffer(Plugin):
             self.log_error("No Guinier region found, data of dubious quality", do_raise=True)
 
     # Process 5: Kratky plot
-        kratky_grp = nxs.new_class(entry_grp, "5_dimensionless_Kratky_plot", "NXprocess")
-        kratky_grp["sequence_index"] = 5
+        seq = self.seq()
+        kratky_grp = nxs.new_class(entry_grp, f"{seq}_dimensionless_Kratky_plot", "NXprocess")
+        kratky_grp["sequence_index"] = seq
         kratky_grp["program"] = "freesas.autorg"
         kratky_grp["version"] = freesas.version
         kratky_grp["date"] = get_isotime()
@@ -653,8 +674,9 @@ class SubtractBuffer(Plugin):
         kratky_data_attrs["axes"] = qRg_ds.name
 
     # stage 6: Rambo-Tainer invariant
-        rti_grp = nxs.new_class(entry_grp, "6_invariants", "NXprocess")
-        rti_grp["sequence_index"] = 6
+        seq = self.seq()
+        rti_grp = nxs.new_class(entry_grp, f"{seq}_invariants", "NXprocess")
+        rti_grp["sequence_index"] = seq
         rti_grp["program"] = "freesas.invariants"
         rti_grp["version"] = freesas.version
         rti_data = nxs.new_class(rti_grp, "result", "NXdata")
@@ -690,8 +712,9 @@ class SubtractBuffer(Plugin):
         self.to_pyarch["rti"] = rti
 
     # stage 7: Pair distribution function, what is the equivalent of datgnom
-        bift_grp = nxs.new_class(entry_grp, "7_indirect_Fourier_transformation", "NXprocess")
-        bift_grp["sequence_index"] = 6
+        seq = self.seq()
+        bift_grp = nxs.new_class(entry_grp, f"{seq}_indirect_Fourier_transformation", "NXprocess")
+        bift_grp["sequence_index"] = seq
         bift_grp["program"] = "freesas.bift"
         bift_grp["version"] = freesas.version
         bift_grp["date"] = get_isotime()
@@ -734,7 +757,7 @@ class SubtractBuffer(Plugin):
             cfg_grp["Powell_steps"] = res.nfev
             cfg_grp["Monte-Carlo_steps"] = 0
         except Exception as error:
-            bift_grp["Failed"] = "%s: %s" % (error.__class__.__name__, error)
+            bift_grp["Failed"] = f"{error.__class__.__name__}: {error}"
             bo = None
         else:
             stats = bo.calc_stats()
@@ -757,7 +780,7 @@ class SubtractBuffer(Plugin):
             r_ds.attrs["interpretation"] = "spectrum"
 
             r_ds.attrs["unit"] = radius_unit
-            r_ds.attrs["long_name"] = "radius r(%s)" % radius_unit
+            r_ds.attrs["long_name"] = f"radius r({radius_unit})"
             p_ds = bift_data.create_dataset("p(r)", data=stats.density_avg.astype(numpy.float32))
             p_ds.attrs["interpretation"] = "spectrum"
             bift_data["errors"] = stats.density_std
@@ -830,7 +853,7 @@ class SubtractBuffer(Plugin):
             ispyb = IspybConnector(*self.ispyb)
             ispyb.send_subtracted(self.to_pyarch)
         else:
-            self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
+            self.log_warning(f"Not sending to ISPyB: no valid URL {self.ispyb.url}")
 
     def send_to_icat(self):
         to_icat = copy.copy(self.to_pyarch)

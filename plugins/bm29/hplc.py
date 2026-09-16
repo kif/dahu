@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """Data Analysis plugin for BM29: BioSaxs
 
 * HPLC mode: Rebuild the complete chromatogram and perform basic analysis on it.
 """
+from __future__ import annotations
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
@@ -14,44 +14,54 @@ __date__ = "16/09/2026"
 __status__ = "development"
 __version__ = "0.4.1"
 
-import time
-import os
-import json
-import math
-from math import log, pi
-import posixpath
 import copy
-import zipfile
-from urllib3.util import parse_url
-from dahu.plugin import Plugin
+import json
 
 # from dahu.utils import fully_qualified_name
 import logging
-import numpy
-import h5py
-import pyFAI
-import pyFAI.integrator.azimuthal
-import pyFAI.units
-from pyFAI.method_registry import IntegrationMethod
+import math
+import os
+import posixpath
+import time
+import zipfile
+from math import log, pi
+from typing import NamedTuple
+
 import freesas
 import freesas.cormap
 import freesas.invariants
-from freesas.autorg import auto_gpa, autoRg, auto_guinier
-from freesas.bift import BIFT
-from freesas.app.extract_ascii import write_ascii
-from freesas.containers import UVJuice
-from scipy.optimize import minimize
-import scipy.signal
-import scipy.ndimage
-import sklearn
-from sklearn.decomposition import NMF
-from .common import Ispyb, SAXS_STYLE, NORMAL_STYLE, Sample, create_nexus_sample
-from .nexus import Nexus, get_isotime
-from .ispyb import IspybConnector
-from .icat import send_icat
-from typing import NamedTuple
+import h5py
 import matplotlib.pyplot
+import numpy
+import pyFAI
+import pyFAI.integrator.azimuthal
+import pyFAI.units
+import scipy.ndimage
+import scipy.signal
+import sklearn
+from freesas.app.extract_ascii import write_ascii
+from freesas.autorg import auto_gpa, auto_guinier, autoRg
+from freesas.bift import BIFT
+from freesas.containers import UVJuice
 from freesas.plot import hplc_plot
+from pyFAI.method_registry import IntegrationMethod
+from scipy.optimize import minimize
+from sklearn.decomposition import NMF
+from urllib3.util import parse_url
+
+from dahu.plugin import Plugin
+
+from .common import (
+    NORMAL_STYLE,
+    SAXS_STYLE,
+    Ispyb,
+    Sample,
+    SequenceIndex,
+    create_nexus_sample,
+)
+from .icat import send_icat
+from .ispyb import IspybConnector
+from .nexus import Nexus, get_isotime
 
 logger = logging.getLogger("bm29.hplc")
 matplotlib.use("Agg")
@@ -67,7 +77,7 @@ class NexusJuice(NamedTuple):
     idx: numpy.ndarray
     Isum: numpy.ndarray
     q: numpy.ndarray
-    I: numpy.ndarray  # noqa
+    I: numpy.ndarray
     sigma: numpy.ndarray
     poni: str
     mask: numpy.ndarray
@@ -160,7 +170,7 @@ def build_background(intensity, std=None, keep=0.3):
         for i in intensity
     ]
     orderd = numpy.argsort(Pscore)
-    nkeep = int(math.ceil(keep * intensity.shape[0]))
+    nkeep = math.ceil(keep * intensity.shape[0])
     to_keep = numpy.sort(orderd[:nkeep])
     bg_avg = intensity[to_keep].mean(axis=0)
     if std is not None:
@@ -240,13 +250,8 @@ class HPLC(Plugin):
         self.nmf_components = self.NMF_COMP
         self.to_pyarch = {}
         self.ispyb = None
-        self._pid = 0
+        self.sequence_index = SequenceIndex(0)
         self._time_digits = 0
-
-    def sequence_index(self):
-        value = self._pid
-        self._pid += 1
-        return value
 
     def setup(self):
         Plugin.setup(self)
@@ -364,7 +369,7 @@ class HPLC(Plugin):
         nframes = max(i.idx.max() for i in self.juices) + 1
         nbin = q.size
 
-        I = numpy.zeros((nframes, nbin), dtype=numpy.float32)  # noqa
+        I = numpy.zeros((nframes, nbin), dtype=numpy.float32)
         sigma = numpy.zeros((nframes, nbin), dtype=numpy.float32)
         Isum = numpy.zeros(nframes)
 
@@ -405,7 +410,7 @@ class HPLC(Plugin):
                 "interpretation"
             ] = "spectrum"
             scale = diode_raw / diode_smooth
-            I *= numpy.atleast_2d(scale).T  # noqa
+            I *= numpy.atleast_2d(scale).T
             Isum *= scale
             sigma *= numpy.atleast_2d(scale).T
             diode = diode_smooth
@@ -795,7 +800,7 @@ class HPLC(Plugin):
 
         # Stage #4 Guinier plot generation:
 
-        q, I, err = sasm.T[:3]  # noqa
+        q, I, err = sasm.T[:3]
         mask = (I > 0) & numpy.isfinite(I) & (q > 0) & numpy.isfinite(q)
         if err is not None:
             mask &= (err > 0.0) & numpy.isfinite(err)
@@ -1071,7 +1076,7 @@ class HPLC(Plugin):
         ispyb_grp["start_time"] = get_isotime()
 
         scattering_I = self.to_pyarch["scattering_I"]
-        nframes, nbin = scattering_I.shape
+        nframes, _nbin = scattering_I.shape
 
         q = self.juices[0].q.astype(numpy.float64)
         ds = ispyb_grp.create_dataset("q", data=normalize(q, dtype=numpy.float32))
@@ -1194,7 +1199,7 @@ class HPLC(Plugin):
             idx = nxdata_grp[axis][()]
             integrated = nxdata_grp.parent["result"]
             signal = integrated.attrs["signal"]
-            I = integrated[signal][()]  # noqa
+            I = integrated[signal][()]
             axes = integrated.attrs["axes"][-1]
             q = integrated[axes][()]
             sigma = integrated["errors"][()]
@@ -1353,7 +1358,7 @@ class HPLC(Plugin):
             os.makedirs(dirname, exist_ok=True)
         lines = ["id,ΣI,Rg"]
         idx = 0
-        for I, rg in zip(sum_I, Rg):  # noqa
+        for I, rg in zip(sum_I, Rg):
             lines.append(f"{idx},{I},{rg}")
             idx += 1
         lines.append("")
