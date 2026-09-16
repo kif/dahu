@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/03/2026"
+__date__ = "16/09/2026"
 __status__ = "development"
 __version__ = "0.0.2"
 
@@ -129,6 +129,18 @@ class Ispyb(NamedTuple):
 class EquivalentFrames(NamedTuple):
     start: int=0
     end: int=-1
+
+
+class SequenceIndex:
+    "Increment by one each time one calls it"
+    def __init__(self, start:int=0):
+        self.idx = 0
+
+    def __call__(self)->int:
+        value = self.idx
+        self.idx+=1
+        return value
+
 
 
 def get_equivalent_frames(proba, absolute=0.1, relative=0.2):

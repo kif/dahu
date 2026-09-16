@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/03/2026"
+__date__ = "16/09/2026"
 __status__ = "development"
 __version__ = "0.4.0"
 
@@ -41,7 +41,7 @@ from freesas.app.extract_ascii import write_ascii
 from scipy.optimize import minimize
 from .common import Ispyb, get_equivalent_frames, cmp_float, get_integrator, KeyCache, \
                     polarization_factor, method, SAXS_STYLE, NORMAL_STYLE, \
-                    Sample, create_nexus_sample
+                    Sample, create_nexus_sample, SequenceIndex
 from .nexus import Nexus, get_isotime
 from .ispyb import IspybConnector, NumpyEncoder
 from .memcached import to_memcached
@@ -172,6 +172,7 @@ class SubtractBuffer(Plugin):
         self.ispyb = None
         self.to_pyarch = {}
         self.to_memcached = {}  # data to be shared via memcached
+        self.seq = SequenceIndex(0)
 
     def setup(self, kwargs=None):
         logger.debug("SubtractBuffer.setup")
@@ -301,8 +302,9 @@ class SubtractBuffer(Plugin):
         cfg_grp.create_dataset("format", data="text/json")
 
     # Process 0: Measurement group
-        input_grp = nxs.new_class(entry_grp, "0_measurement", "NXcollection")
-        input_grp["sequence_index"] = 0
+        seq = self.seq()
+        input_grp = nxs.new_class(entry_grp, f"{seq}_measurement", "NXcollection")
+        input_grp["sequence_index"] = seq
         rel_path = os.path.relpath(os.path.abspath(self.sample_file), os.path.dirname(os.path.abspath(self.output_file)))
         input_grp["sample"] = h5py.ExternalLink(rel_path, self.sample_juice.h5path)
 
@@ -322,8 +324,9 @@ class SubtractBuffer(Plugin):
                  self.buffer_juices)
 
     # Process 1: CorMap
-        cormap_grp = nxs.new_class(entry_grp, "1_correlation_mapping", "NXprocess")
-        cormap_grp["sequence_index"] = 1
+        seq = self.seq()
+        cormap_grp = nxs.new_class(entry_grp, f"{seq}_correlation_mapping", "NXprocess")
+        cormap_grp["sequence_index"] = seq
         cormap_grp["program"] = "freesas.cormap"
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
@@ -363,8 +366,9 @@ class SubtractBuffer(Plugin):
         cormap_grp.attrs["default"] = posixpath.relpath(cormap_data.name, cormap_grp.name)
 
     # Process 2: Image processing: subtraction with standard deviation
-        average_grp = nxs.new_class(entry_grp, "2_buffer_subtraction", "NXprocess")
-        average_grp["sequence_index"] = 2
+        seq = self.seq()
+        average_grp = nxs.new_class(entry_grp, f"{seq}_buffer_subtraction", "NXprocess")
+        average_grp["sequence_index"] = seq
         average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
         average_data = nxs.new_class(average_grp, "result", "NXdata")
@@ -424,8 +428,9 @@ class SubtractBuffer(Plugin):
             self.to_pyarch["buffer"] = res2
 
     # Process 3: Azimuthal integration of the subtracted image
-        ai2_grp = nxs.new_class(entry_grp, "3_azimuthal_integration", "NXprocess")
-        ai2_grp["sequence_index"] = 3
+        seq = self.seq()
+        ai2_grp = nxs.new_class(entry_grp, f"{seq}_azimuthal_integration", "NXprocess")
+        ai2_grp["sequence_index"] = seq
         ai2_grp["program"] = "pyFAI"
         ai2_grp["version"] = pyFAI.version
         ai2_grp["date"] = get_isotime()
@@ -485,8 +490,9 @@ class SubtractBuffer(Plugin):
         entry_grp.attrs["default"] = posixpath.relpath(ai2_data.name, entry_grp.name)
 
     # Process 4: Guinier analysis
-        guinier_grp = nxs.new_class(entry_grp, "4_Guinier_analysis", "NXprocess")
-        guinier_grp["sequence_index"] = 4
+        seq = self.seq()
+        guinier_grp = nxs.new_class(entry_grp, f"{seq}_Guinier_analysis", "NXprocess")
+        guinier_grp["sequence_index"] = self.seq()
         guinier_grp["program"] = "freesas.autorg"
         guinier_grp["version"] = freesas.version
         guinier_grp["date"] = get_isotime()
@@ -622,8 +628,9 @@ class SubtractBuffer(Plugin):
             self.log_error("No Guinier region found, data of dubious quality", do_raise=True)
 
     # Process 5: Kratky plot
-        kratky_grp = nxs.new_class(entry_grp, "5_dimensionless_Kratky_plot", "NXprocess")
-        kratky_grp["sequence_index"] = 5
+        seq = self.seq()
+        kratky_grp = nxs.new_class(entry_grp, f"{seq}_dimensionless_Kratky_plot", "NXprocess")
+        kratky_grp["sequence_index"] = seq
         kratky_grp["program"] = "freesas.autorg"
         kratky_grp["version"] = freesas.version
         kratky_grp["date"] = get_isotime()
@@ -653,8 +660,9 @@ class SubtractBuffer(Plugin):
         kratky_data_attrs["axes"] = qRg_ds.name
 
     # stage 6: Rambo-Tainer invariant
-        rti_grp = nxs.new_class(entry_grp, "6_invariants", "NXprocess")
-        rti_grp["sequence_index"] = 6
+        seq = self.seq()
+        rti_grp = nxs.new_class(entry_grp, f"{seq}_invariants", "NXprocess")
+        rti_grp["sequence_index"] = seq
         rti_grp["program"] = "freesas.invariants"
         rti_grp["version"] = freesas.version
         rti_data = nxs.new_class(rti_grp, "result", "NXdata")
@@ -690,8 +698,9 @@ class SubtractBuffer(Plugin):
         self.to_pyarch["rti"] = rti
 
     # stage 7: Pair distribution function, what is the equivalent of datgnom
-        bift_grp = nxs.new_class(entry_grp, "7_indirect_Fourier_transformation", "NXprocess")
-        bift_grp["sequence_index"] = 6
+        seq = self.seq()
+        bift_grp = nxs.new_class(entry_grp, f"{seq}_indirect_Fourier_transformation", "NXprocess")
+        bift_grp["sequence_index"] = seq
         bift_grp["program"] = "freesas.bift"
         bift_grp["version"] = freesas.version
         bift_grp["date"] = get_isotime()

@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/03/2026"
+__date__ = "16/09/2026"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -29,7 +29,7 @@ import pyFAI
 from pyFAI.method_registry import IntegrationMethod
 from pyFAI.io.ponifile import PoniFile
 from pyFAI.io.diffmap_config import DiffmapConfig, WorkerConfig, MotorRange, ListDataSet, DataSet
-from .common import Sample, Ispyb, SAXS_STYLE, create_nexus_sample
+from .common import Sample, Ispyb, SAXS_STYLE, create_nexus_sample, SequenceIndex
 from .nexus import Nexus, get_isotime
 
 
@@ -263,12 +263,7 @@ class Mesh(Plugin):
         self.juices = []
         self.to_pyarch = {}
         self.ispyb = None
-        self._pid = 0
-
-    def sequence_index(self):
-        value = self._pid
-        self._pid += 1
-        return value
+        self.sequence_index = SequenceIndex(0)
 
     def setup(self):
         Plugin.setup(self)

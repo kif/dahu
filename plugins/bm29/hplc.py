@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/04/2026"
+__date__ = "16/09/2026"
 __status__ = "development"
 __version__ = "0.4.1"
 
@@ -45,7 +45,7 @@ import scipy.signal
 import scipy.ndimage
 import sklearn
 from sklearn.decomposition import NMF
-from .common import Ispyb, SAXS_STYLE, NORMAL_STYLE, Sample, create_nexus_sample
+from .common import Ispyb, SAXS_STYLE, NORMAL_STYLE, Sample, create_nexus_sample, SequenceIndex
 from .nexus import Nexus, get_isotime
 from .ispyb import IspybConnector
 from .icat import send_icat
@@ -240,13 +240,8 @@ class HPLC(Plugin):
         self.nmf_components = self.NMF_COMP
         self.to_pyarch = {}
         self.ispyb = None
-        self._pid = 0
+        self.sequence_index = SequenceIndex(0)
         self._time_digits = 0
-
-    def sequence_index(self):
-        value = self._pid
-        self._pid += 1
-        return value
 
     def setup(self):
         Plugin.setup(self)
