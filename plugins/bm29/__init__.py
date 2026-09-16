@@ -16,10 +16,12 @@ __status__ = "development"
 __version__ = "0.2.0"
 
 from dahu.factory import register
-from .integrate import IntegrateMultiframe
-from .subtracte import SubtractBuffer
+
 from .hplc import HPLC
+from .integrate import IntegrateMultiframe
 from .mesh import Mesh
+from .subtracte import SubtractBuffer
+
 register(IntegrateMultiframe, fqn="bm29.integratemultiframe")
 register(SubtractBuffer, fqn="bm29.subtractbuffer")
 register(HPLC, fqn="bm29.hplc")

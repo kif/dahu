@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """Data Analysis plugin for BM29: BioSaxs
 
@@ -14,24 +13,32 @@ __date__ = "16/09/2026"
 __status__ = "development"
 __version__ = "0.1.0"
 
+import glob
+import json
 import os
 import posixpath
-import json
-import glob
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from typing import NamedTuple
-import numpy
-from dahu.plugin import Plugin
+
 import h5py
 import matplotlib
-from matplotlib.pyplot import subplots
+import numpy
 import pyFAI
-from pyFAI.method_registry import IntegrationMethod
+from matplotlib.pyplot import subplots
+from pyFAI.io.diffmap_config import (
+    DataSet,
+    DiffmapConfig,
+    ListDataSet,
+    MotorRange,
+    WorkerConfig,
+)
 from pyFAI.io.ponifile import PoniFile
-from pyFAI.io.diffmap_config import DiffmapConfig, WorkerConfig, MotorRange, ListDataSet, DataSet
-from .common import Sample, Ispyb, SAXS_STYLE, create_nexus_sample, SequenceIndex
-from .nexus import Nexus, get_isotime
+from pyFAI.method_registry import IntegrationMethod
 
+from dahu.plugin import Plugin
+
+from .common import SAXS_STYLE, Ispyb, Sample, SequenceIndex, create_nexus_sample
+from .nexus import Nexus, get_isotime
 
 matplotlib.use("Agg")
 
@@ -44,7 +51,7 @@ class NexusJuice(NamedTuple):
     idx: int
     Isum: numpy.ndarray
     q: numpy.ndarray
-    I: numpy.ndarray  #noqa
+    I: numpy.ndarray
     sigma: numpy.ndarray
     poni: str
     mask: numpy.ndarray

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """Data Analysis plugin for BM29: BioSaxs
 
@@ -16,9 +15,10 @@ __status__ = "development"
 __version__ = "0.3.0"
 
 
+import logging
 import os
 import tempfile
-import logging
+
 logger = logging.getLogger(__name__)
 try:
     from pyicat_plus.client.main import IcatClient

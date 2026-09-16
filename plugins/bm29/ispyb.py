@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """Data Analysis plugin for BM29: BioSaxs
 
@@ -16,14 +15,15 @@ __status__ = "development"
 __version__ = "0.2.3"
 
 
+import json
 import logging
 import os
 import shutil
-import json
 import tempfile
-import numpy
-from freesas.plot import kratky_plot, guinier_plot, scatter_plot, density_plot
+
 import matplotlib.pyplot
+import numpy
+from freesas.plot import density_plot, guinier_plot, kratky_plot, scatter_plot
 
 logger = logging.getLogger("bm29.ispyb")
 try:

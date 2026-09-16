@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 """Data Analysis plugin for BM29: BioSaxs
 
@@ -15,30 +14,44 @@ __date__ = "16/09/2026"
 __status__ = "development"
 __version__ = "0.3.1"
 
-import os
-import time
+import copy
 import json
 import logging
-import copy
+import os
 import posixpath
+import time
 from typing import NamedTuple
-from urllib3.util import parse_url
-from dahu.plugin import Plugin
-from dahu.factory import register
-from dahu.utils import fully_qualified_name
 
-import numpy
-import h5py
-import pyFAI
 import freesas
 import freesas.cormap
-from .nexus import Nexus, get_isotime
-from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, get_integrator, KeyCache, \
-                    method, polarization_factor,SAXS_STYLE, NORMAL_STYLE, \
-                    create_nexus_sample, SequenceIndex
-from .ispyb import IspybConnector, NumpyEncoder
+import h5py
+import numpy
+import pyFAI
+from urllib3.util import parse_url
+
+from dahu.factory import register
+from dahu.plugin import Plugin
+from dahu.utils import fully_qualified_name
+
+from .common import (
+    NORMAL_STYLE,
+    SAXS_STYLE,
+    Ispyb,
+    KeyCache,
+    Sample,
+    SequenceIndex,
+    cmp_float,
+    cmp_int,
+    create_nexus_sample,
+    get_equivalent_frames,
+    get_integrator,
+    method,
+    polarization_factor,
+)
 from .icat import send_icat
+from .ispyb import IspybConnector, NumpyEncoder
 from .memcached import to_memcached
+from .nexus import Nexus, get_isotime
 
 version = __version__
 logger = logging.getLogger("bm29.integrate")
@@ -422,7 +435,7 @@ class IntegrateMultiframe(Plugin):
         integrate1_result = self.process1_integration(self.input_frames)
         radial_unit, unit_name = str(self.unit).split("_", 1)
         q = numpy.ascontiguousarray(integrate1_result.radial, numpy.float32)
-        I = numpy.ascontiguousarray(integrate1_result.intensity, dtype=numpy.float32)  #noqa
+        I = numpy.ascontiguousarray(integrate1_result.intensity, dtype=numpy.float32)
         sigma = numpy.ascontiguousarray(integrate1_result.sigma, dtype=numpy.float32)
 
         self.to_memcached[radial_unit] = q
