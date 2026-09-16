@@ -11,7 +11,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/03/2026"
+__date__ = "27/04/2026"
 __status__ = "development"
 __version__ = "0.3.1"
 
@@ -139,6 +139,7 @@ class IntegrateMultiframe(Plugin):
         self.scale_factor = None
         self.to_pyarch = {}  # contains all the stuff to be sent to Ispyb and pyarch
         self.to_memcached = {}  # data to be shared via memcached
+        self.seq = 0  # Sequence index
 
     def setup(self, kwargs=None):
         logger.debug("IntegrateMultiframe.setup")
@@ -308,6 +309,9 @@ class IntegrateMultiframe(Plugin):
         # Process 0: Measurement group
         measurement_grp = nxs.new_class(entry_grp, "0_measurement", "NXdata")
         measurement_grp.attrs["SILX_style"] = SAXS_STYLE
+        measurement_grp["sequence_index"] = self.seq
+        self.seq += 1
+
         # Instrument
         instrument_grp = nxs.new_instrument(entry_grp, "BM29")
         instrument_grp["name"] = "BioSaxs"
@@ -401,7 +405,8 @@ class IntegrateMultiframe(Plugin):
 
     # Process 1: pyFAI
         integration_grp = nxs.new_class(entry_grp, "1_integration", "NXprocess")
-        integration_grp["sequence_index"] = 1
+        integration_grp["sequence_index"] = self.seq
+        self.seq += 1
         integration_grp["program"] = "pyFAI"
         integration_grp["version"] = pyFAI.version
         integration_grp["date"] = get_isotime()
@@ -462,7 +467,8 @@ class IntegrateMultiframe(Plugin):
 
     # Process 2: Freesas cormap
         cormap_grp = nxs.new_class(entry_grp, "2_correlation_mapping", "NXprocess")
-        cormap_grp["sequence_index"] = 2
+        cormap_grp["sequence_index"] = self.seq
+        self.seq += 1
         cormap_grp["program"] = "freesas.cormap"
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
@@ -494,7 +500,8 @@ class IntegrateMultiframe(Plugin):
 
     # Process 3: time average and standard deviation
         average_grp = nxs.new_class(entry_grp, "3_time_average", "NXprocess")
-        average_grp["sequence_index"] = 3
+        average_grp["sequence_index"] = self.seq
+        self.seq += 1
         average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
         average_data = nxs.new_class(average_grp, "result", "NXdata")
@@ -527,7 +534,8 @@ class IntegrateMultiframe(Plugin):
 
     # Process 4: Azimuthal integration of the time average image
         ai2_grp = nxs.new_class(entry_grp, "4_azimuthal_integration", "NXprocess")
-        ai2_grp["sequence_index"] = 4
+        ai2_grp["sequence_index"] = self.seq
+        self.seq += 1
         ai2_grp["program"] = "pyFAI"
         ai2_grp["version"] = pyFAI.version
         ai2_grp["date"] = get_isotime()
