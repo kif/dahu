@@ -65,7 +65,7 @@ def is_hdf5(filename):
     """
     signature = [137, 72, 68, 70, 13, 10, 26, 10]
     if not os.path.exists(filename):
-        raise OSError("No such file %s" % (filename))
+        raise OSError(f"No such file {filename}")
     with open(filename, "rb") as f:
         raw = f.read(8)
     sig = [ord(i) for i in raw] if sys.version_info[0] < 3 else [int(i) for i in raw]
@@ -177,13 +177,12 @@ class Nexus:
         Close the file and update all entries.
         """
         try:
-            if self.mode != "r":
-                if self.h5:
-                    end_time = get_isotime(end_time)
-                    while self.to_close:
-                        entry = self.to_close.pop()
-                        entry["end_time"] = end_time
-                    self.h5.attrs["file_update_time"] = get_isotime()
+            if self.mode != "r" and self.h5:
+                end_time = get_isotime(end_time)
+                while self.to_close:
+                    entry = self.to_close.pop()
+                    entry["end_time"] = end_time
+                self.h5.attrs["file_update_time"] = get_isotime()
         except Exception as error:
             sys.stderr.write(f"{type(error)}: {error},\nwhile finalizing Nexus file\n")
 

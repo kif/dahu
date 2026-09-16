@@ -354,7 +354,7 @@ class Mesh(Plugin):
         assert  self.juices
         q = self.juices[0].q
         unit = self.juices[0].unit
-        radial_unit, unit_name = str(unit).split("_", 1)
+        _radial_unit, unit_name = str(unit).split("_", 1)
 
         # Sample: outsourced !
         create_nexus_sample(nxs, entry_grp, self.juices[0].sample)

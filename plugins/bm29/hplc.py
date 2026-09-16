@@ -4,6 +4,7 @@
 
 * HPLC mode: Rebuild the complete chromatogram and perform basic analysis on it.
 """
+from __future__ import annotations
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
@@ -169,7 +170,7 @@ def build_background(intensity, std=None, keep=0.3):
         for i in intensity
     ]
     orderd = numpy.argsort(Pscore)
-    nkeep = int(math.ceil(keep * intensity.shape[0]))
+    nkeep = math.ceil(keep * intensity.shape[0])
     to_keep = numpy.sort(orderd[:nkeep])
     bg_avg = intensity[to_keep].mean(axis=0)
     if std is not None:
@@ -1075,7 +1076,7 @@ class HPLC(Plugin):
         ispyb_grp["start_time"] = get_isotime()
 
         scattering_I = self.to_pyarch["scattering_I"]
-        nframes, nbin = scattering_I.shape
+        nframes, _nbin = scattering_I.shape
 
         q = self.juices[0].q.astype(numpy.float64)
         ds = ispyb_grp.create_dataset("q", data=normalize(q, dtype=numpy.float32))

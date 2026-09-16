@@ -244,7 +244,7 @@ class IspybConnector:
         if isinstance(index, int):
             filename = os.path.join(dest, "%s_%04d%s" % (basename, index, ext))
         else:
-            filename = os.path.join(dest, "%s_%s%s" % (basename, index, ext))
+            filename = os.path.join(dest, f"{basename}_{index}{ext}")
         return filename
 
     def save_curve(self, index, integrate_result, basename="frame", gallery=False):
@@ -366,7 +366,7 @@ class IspybConnector:
                                            str(gnom.Dmax_avg if gnom else -1),
                                            str(gnom.evidence_avg if gnom else -1),
                                            str(data.get("volume", -1)),
-                                           "[{'filePath': '%s'}]" % sample,  # sampleOneDimensionalFiles
+                                           f"[{{'filePath': '{sample}'}}]",  # sampleOneDimensionalFiles
                                            str_list(individual_buffers),  # bufferOneDimensionalFiles
                                            sample,  # sampleAverageFilePath,
                                            buf,  # bufferAverageFilePath,

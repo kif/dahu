@@ -257,7 +257,7 @@ class SubtractBuffer(Plugin):
         self.to_pyarch["basename"] = os.path.splitext(os.path.basename(self.sample_file))[0]
         try:
             self.create_nexus()
-        except Exception as err:
+        except Exception:
             # try to register in test-mode
             if self.input.get("test_mode", True):
                 try:
@@ -265,7 +265,7 @@ class SubtractBuffer(Plugin):
                 except Exception as err2:
                     import traceback
                     self.log_warning(f"Processing failed and unable to send remaining data to ISPyB: {type(err2)} {err2}\n{traceback.format_exc(limit=10)}")
-                raise(err)
+                raise
         else:
             self.send_to_ispyb()
             self.send_to_icat()
@@ -451,7 +451,7 @@ class SubtractBuffer(Plugin):
         radial_unit, unit_name = str(key_cache.unit).split("_", 1)
         ai2_data = nxs.new_class(ai2_grp, "result", "NXdata")
         ai2_data.attrs["SILX_style"] = SAXS_STYLE
-        ai2_data.attrs["title"] = "%s, subtracted" % self.sample_juice.sample.name
+        ai2_data.attrs["title"] = f"{self.sample_juice.sample.name}, subtracted"
         ai2_data.attrs["signal"] = "I"
         ai2_data.attrs["axes"] = radial_unit
         ai2_grp.attrs["default"] = posixpath.relpath(ai2_data.name, ai2_grp.name)
@@ -522,7 +522,7 @@ class SubtractBuffer(Plugin):
         try:
             gpa = auto_gpa(sasm)
         except Exception as error:
-            guinier_gpa["Failed"] = "%s: %s" % (error.__class__.__name__, error)
+            guinier_gpa["Failed"] = f"{error.__class__.__name__}: {error}"
             gpa = None
         else:
             #  "Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
@@ -540,7 +540,7 @@ class SubtractBuffer(Plugin):
         try:
             guinier = auto_guinier(sasm)
         except Exception as error:
-            guinier_guinier["Failed"] = "%s: %s" % (error.__class__.__name__, error)
+            guinier_guinier["Failed"] = f"{error.__class__.__name__}: {error}"
             guinier = None
         else:
             #  "Rg sigma_Rg I0 sigma_I0 start_point end_point quality aggregated"
@@ -560,7 +560,7 @@ class SubtractBuffer(Plugin):
         try:
             autorg = autoRg(sasm)
         except Exception as err:
-            guinier_autorg["Failed"] = "%s: %s" % (err.__class__.__name__, err)
+            guinier_autorg["Failed"] = f"{err.__class__.__name__}: {err}"
             autorg = None
         else:
             if autorg.Rg < 0:
@@ -619,7 +619,7 @@ class SubtractBuffer(Plugin):
         dlogI = err[mask] / logI
         q2_ds = guinier_data.create_dataset("q2", data=q2.astype(numpy.float32))
         q2_ds.attrs["unit"] = radius_unit + "⁻²"
-        q2_ds.attrs["long_name"] = "q² (%s⁻²)" % radius_unit
+        q2_ds.attrs["long_name"] = f"q² ({radius_unit}⁻²)"
         q2_ds.attrs["interpretation"] = "spectrum"
         lnI_ds = guinier_data.create_dataset("logI", data=logI.astype(numpy.float32))
         lnI_ds.attrs["long_name"] = "log(I)"
@@ -757,7 +757,7 @@ class SubtractBuffer(Plugin):
             cfg_grp["Powell_steps"] = res.nfev
             cfg_grp["Monte-Carlo_steps"] = 0
         except Exception as error:
-            bift_grp["Failed"] = "%s: %s" % (error.__class__.__name__, error)
+            bift_grp["Failed"] = f"{error.__class__.__name__}: {error}"
             bo = None
         else:
             stats = bo.calc_stats()
@@ -780,7 +780,7 @@ class SubtractBuffer(Plugin):
             r_ds.attrs["interpretation"] = "spectrum"
 
             r_ds.attrs["unit"] = radius_unit
-            r_ds.attrs["long_name"] = "radius r(%s)" % radius_unit
+            r_ds.attrs["long_name"] = f"radius r({radius_unit})"
             p_ds = bift_data.create_dataset("p(r)", data=stats.density_avg.astype(numpy.float32))
             p_ds.attrs["interpretation"] = "spectrum"
             bift_data["errors"] = stats.density_std
@@ -853,7 +853,7 @@ class SubtractBuffer(Plugin):
             ispyb = IspybConnector(*self.ispyb)
             ispyb.send_subtracted(self.to_pyarch)
         else:
-            self.log_warning("Not sending to ISPyB: no valid URL %s" % self.ispyb.url)
+            self.log_warning(f"Not sending to ISPyB: no valid URL {self.ispyb.url}")
 
     def send_to_icat(self):
         to_icat = copy.copy(self.to_pyarch)
