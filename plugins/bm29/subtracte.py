@@ -90,7 +90,7 @@ class NexusJuice(NamedTuple):
     sigma_all: numpy.ndarray
 
     @classmethod
-    def read(filename):
+    def read(cls, filename):
         """Extract some NexusJuice from a HDF5 file, alternative constructor
 
         :param filename: name of the file
@@ -154,9 +154,9 @@ class NexusJuice(NamedTuple):
                     energy=energy,
                     polarization=polarization,
                     method=method,
-                    image2d=image2d,
+                    signal2d=image2d,
                     error2d=error2d,
-                    norm=norm,
+                    normalization=norm,
                     sample=sample,
                     I_all=I_all,
                     sigma_all=sigma_all)
