@@ -58,7 +58,7 @@ from .common import (
     Sample,
     SequenceIndex,
     create_nexus_sample,
-    str_
+    str_,
 )
 from .icat import send_icat
 from .ispyb import IspybConnector
