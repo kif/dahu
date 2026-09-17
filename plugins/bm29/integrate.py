@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """Data Analysis plugin for BM29: BioSaxs
 
 * IntegrateMultiframe: perform the integration of many frames contained in a HDF5 file and average them
@@ -11,37 +8,50 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "04/06/2025"
+__date__ = "17/09/2026"
 __status__ = "development"
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
-import os
-import time
+import copy
 import json
 import logging
-import copy
+import os
 import posixpath
-from collections import namedtuple
-from urllib3.util import parse_url
-from dahu.plugin import Plugin
-from dahu.factory import register
-from dahu.utils import fully_qualified_name
+import time
+from typing import NamedTuple
 
-import numpy
-import h5py
-import pyFAI
-import pyFAI.azimuthalIntegrator
 import freesas
 import freesas.cormap
+import h5py
+import numpy
+import pyFAI
+from urllib3.util import parse_url
 
-from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, get_integrator, KeyCache, \
-                    method, polarization_factor, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
-                    create_nexus_sample
-from .ispyb import IspybConnector, NumpyEncoder
+from dahu.factory import register
+from dahu.plugin import Plugin
+from dahu.utils import fully_qualified_name
+
+from .common import (
+    NORMAL_STYLE,
+    SAXS_STYLE,
+    Ispyb,
+    KeyCache,
+    Sample,
+    SequenceIndex,
+    cmp_float,
+    cmp_int,
+    create_nexus_sample,
+    get_equivalent_frames,
+    get_integrator,
+    method,
+    polarization_factor,
+)
 from .icat import send_icat
+from .ispyb import IspybConnector, NumpyEncoder
 from .memcached import to_memcached
+from .nexus import Nexus, get_isotime
 
-
+version = __version__
 logger = logging.getLogger("bm29.integrate")
 try:
     import numexpr
@@ -49,9 +59,23 @@ except ImportError:
     logger.error("Numexpr is not installed, falling back on numpy's implementations")
     numexpr = None
 
-IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
-CormapResult = namedtuple("CormapResult", "probability count tomerge")
-AverageResult = namedtuple("AverageResult", "average deviation normalization")
+
+class IntegrationResult(NamedTuple):
+    radial:numpy.ndarray
+    intensity:numpy.ndarray
+    sigma:numpy.ndarray
+
+
+class CormapResult(NamedTuple):
+    probability:float
+    count:int
+    tomerge:int
+
+
+class AverageResult(NamedTuple):
+    average:numpy.ndarray
+    deviation:numpy.ndarray
+    normalization:numpy.ndarray
 
 
 @register
@@ -126,6 +150,7 @@ class IntegrateMultiframe(Plugin):
         self.scale_factor = None
         self.to_pyarch = {}  # contains all the stuff to be sent to Ispyb and pyarch
         self.to_memcached = {}  # data to be shared via memcached
+        self.seq = SequenceIndex(0)
 
     def setup(self, kwargs=None):
         logger.debug("IntegrateMultiframe.setup")
@@ -189,6 +214,7 @@ class IntegrateMultiframe(Plugin):
         self.monitor_values = numpy.array(self.input.get("monitor_values", 1), dtype=numpy.float64)
         if self.input.get("average_out_monitor_values"):
             self.monitor_values = numpy.zeros_like(self.monitor_values) + self.monitor_values.mean()
+            self.log_warning("Averaging-out the monitor values !")
         self.normalization_factor = float(self.input.get("normalization_factor", 1))
         self.scale_factor = float(self.input.get("exposure_time", 1)) / self.normalization_factor
 
@@ -197,6 +223,7 @@ class IntegrateMultiframe(Plugin):
         logger.debug("IntegrateMultiframe.teardown")
         # export the output file location
         self.output["output_file"] = self.output_file
+        self.output["monitor_noise_%"] = 100 * self.monitor_values.std() / self.monitor_values.mean()
         if self.nxs is not None:
             self.nxs.close()
         if self.ai is not None:
@@ -218,15 +245,15 @@ class IntegrateMultiframe(Plugin):
                     if "measurement" in entry:
                         measurement = entry["measurement"]
                     else:
-                        self.log_error("No measurement in entry: %s of data_file: %s" % (entry, self.input_file))
+                        self.log_error(f"No measurement in entry: {entry} of data_file: {self.input_file}")
                     self._input_frames = measurement["data"][...]
                     try:
                         self._start_time = entry["start_time"][()]
                         self._end_time = entry["end_time"][()]
                     except Exception as err:
-                        self.log_error("Unable to read time %s: %s" % (type(err), str(err)), do_raise=False)
+                        self.log_error(f"Unable to read time {type(err)}: {err!s}", do_raise=False)
             except Exception as err:
-                self.log_error("Unable to read images %s: %s" % (type(err), str(err)), do_raise=True)
+                self.log_error(f"Unable to read images {type(err)}: {err!s}", do_raise=True)
         return self._input_frames
 
     def process(self):
@@ -249,7 +276,7 @@ class IntegrateMultiframe(Plugin):
 	"""
         timeout = self.timeout if timeout is None else timeout
         end_time = time.perf_counter() + timeout
-        dirname = os.path.dirname(filename)
+        dirname = os.path.dirname(filename) or "."
         while not os.path.isdir(dirname):
             if time.perf_counter() > end_time:
                 self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
@@ -273,8 +300,9 @@ class IntegrateMultiframe(Plugin):
 
     def create_nexus(self):
         "create the nexus result file with basic structure"
-        if not os.path.isdir(os.path.dirname(self.output_file)):
-            os.makedirs(os.path.dirname(self.output_file))
+        dirname = os.path.dirname(self.output_file)
+        if dirname and not os.path.isdir(dirname):
+            os.makedirs(dirname)
         creation_time = os.stat(self.input_file).st_ctime
         nxs = self.nxs = Nexus(self.output_file, mode="w", creator="dahu")
 
@@ -291,6 +319,8 @@ class IntegrateMultiframe(Plugin):
         # Process 0: Measurement group
         measurement_grp = nxs.new_class(entry_grp, "0_measurement", "NXdata")
         measurement_grp.attrs["SILX_style"] = SAXS_STYLE
+        measurement_grp["sequence_index"] = self.seq()
+
         # Instrument
         instrument_grp = nxs.new_instrument(entry_grp, "BM29")
         instrument_grp["name"] = "BioSaxs"
@@ -362,7 +392,7 @@ class IntegrateMultiframe(Plugin):
                 if "measurement" in entry:
                     measurement = entry["measurement"]
                 else:
-                    self.log_error("No measurement in entry: %s of data_file: %s" % (entry, self.input_file))
+                    self.log_error(f"No measurement in entry: {entry} of data_file: {self.input_file}")
                 h5path = measurement["data"].name
             rel_path = os.path.relpath(os.path.abspath(self.input_file), os.path.dirname(os.path.abspath(self.output_file)))
             measurement_grp["images"] = detector_grp["frames"] = h5py.ExternalLink(rel_path, h5path)
@@ -384,7 +414,7 @@ class IntegrateMultiframe(Plugin):
 
     # Process 1: pyFAI
         integration_grp = nxs.new_class(entry_grp, "1_integration", "NXprocess")
-        integration_grp["sequence_index"] = 1
+        integration_grp["sequence_index"] = self.seq()
         integration_grp["program"] = "pyFAI"
         integration_grp["version"] = pyFAI.version
         integration_grp["date"] = get_isotime()
@@ -395,15 +425,15 @@ class IntegrateMultiframe(Plugin):
         pol_ds = cfg_grp.create_dataset("polarization_factor", data=polarization_factor)
         pol_ds.attrs["comment"] = "Between -1 and +1, 0 for circular"
         cfg_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
-        integration_data = nxs.new_class(integration_grp, "results", "NXdata")
+        integration_data = nxs.new_class(integration_grp, "result", "NXdata")
         integration_grp.attrs["title"] = str(self.sample)
 
     # Stage 1 processing: Integration frame per frame
-        integrate1_results = self.process1_integration(self.input_frames)
+        integrate1_result = self.process1_integration(self.input_frames)
         radial_unit, unit_name = str(self.unit).split("_", 1)
-        q = numpy.ascontiguousarray(integrate1_results.radial, numpy.float32)
-        I = numpy.ascontiguousarray(integrate1_results.intensity, dtype=numpy.float32)
-        sigma = numpy.ascontiguousarray(integrate1_results.sigma, dtype=numpy.float32)
+        q = numpy.ascontiguousarray(integrate1_result.radial, numpy.float32)
+        I = numpy.ascontiguousarray(integrate1_result.intensity, dtype=numpy.float32)
+        sigma = numpy.ascontiguousarray(integrate1_result.sigma, dtype=numpy.float32)
 
         self.to_memcached[radial_unit] = q
         self.to_memcached["I"] = I
@@ -428,7 +458,7 @@ class IntegrateMultiframe(Plugin):
 
         hplc_data = nxs.new_class(integration_grp, "hplc", "NXdata")
         hplc_data.attrs["title"] = "Chromatogram"
-        sum_ds = hplc_data.create_dataset("sum", data=numpy.ascontiguousarray(integrate1_results.intensity.sum(axis=-1), dtype=numpy.float32))
+        sum_ds = hplc_data.create_dataset("sum", data=numpy.ascontiguousarray(integrate1_result.intensity.sum(axis=-1), dtype=numpy.float32))
         sum_ds.attrs["interpretation"] = "spectrum"
         sum_ds.attrs["long_name"] = "Summed Intensity"
         hplc_data["frame_ids"] = frame_ds
@@ -445,11 +475,11 @@ class IntegrateMultiframe(Plugin):
 
     # Process 2: Freesas cormap
         cormap_grp = nxs.new_class(entry_grp, "2_correlation_mapping", "NXprocess")
-        cormap_grp["sequence_index"] = 2
+        cormap_grp["sequence_index"] = self.seq()
         cormap_grp["program"] = "freesas.cormap"
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
-        cormap_data = nxs.new_class(cormap_grp, "results", "NXdata")
+        cormap_data = nxs.new_class(cormap_grp, "result", "NXdata")
         cormap_data.attrs["SILX_style"] = NORMAL_STYLE
         cfg_grp = nxs.new_class(cormap_grp, "configuration", "NXcollection")
 
@@ -459,33 +489,33 @@ class IntegrateMultiframe(Plugin):
         cfg_grp["fidelity_rel"] = fidelity_rel
 
     # Stage 2 processing
-        cormap_results = self.process2_cormap(integrate1_results.intensity, fidelity_abs, fidelity_rel)
+        cormap_result = self.process2_cormap(integrate1_result.intensity, fidelity_abs, fidelity_rel)
         cormap_data.attrs["signal"] = "probability"
-        cormap_ds = cormap_data.create_dataset("probability", data=cormap_results.probability)
+        cormap_ds = cormap_data.create_dataset("probability", data=cormap_result.probability)
         cormap_ds.attrs["interpretation"] = "image"
         cormap_ds.attrs["long_name"] = "Probability to be the same"
 
-        count_ds = cormap_data.create_dataset("count", data=cormap_results.count)
+        count_ds = cormap_data.create_dataset("count", data=cormap_result.count)
         count_ds.attrs["interpretation"] = "image"
         count_ds.attrs["long_name"] = "Longest sequence where curves do not cross each other"
 
-        to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*cormap_results.tomerge, dtype=numpy.uint16))
+        to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*cormap_result.tomerge, dtype=numpy.uint16))
         to_merge_ds.attrs["long_name"] = "Index of equivalent frames"
         cormap_grp.attrs["default"] = posixpath.relpath(cormap_data.name, cormap_grp.name)
         if self.ispyb.url:
-            self.to_pyarch["merged"] = cormap_results.tomerge
+            self.to_pyarch["merged"] = cormap_result.tomerge
 
     # Process 3: time average and standard deviation
         average_grp = nxs.new_class(entry_grp, "3_time_average", "NXprocess")
-        average_grp["sequence_index"] = 3
+        average_grp["sequence_index"] = self.seq()
         average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
-        average_data = nxs.new_class(average_grp, "results", "NXdata")
+        average_data = nxs.new_class(average_grp, "result", "NXdata")
         average_data.attrs["SILX_style"] = SAXS_STYLE
         average_data.attrs["signal"] = "intensity_normed"
 
     # Stage 3 processing
-        res3 = self.process3_average(cormap_results.tomerge)
+        res3 = self.process3_average(cormap_result.tomerge)
 
         Iavg = numpy.ascontiguousarray(res3.average, dtype=numpy.float32)
         sigma_avg = numpy.ascontiguousarray(res3.deviation, dtype=numpy.float32)
@@ -510,11 +540,11 @@ class IntegrateMultiframe(Plugin):
 
     # Process 4: Azimuthal integration of the time average image
         ai2_grp = nxs.new_class(entry_grp, "4_azimuthal_integration", "NXprocess")
-        ai2_grp["sequence_index"] = 4
+        ai2_grp["sequence_index"] = self.seq()
         ai2_grp["program"] = "pyFAI"
         ai2_grp["version"] = pyFAI.version
         ai2_grp["date"] = get_isotime()
-        ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
+        ai2_data = nxs.new_class(ai2_grp, "result", "NXdata")
         ai2_data.attrs["signal"] = "I"
         ai2_data.attrs["axes"] = radial_unit
         ai2_data.attrs["SILX_style"] = SAXS_STYLE
@@ -656,6 +686,7 @@ class IntegrateMultiframe(Plugin):
                          raw=os.path.dirname(os.path.dirname(os.path.abspath(self.input_file))),
                          path=os.path.dirname(os.path.abspath(self.output_file)),
                          data=to_icat,
+                         dataset = "integrate",
                          gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"),
                          metadata=metadata)
 

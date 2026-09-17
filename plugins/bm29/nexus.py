@@ -4,15 +4,17 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/05/2025"
+__date__ = "17/09/2026"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
+import logging
 import os
 import sys
 import time
-import logging
+
 import h5py
+
 logger = logging.getLogger(__name__)
 
 
@@ -29,7 +31,7 @@ def get_isotime(forceTime=None):
     gmtime = time.gmtime(forceTime)
     tz_h = localtime.tm_hour - gmtime.tm_hour
     tz_m = localtime.tm_min - gmtime.tm_min
-    return "%s%+03i:%02i" % (time.strftime("%Y-%m-%dT%H:%M:%S", localtime), tz_h, tz_m)
+    return time.strftime("%Y-%m-%dT%H:%M:%S", localtime)+f"{tz_h:+03i}:{tz_m:02i}"
 
 
 def from_isotime(text, use_tz=False):
@@ -63,11 +65,20 @@ def is_hdf5(filename):
     """
     signature = [137, 72, 68, 70, 13, 10, 26, 10]
     if not os.path.exists(filename):
-        raise IOError("No such file %s" % (filename))
+        raise OSError(f"No such file {filename}")
     with open(filename, "rb") as f:
         raw = f.read(8)
     sig = [ord(i) for i in raw] if sys.version_info[0] < 3 else [int(i) for i in raw]
     return sig == signature
+
+
+def fully_qualified_name(o):
+    """Return the fully qualified name of the class"""
+    klass = o.__class__
+    module = klass.__module__
+    if module == 'builtins':
+        return klass.__qualname__ # avoid outputs like 'builtins.str'
+    return module + '.' + klass.__qualname__
 
 
 class Nexus:
@@ -88,7 +99,8 @@ class Nexus:
     def __init__(self, filename, mode=None,
                  creator=None,
                  timeout=None,
-                 start_time=None):
+                 start_time=None,
+                 pure=False):
         """
         Constructor
 
@@ -97,6 +109,8 @@ class Nexus:
         :param creator: set as attr of the NXroot
         :param timeout: retry for that amount of time (in seconds)
         :param start_time: set as attr of the NXroot
+        :param pure: use pure h5py mode. Unless, try to be clever when
+                     accessing write-opened files (can breaks external links)
         """
         self.filename = os.path.abspath(filename)
         self.mode = mode
@@ -104,19 +118,19 @@ class Nexus:
             logger.error("h5py module missing: NeXus not supported")
             raise RuntimeError("H5py module is missing")
 
-        pre_existing = os.path.exists(self.filename) or "w" in mode
-        if self.mode is None:
-            if pre_existing:
-                self.mode = "r"
-            else:
-                self.mode = "a"
 
         if timeout:
             end = time.perf_counter() + timeout
             while time.perf_counter() < end :
+                pre_existing = os.path.exists(self.filename)
+                if self.mode is None:
+                    if pre_existing:
+                        mode = "r"
+                    else:
+                        mode = "a"
                 try:
-                    if self.mode == "r":
-                        self.file_handle = open(self.filename, mode="rb")
+                    if mode == "r" and not pure:
+                        self.file_handle = open(self.filename, mode="rb")  # noqa:  SIM115
                         self.h5 = h5py.File(self.file_handle, mode="r")
                     else:
                         self.file_handle = None
@@ -125,23 +139,35 @@ class Nexus:
                     os.stat(os.path.dirname(self.filename))
                     time.sleep(1)
                 else:
+                    self.mode = mode
                     break
             else:
                 raise OSError(f"Unable to open HDF5 file {self.filename}")
         else:
-            if self.mode == "r":
-                self.file_handle = open(self.filename, mode=self.mode + "b")
+            pre_existing = os.path.exists(self.filename)
+            if self.mode is None:
+                if pre_existing:
+                    self.mode = "r"
+                else:
+                    self.mode = "a"
+
+            if not pure and self.mode == "r" and h5py.version.version_tuple >= (2, 9):
+                self.file_handle = open(self.filename, mode=self.mode + "b")  # noqa:  SIM115
                 self.h5 = h5py.File(self.file_handle, mode=self.mode)
             else:
                 self.file_handle = None
                 self.h5 = h5py.File(self.filename, mode=self.mode)
         self.to_close = []
-        if not pre_existing:
+
+        if not pre_existing or "w" in self.mode:
             self.h5.attrs["NX_class"] = "NXroot"
             self.h5.attrs["file_time"] = get_isotime(start_time)
             self.h5.attrs["file_name"] = self.filename
             self.h5.attrs["HDF5_Version"] = h5py.version.hdf5_version
             self.h5.attrs["creator"] = creator or self.__class__.__name__
+
+    def __repr__(self):
+        return f"<{fully_qualified_name(self)} file on {self.h5}>"
 
     def __del__(self):
         self.close()
@@ -151,13 +177,12 @@ class Nexus:
         Close the file and update all entries.
         """
         try:
-            if self.mode != "r":
-                if self.h5:
-                    end_time = get_isotime(end_time)
-                    while self.to_close:
-                        entry = self.to_close.pop()
-                        entry["end_time"] = end_time
-                    self.h5.attrs["file_update_time"] = get_isotime()
+            if self.mode != "r" and self.h5:
+                end_time = get_isotime(end_time)
+                while self.to_close:
+                    entry = self.to_close.pop()
+                    entry["end_time"] = end_time
+                self.h5.attrs["file_update_time"] = get_isotime()
         except Exception as error:
             sys.stderr.write(f"{type(error)}: {error},\nwhile finalizing Nexus file\n")
 
@@ -202,13 +227,14 @@ class Nexus:
 
         :return: list of HDF5 groups
         """
-        entries = [(grp, from_isotime(self.h5[grp + "/start_time"][()]))
-                   for grp in self.h5
-                   if isinstance(self.h5[grp], h5py.Group) and
-                   ("start_time" in self.h5[grp]) and
-                   self.get_attr(self.h5[grp], "NX_class") == "NXentry"]
-        entries.sort(key=lambda a: a[1], reverse=True)  # sort entries in decreasing time
-        return [self.h5[i[0]] for i in entries]
+        entries = [(name, grp, from_isotime(self.h5[name + "/start_time"][()]))
+                   for name, grp in self.h5.items()
+                   if isinstance(grp, h5py.Group) and
+                   ("start_time" in grp) and
+                   self.get_attr(grp, "NX_class") == "NXentry"]
+        # print(entries)
+        entries.sort(key=lambda a: a[-1], reverse=True)  # sort entries in decreasing time
+        return [i[1] for i in entries]
 
     def find_detector(self, all=False):
         """
@@ -242,12 +268,15 @@ class Nexus:
 
         if not force_name:
             nb_entries = len(self.get_entries())
-            entry = "%s_%04i" % (entry, nb_entries)
-        entry_grp = self.h5.require_group(entry)
+            entry = f"{entry}_{nb_entries:04i}"
+        entry_grp = self.h5
+        for i in entry.split("/"):
+            if i:
+                entry_grp = entry_grp.require_group(i)
         self.h5.attrs["default"] = entry_grp.name.strip("/")
         entry_grp.attrs["NX_class"] = "NXentry"
         entry_grp["title"] = str(title)
-        entry_grp["program_name"] = program_name
+        entry_grp["program_name"] = str(program_name)
         if isinstance(force_time, str):
             entry_grp["start_time"] = force_time
         else:
@@ -290,7 +319,7 @@ class Nexus:
         from . import __version__ as version
         entry_grp = self.new_entry(entry)
         pyFAI_grp = self.new_class(entry_grp, subentry, "NXsubentry")
-        pyFAI_grp["definition_local"] = str("pyFAI")
+        pyFAI_grp["definition_local"] = "pyFAI"
         pyFAI_grp["definition_local"].attrs["version"] = str(version)
         det_grp = self.new_class(pyFAI_grp, name, "NXdetector")
         return det_grp

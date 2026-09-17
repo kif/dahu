@@ -4,11 +4,15 @@
 Reprocess a job using the current
 """
 
-import os, json, logging, time
+import os
+import json
+import logging
+import time
 from argparse import ArgumentParser
 import dahu.factory
-from dahu.job import Job
-from dahu.utils import get_workdir, NumpyEncoder
+from ..job import Job
+from ..utils import get_workdir, NumpyEncoder
+
 logging.basicConfig()
 
 STATE_UNINITIALIZED = Job.STATE_UNINITIALIZED
@@ -70,7 +74,7 @@ def _run_(plugin, what):
 
 def process(args):
     """Process a set of arguments
-    
+
     :param args: list of files to process
     """
     working_dir = get_workdir()
