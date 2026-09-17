@@ -130,7 +130,7 @@ class NexusJuice(NamedTuple):
                           idx=idx,
                           Isum=Isum,
                           q=q,
-                          I_ary=I_ary,
+                          I=I_ary,
                           sigma=sigma,
                           poni=poni,
                           mask=mask,
