@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Data Analysis plugin for BM29: BioSaxs
 
 * Mesh mode: Rebuild the complete map and performs basic analysis on it.
@@ -9,7 +7,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/09/2026"
+__date__ = "17/09/2026"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -426,7 +424,7 @@ class Mesh(Plugin):
             juice = NexusJuice.read(filename)
             if juice is not None:
                 rel_path = os.path.relpath(os.path.abspath(filename), os.path.dirname(os.path.abspath(self.output_file)))
-                input_grp["LImA_%04i" % idx] = h5py.ExternalLink(rel_path, juice.h5path)
+                input_grp[f"LImA_{idx:04i}"] = h5py.ExternalLink(rel_path, juice.h5path)
                 self.juices.append(juice)
 
         assert  self.juices

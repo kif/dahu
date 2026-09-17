@@ -4,7 +4,7 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "27/05/2025"
+__date__ = "17/09/2026"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
@@ -31,7 +31,7 @@ def get_isotime(forceTime=None):
     gmtime = time.gmtime(forceTime)
     tz_h = localtime.tm_hour - gmtime.tm_hour
     tz_m = localtime.tm_min - gmtime.tm_min
-    return "%s%+03i:%02i" % (time.strftime("%Y-%m-%dT%H:%M:%S", localtime), tz_h, tz_m)
+    return time.strftime("%Y-%m-%dT%H:%M:%S", localtime)+f"{tz_h:+03i}:{tz_m:02i}"
 
 
 def from_isotime(text, use_tz=False):
@@ -130,7 +130,7 @@ class Nexus:
                         mode = "a"
                 try:
                     if mode == "r" and not pure:
-                        self.file_handle = open(self.filename, mode="rb")
+                        self.file_handle = open(self.filename, mode="rb")  # noqa:  SIM115
                         self.h5 = h5py.File(self.file_handle, mode="r")
                     else:
                         self.file_handle = None
@@ -152,7 +152,7 @@ class Nexus:
                     self.mode = "a"
 
             if not pure and self.mode == "r" and h5py.version.version_tuple >= (2, 9):
-                self.file_handle = open(self.filename, mode=self.mode + "b")
+                self.file_handle = open(self.filename, mode=self.mode + "b")  # noqa:  SIM115
                 self.h5 = h5py.File(self.file_handle, mode=self.mode)
             else:
                 self.file_handle = None
@@ -268,7 +268,7 @@ class Nexus:
 
         if not force_name:
             nb_entries = len(self.get_entries())
-            entry = "%s_%04i" % (entry, nb_entries)
+            entry = f"{entry}_{nb_entries:04i}"
         entry_grp = self.h5
         for i in entry.split("/"):
             if i:
