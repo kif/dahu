@@ -10,7 +10,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/09/2026"
+__date__ = "17/09/2026"
 __status__ = "development"
 __version__ = "0.4.0"
 
@@ -147,7 +147,7 @@ class NexusJuice(NamedTuple):
                     npt=npt,
                     unit=unit,
                     q=q,
-                    I_ary=I_ary,
+                    I=I_ary,
                     sigma=sigma,
                     poni=poni,
                     mask=mask,
