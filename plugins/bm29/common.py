@@ -206,3 +206,11 @@ def create_nexus_sample(nxs, entry, sample):
         tempv_ds = sample_grp.create_dataset("temperature_env", data=sample.temperature_env)
         tempv_ds.attrs["units"] = "°C"
         tempv_ds.attrs["comment"] = "Storage temperature"
+
+
+def str_(smth)->str:
+    "Wisely convert to string"
+    if isinstance(smth, bytes):
+        return smth.decode()
+    else:
+        return str(smth)

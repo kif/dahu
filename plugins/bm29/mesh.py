@@ -37,7 +37,7 @@ from pyFAI.method_registry import IntegrationMethod
 
 from dahu.plugin import Plugin
 
-from .common import SAXS_STYLE, Ispyb, Sample, SequenceIndex, create_nexus_sample
+from .common import SAXS_STYLE, Ispyb, Sample, SequenceIndex, create_nexus_sample, str_
 from .nexus import Nexus, get_isotime
 
 matplotlib.use("Agg")
@@ -60,6 +60,85 @@ class NexusJuice(NamedTuple):
     method: tuple
     sample: str
     timestamps:numpy.ndarray
+
+    @classmethod
+
+    def read(cls, filename, logger=None):
+        """Extract some NexusJuice from a HDF5 file, alternative constructor
+
+        :param filename: name of the file
+        :return: NexusJuice instance
+        """
+        with Nexus(filename, "r") as nxsr:
+            entry_name = nxsr.h5.attrs["default"]
+            entry_grp = nxsr.h5[entry_name]
+            h5path = entry_grp.name
+            nxdata_grp = entry_grp[entry_grp.attrs["default"]]
+            # assert nxdata_grp.name.endswith("hplc")  # we are reading HPLC data
+            signal = nxdata_grp.attrs["signal"]
+            axis = nxdata_grp.attrs["axes"]
+            Isum = nxdata_grp[signal][()]
+            idx = nxdata_grp[axis][()]
+            try:
+                integrated = nxdata_grp.parent["result"]
+            except KeyError:
+                integrated = nxdata_grp.parent["results"]
+                if logger:
+                    logger.warning(f"Parsing old file {filename} !")
+            signal = integrated.attrs["signal"]
+            I_ary = integrated[signal][()]
+            axes = integrated.attrs["axes"][-1]
+            q = integrated[axes][()]
+            sigma = integrated["errors"][()]
+
+            npt = len(q)
+            unit = pyFAI.units.to_unit(axes + "_" + integrated[axes].attrs["units"])
+            integration_grp = nxdata_grp.parent
+            poni = str_(integration_grp["configuration/file_name"][()]).strip()
+            if not os.path.exists(poni):
+                poni = str_(integration_grp["configuration/data"][()])
+                poni = json.loads(poni)
+            polarization = integration_grp["configuration/polarization_factor"][()]
+            method = IntegrationMethod.select_method(**json.loads(integration_grp["configuration/integration_method"][()]))[0]
+            instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
+            detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]
+            mask = detector_grp["pixel_mask"].attrs["filename"]
+            mono_grp = nxsr.get_class(instrument_grp, class_type="NXmonochromator")[0]
+            energy = mono_grp["energy"][()]
+
+            # Read the sample description:
+            sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
+            sample_name = posixpath.split(sample_grp.name)[-1]
+
+            buffer = str_(sample_grp["buffer"][()]) if "buffer" in sample_grp else ""
+            concentration = sample_grp["concentration"][()] if "concentration" in sample_grp else ""
+            description = str_(sample_grp["description"][()]) if "description" in sample_grp else ""
+            hplc = str_(sample_grp["hplc"][()]) if "hplc" in sample_grp else ""
+            temperature = sample_grp["temperature"][()] if "temperature" in sample_grp else ""
+            temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
+            sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
+            meas_grp = nxsr.get_class(entry_grp, class_type="NXdata")[0]
+            timestamps = []
+            for ts_name in ("timestamps", "time-stamps"):
+                if ts_name in meas_grp:
+                    timestamps = meas_grp[ts_name][()]
+                    break
+        return cls(       filename=filename,
+                          h5path=h5path,
+                          npt=npt,
+                          unit=unit,
+                          idx=idx,
+                          Isum=Isum,
+                          q=q,
+                          I=I_ary,
+                          sigma=sigma,
+                          poni=poni,
+                          mask=mask,
+                          energy=energy,
+                          polarization=polarization,
+                          method=method,
+                          sample=sample,
+                          timestamps=timestamps)
 
 
 class Position(NamedTuple):
@@ -133,7 +212,7 @@ class Scan:
         return (self.slow_motor_step + 1, self.fast_motor_step + 1)
 
     @classmethod
-    def parse(cls, text):
+    def parse(cls, text:str):
         """Alternative constructor,
         :param text: string containing the bliss command (starting with `amesh`)
         :return: instance of the dataclass
@@ -173,8 +252,7 @@ def input_from_master(master_file):
             title = entry.get("title", "")
             if isinstance(title, h5py.Dataset):
                 title = title[()]
-            if isinstance(title, bytes):
-                title = title.decode()
+            title = str_(title)
             if title:
                 scan = Scan.parse(title)
             if scan is None:
@@ -345,7 +423,7 @@ class Mesh(Plugin):
         input_grp["sequence_index"] = self.sequence_index()
 
         for idx, filename in enumerate(self.input_files):
-            juice = self.read_nexus(filename)
+            juice = NexusJuice.read(filename)
             if juice is not None:
                 rel_path = os.path.relpath(os.path.abspath(filename), os.path.dirname(os.path.abspath(self.output_file)))
                 input_grp["LImA_%04i" % idx] = h5py.ExternalLink(rel_path, juice.h5path)
@@ -505,66 +583,6 @@ class Mesh(Plugin):
               filename=os.path.join(self.ispyb.gallery, "mesh.png"))
         # save_zip(os.path.splitext(self.output_file)[0]+".zip",
         #          self.juices[0], I, sigma)
-
-    def read_nexus(self, filename):
-        "return some NexusJuice from a HDF5 file "
-        with Nexus(filename, "r") as nxsr:
-            entry_name = nxsr.h5.attrs["default"]
-            entry_grp = nxsr.h5[entry_name]
-            h5path = entry_grp.name
-            nxdata_grp = entry_grp[entry_grp.attrs["default"]]
-            # assert nxdata_grp.name.endswith("hplc")  # we are reading HPLC data
-            signal = nxdata_grp.attrs["signal"]
-            axis = nxdata_grp.attrs["axes"]
-            Isum = nxdata_grp[signal][()]
-            idx = nxdata_grp[axis][()]
-            try:
-                integrated = nxdata_grp.parent["result"]
-            except KeyError:
-                integrated = nxdata_grp.parent["results"]
-                self.log_warning(f"Parsing old file {filename} !")
-            signal = integrated.attrs["signal"]
-            I_ary = integrated[signal][()]
-            axes = integrated.attrs["axes"][-1]
-            q = integrated[axes][()]
-            sigma = integrated["errors"][()]
-
-            npt = len(q)
-            unit = pyFAI.units.to_unit(axes + "_" + integrated[axes].attrs["units"])
-            integration_grp = nxdata_grp.parent
-            poni = str(integration_grp["configuration/file_name"][()]).strip()
-            if not os.path.exists(poni):
-                poni = integration_grp["configuration/data"][()]
-                if isinstance(poni, bytes):
-                    poni = poni.decode()
-                poni = json.loads(poni)
-            polarization = integration_grp["configuration/polarization_factor"][()]
-            method = IntegrationMethod.select_method(**json.loads(integration_grp["configuration/integration_method"][()]))[0]
-            instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
-            detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]
-            mask = detector_grp["pixel_mask"].attrs["filename"]
-            mono_grp = nxsr.get_class(instrument_grp, class_type="NXmonochromator")[0]
-            energy = mono_grp["energy"][()]
-
-            # Read the sample description:
-            sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
-            sample_name = posixpath.split(sample_grp.name)[-1]
-
-            buffer = sample_grp["buffer"][()] if "buffer" in sample_grp else ""
-            concentration = sample_grp["concentration"][()] if "concentration" in sample_grp else ""
-            description = sample_grp["description"][()] if "description" in sample_grp else ""
-            hplc = sample_grp["hplc"][()] if "hplc" in sample_grp else ""
-            temperature = sample_grp["temperature"][()] if "temperature" in sample_grp else ""
-            temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
-            sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
-            meas_grp = nxsr.get_class(entry_grp, class_type="NXdata")[0]
-            timestamps = []
-            for ts_name in ("timestamps", "time-stamps"):
-                if ts_name in meas_grp:
-                    timestamps = meas_grp[ts_name][()]
-                    break
-        return NexusJuice(filename, h5path, npt, unit, idx, Isum, q, I_ary, sigma, poni, mask, energy, polarization, method, sample, timestamps)
-        "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps"
 
     def send_to_ispyb(self):
         self.log_warning("send_to_ispyb: unimplemented")

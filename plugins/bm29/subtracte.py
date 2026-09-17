@@ -54,6 +54,7 @@ from .common import (
     get_integrator,
     method,
     polarization_factor,
+    str_,
 )
 from .icat import send_icat
 from .ispyb import IspybConnector, NumpyEncoder
@@ -88,6 +89,78 @@ class NexusJuice(NamedTuple):
     I_all: numpy.ndarray
     sigma_all: numpy.ndarray
 
+    @classmethod
+    def read(cls, filename):
+        """Extract some NexusJuice from a HDF5 file, alternative constructor
+
+        :param filename: name of the file
+        :return: NexusJuice instance
+        """
+        with Nexus(filename, "r") as nxsr:
+            entry_grp = nxsr.get_entries()[0]
+            h5path = entry_grp.name
+            nxdata_grp = entry_grp[entry_grp.attrs["default"]]
+            signal = nxdata_grp.attrs["signal"]
+            axis = nxdata_grp.attrs["axes"]
+            I_ary = nxdata_grp[signal][()]
+            q = nxdata_grp[axis][()]
+            sigma = nxdata_grp["errors"][()]
+            npt = len(q)
+            unit = pyFAI.units.to_unit(axis + "_" + nxdata_grp[axis].attrs["units"])
+            integration_grp = nxdata_grp.parent
+            poni = integration_grp["configuration/file_name"][()]
+            poni = str_(poni).strip()
+            if not os.path.exists(poni):
+                poni = str_(integration_grp["configuration/data"][()]).strip()
+            polarization = integration_grp["configuration/polarization_factor"][()]
+            method = IntegrationMethod.select_method(**json.loads(integration_grp["configuration/integration_method"][()]))[0]
+            instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
+            detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]
+            mask = detector_grp["pixel_mask"].attrs["filename"]
+            mono_grp = nxsr.get_class(instrument_grp, class_type="NXmonochromator")[0]
+            energy = mono_grp["energy"][()]
+            img_grp = nxsr.get_class(entry_grp["3_time_average"], class_type="NXdata")[0]
+            image2d = img_grp["intensity_normed"][()]
+            error2d = img_grp["intensity_std"][()]
+            norm =  img_grp["normalization"][()] if "normalization" in img_grp else None
+            # Read the sample description:
+            sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
+            sample_name = posixpath.basename(sample_grp.name)
+
+            buffer = str_(sample_grp["buffer"][()] if "buffer" in sample_grp else "")
+            concentration = sample_grp["concentration"][()] if "concentration" in sample_grp else ""
+            description = str_(sample_grp["description"][()]) if "description" in sample_grp else ""
+            hplc = str_(sample_grp["hplc"][()]) if "hplc" in sample_grp else ""
+            temperature = sample_grp["temperature"][()] if "temperature" in sample_grp else ""
+            temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
+            sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
+
+            if "1_integration" in entry_grp:
+                I_all = entry_grp["1_integration/result/I"][()]
+                sigma_all = entry_grp["1_integration/result/errors"][()]
+            else:
+                I_all = []
+                sigma_all = []
+
+        return cls(filename=filename,
+                    h5path=h5path,
+                    npt=npt,
+                    unit=unit,
+                    q=q,
+                    I=I_ary,
+                    sigma=sigma,
+                    poni=poni,
+                    mask=mask,
+                    energy=energy,
+                    polarization=polarization,
+                    method=method,
+                    signal2d=image2d,
+                    error2d=error2d,
+                    normalization=norm,
+                    sample=sample,
+                    I_all=I_all,
+                    sigma_all=sigma_all)
+
 
 def save_zip(filename, sample_juice, buffer_juices):
     """Save a stack of I into a zipfile with each frames in a dat-file.
@@ -110,7 +183,7 @@ def save_zip(filename, sample_juice, buffer_juices):
 
         if sample.buffer:
             common["buffer"] = sample.buffer
-            destz_buffer += sample.buffer if isinstance(sample.buffer, str) else sample.buffer.decode()
+            destz_buffer += str_(sample.buffer)
         else:
             destz_buffer += "buffer"
 
@@ -253,7 +326,7 @@ class SubtractBuffer(Plugin):
     def process(self):
         Plugin.process(self)
         logger.debug("SubtractBuffer.process")
-        self.sample_juice = self.read_nexus(self.sample_file)
+        self.sample_juice = NexusJuice.read(self.sample_file)
         self.to_pyarch["basename"] = os.path.splitext(os.path.basename(self.sample_file))[0]
         try:
             self.create_nexus()
@@ -274,7 +347,7 @@ class SubtractBuffer(Plugin):
 
     def validate_buffer(self, buffer_file):
         "Validate if a buffer is consitent with the sample, return some buffer_juice or None when unconsistent"
-        buffer_juice = self.read_nexus(buffer_file)
+        buffer_juice = NexusJuice.read(buffer_file)
         if self.sample_juice.npt != buffer_juice.npt:
             self.log_warning(f"Sample {buffer_file} differs in number of points, discarding")
             return
@@ -796,58 +869,6 @@ class SubtractBuffer(Plugin):
             bift_grp.attrs["default"] = posixpath.relpath(bift_data.name, bift_grp.name)
             self.to_pyarch["bift"] = stats
 
-    @staticmethod
-    def read_nexus(filename):
-        "return some NexusJuice from a HDF5 file "
-        with Nexus(filename, "r") as nxsr:
-            entry_grp = nxsr.get_entries()[0]
-            h5path = entry_grp.name
-            nxdata_grp = entry_grp[entry_grp.attrs["default"]]
-            signal = nxdata_grp.attrs["signal"]
-            axis = nxdata_grp.attrs["axes"]
-            I_ary = nxdata_grp[signal][()]
-            q = nxdata_grp[axis][()]
-            sigma = nxdata_grp["errors"][()]
-            npt = len(q)
-            unit = pyFAI.units.to_unit(axis + "_" + nxdata_grp[axis].attrs["units"])
-            integration_grp = nxdata_grp.parent
-            poni = integration_grp["configuration/file_name"][()]
-            poni = str_(poni).strip()
-            if not os.path.exists(poni):
-                poni = str_(integration_grp["configuration/data"][()]).strip()
-            polarization = integration_grp["configuration/polarization_factor"][()]
-            method = IntegrationMethod.select_method(**json.loads(integration_grp["configuration/integration_method"][()]))[0]
-            instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
-            detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]
-            mask = detector_grp["pixel_mask"].attrs["filename"]
-            mono_grp = nxsr.get_class(instrument_grp, class_type="NXmonochromator")[0]
-            energy = mono_grp["energy"][()]
-            img_grp = nxsr.get_class(entry_grp["3_time_average"], class_type="NXdata")[0]
-            image2d = img_grp["intensity_normed"][()]
-            error2d = img_grp["intensity_std"][()]
-            norm =  img_grp["normalization"][()] if "normalization" in img_grp else None
-            # Read the sample description:
-            sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
-            sample_name = posixpath.basename(sample_grp.name)
-
-            buffer = str_(sample_grp["buffer"][()] if "buffer" in sample_grp else "")
-            concentration = sample_grp["concentration"][()] if "concentration" in sample_grp else ""
-            description = sample_grp["description"][()] if "description" in sample_grp else ""
-            hplc = sample_grp["hplc"][()] if "hplc" in sample_grp else ""
-            temperature = sample_grp["temperature"][()] if "temperature" in sample_grp else ""
-            temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
-            sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
-
-            if "1_integration" in entry_grp:
-                I_all = entry_grp["1_integration/result/I"][()]
-                sigma_all = entry_grp["1_integration/result/errors"][()]
-            else:
-                I_all = []
-                sigma_all = []
-
-        return NexusJuice(filename, h5path, npt, unit, q, I_ary, sigma, poni, mask, energy, polarization,
-                          method, image2d, error2d, norm, sample, I_all, sigma_all)
-
     def send_to_ispyb(self):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
             ispyb = IspybConnector(*self.ispyb)
@@ -883,8 +904,3 @@ class SubtractBuffer(Plugin):
 
         return to_memcached(dico)
 
-def str_(smth):
-    if isinstance(smth, bytes):
-        return smth.decode()
-    else:
-        return str(smth)
