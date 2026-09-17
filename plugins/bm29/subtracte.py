@@ -147,7 +147,7 @@ class NexusJuice(NamedTuple):
                     npt=npt,
                     unit=unit,
                     q=q,
-                    I_ary=I_ary,
+                    I=I_ary,
                     sigma=sigma,
                     poni=poni,
                     mask=mask,
