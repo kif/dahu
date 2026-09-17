@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Data Analysis plugin for BM29: BioSaxs
 
 * HPLC mode: Rebuild the complete chromatogram and perform basic analysis on it.
@@ -10,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/09/2026"
+__date__ = "17/09/2026"
 __status__ = "development"
 __version__ = "0.4.1"
 
@@ -295,7 +293,7 @@ def save_zip(filename, config, intensity, sigma):
     if config.sample:
         sample = config.sample
         if sample.name:
-            common["sample"]: sample.name
+            common["sample"]= sample.name
         if sample.buffer:
             common["buffer"] = sample.buffer
         if sample.temperature_env:
@@ -313,7 +311,7 @@ def save_zip(filename, config, intensity, sigma):
     with zipfile.ZipFile(filename, "w") as z:
         for idx, frame in enumerate(res):
             z.writestr(destz % idx, write_ascii(frame))
-
+        # TODO: save buffer, averaged-subtracted
 
 class HPLC(Plugin):
     """Rebuild the complete chromatogram and perform basic analysis on it.
@@ -455,7 +453,7 @@ class HPLC(Plugin):
                     os.path.abspath(filename),
                     os.path.dirname(os.path.abspath(self.output_file)),
                 )
-                input_grp["LImA_%04i" % idx] = h5py.ExternalLink(rel_path, juice.h5path)
+                input_grp[f"LImA_{idx:04i}"] = h5py.ExternalLink(rel_path, juice.h5path)
                 self.juices.append(juice)
 
         q = self.juices[0].q
@@ -1214,7 +1212,6 @@ class HPLC(Plugin):
         ds.attrs["info"] = (
             "Uncertainties on scattering from merged frames in each fraction"
         )
-        "", "", "", ""
         ds = ispyb_grp.create_dataset(
             "scattering_I",
             data=normalize(self.to_pyarch["scattering_I"], dtype=numpy.float32),
@@ -1357,10 +1354,8 @@ class HPLC(Plugin):
         if not os.path.isdir(dirname):
             os.makedirs(dirname, exist_ok=True)
         lines = ["id,ΣI,Rg"]
-        idx = 0
-        for I, rg in zip(sum_I, Rg):
+        for idx, (I, rg) in enumerate(zip(sum_I, Rg)):
             lines.append(f"{idx},{I},{rg}")
-            idx += 1
         lines.append("")
         with open(filename, "w") as csv:
             csv.write(os.linesep.join(lines))

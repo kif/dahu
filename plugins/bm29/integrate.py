@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Data Analysis plugin for BM29: BioSaxs
 
 * IntegrateMultiframe: perform the integration of many frames contained in a HDF5 file and average them
@@ -10,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/09/2026"
+__date__ = "17/09/2026"
 __status__ = "development"
 __version__ = "0.3.1"
 

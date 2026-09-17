@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Data Analysis plugin for BM29: BioSaxs
 
 Common data structures: Sample, Ispyb
@@ -10,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "16/09/2026"
+__date__ = "17/09/2026"
 __status__ = "development"
 __version__ = "0.0.2"
 

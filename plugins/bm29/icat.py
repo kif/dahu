@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Data Analysis plugin for BM29: BioSaxs
 
 Everything to send data to iCat, the data catalogue
@@ -27,7 +25,7 @@ except ImportError:
     IcatClient = None
 try:
     from esrf_ontologies import technique
-except:
+except ImportError:
     technique = None
     METADATA = {'technique_pid': 'https://w3id.org/PaN/ESRFET#BioSAXS https://w3id.org/PaN/ESRFET#SAXS', 'definition': 'BioSAXS SAXS', 'technique_pid_esrfet_version': '0.1.0'}
 
@@ -106,9 +104,6 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
         metadata.update(technique.get_technique_metadata("SAXS", "BIOSAXS").get_dataset_metadata())
     else:
         metadata.update(METADATA)
-
-    metadata["definition"] = "SAXS"
-   # metadata["Sample_name"] = sample
 
     for k,v in data.items():
         if isinstance(k, str) and k.startswith("SAXS_"):

@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Data Analysis plugin for BM29: BioSaxs
 
 * SubtractBuffer: Search for the equivalence of buffers, average them and subtract from sample signal.
@@ -176,7 +174,7 @@ def save_zip(filename, sample_juice, buffer_juices):
     if sample_juice.sample:
         sample = sample_juice.sample
         if sample.name:
-            common["sample"]: sample.name
+            common["sample"] = sample.name
             destz_sample += sample.name
         else:
             destz_sample += "sample"
@@ -199,22 +197,18 @@ def save_zip(filename, sample_juice, buffer_juices):
     destz_buffer +=  "_%04i.dat"
     res = {}
     # sample
-    idx = 0
-    for i, s in zip(sample_juice.I_all, sample_juice.sigma_all):
+    for idx, (i, s) in enumerate(zip(sample_juice.I_all, sample_juice.sigma_all)):
         r = copy.copy(common)
         r["I"] = i
         r["std"] = s
         res[destz_sample % idx] = r
-        idx+=1
     # buffers
     for buffer_idx, buffer in enumerate(buffer_juices):
-        idx = 0
-        for i, s in zip(buffer.I_all, buffer.sigma_all):
+        for idx, (i, s) in enumerate(zip(buffer.I_all, buffer.sigma_all)):
             r = copy.copy(common)
             r["I"] = i
             r["std"] = s
             res[destz_buffer % (buffer_idx, idx)] = r
-            idx+=1
 
     with zipfile.ZipFile(filename, "w") as z:
         for name, frame in res.items():
@@ -399,7 +393,7 @@ class SubtractBuffer(Plugin):
             buffer_juice = self.validate_buffer(buffer_file)
             if buffer_juice is not None:
                 rel_path = os.path.relpath(os.path.abspath(buffer_file), os.path.dirname(os.path.abspath(self.output_file)))
-                input_grp["buffer_%i" % idx] = h5py.ExternalLink(rel_path, buffer_juice.h5path)
+                input_grp[f"buffer_{idx}"] = h5py.ExternalLink(rel_path, buffer_juice.h5path)
                 self.buffer_juices.append(buffer_juice)
 
         # Sample: outsourced !
