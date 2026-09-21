@@ -83,16 +83,16 @@ def build_project(name, root_dir):
     while not os.path.isdir(home):
         home, last = os.path.split(home)
         tmp.append(last)
-    print(home, tmp)
+    # print(home, tmp)
     for _ in tmp:
         for n in os.listdir(home):
-            print("isdir ?", home, "/", n)
+            # print("isdir ?", home, "/", n)
             if os.path.isdir(os.path.join(home, n)):
                 break
         home = os.path.join(home, n)
 
     logger.warning("Building %s to %s", name, home)
-    print("return", home)
+    # print("return", home)
     return home
 
 
