@@ -29,7 +29,6 @@ from urllib3.util import parse_url
 
 from dahu.factory import register
 from dahu.plugin import Plugin
-from dahu.factory import register
 from dahu.utils import fully_qualified_name
 
 from .common import (

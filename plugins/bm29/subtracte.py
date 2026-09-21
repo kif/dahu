@@ -73,7 +73,7 @@ class NexusJuice(NamedTuple):
     npt: int
     unit: str
     q: numpy.ndarray
-    I: numpy.ndarray  # noqa
+    I: numpy.ndarray
     sigma: numpy.ndarray
     poni:str
     mask: numpy.ndarray
@@ -846,7 +846,7 @@ class SubtractBuffer(Plugin):
             r_ds.attrs["interpretation"] = "spectrum"
 
             r_ds.attrs["unit"] = radius_unit
-            r_ds.attrs["long_name"] = "radius r(%s)" % radius_unit
+            r_ds.attrs["long_name"] = f"radius r({radius_unit})"
             p_ds = bift_data.create_dataset("p(r)", data=stats.density_avg.astype(numpy.float32))
             p_ds.attrs["interpretation"] = "spectrum"
             bift_data["errors"] = stats.density_std

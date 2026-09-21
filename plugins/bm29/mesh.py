@@ -38,7 +38,6 @@ from dahu.plugin import Plugin
 from .common import SAXS_STYLE, Ispyb, Sample, SequenceIndex, create_nexus_sample, str_
 from .nexus import Nexus, get_isotime
 
-
 matplotlib.use("Agg")
 
 
@@ -50,7 +49,7 @@ class NexusJuice(NamedTuple):
     idx: int
     Isum: numpy.ndarray
     q: numpy.ndarray
-    I: numpy.ndarray  #noqa
+    I: numpy.ndarray
     sigma: numpy.ndarray
     poni: str
     mask: numpy.ndarray

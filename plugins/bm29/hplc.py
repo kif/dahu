@@ -2,12 +2,13 @@
 
 * HPLC mode: Rebuild the complete chromatogram and perform basic analysis on it.
 """
+from __future__ import annotations
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/09/2026"
+__date__ = "21/09/2026"
 __status__ = "development"
 __version__ = "0.4.1"
 
@@ -30,7 +31,6 @@ import freesas.invariants
 import h5py
 import matplotlib.pyplot
 import numpy
-import h5py
 import pyFAI
 import pyFAI.integrator.azimuthal
 import pyFAI.units
@@ -40,7 +40,6 @@ import sklearn
 from freesas.app.extract_ascii import write_ascii
 from freesas.autorg import auto_gpa, auto_guinier, autoRg
 from freesas.bift import BIFT
-from freesas.app.extract_ascii import write_ascii
 from freesas.containers import UVJuice
 from freesas.plot import hplc_plot
 from pyFAI.method_registry import IntegrationMethod
@@ -62,11 +61,6 @@ from .common import (
 from .icat import send_icat
 from .ispyb import IspybConnector
 from .nexus import Nexus, get_isotime
-from .ispyb import IspybConnector
-from .icat import send_icat
-from typing import NamedTuple
-import matplotlib.pyplot
-from freesas.plot import hplc_plot
 
 logger = logging.getLogger("bm29.hplc")
 matplotlib.use("Agg")
@@ -82,7 +76,7 @@ class NexusJuice(NamedTuple):
     idx: numpy.ndarray
     Isum: numpy.ndarray
     q: numpy.ndarray
-    I: numpy.ndarray  # noqa
+    I: numpy.ndarray
     sigma: numpy.ndarray
     poni: str
     mask: numpy.ndarray
@@ -318,7 +312,7 @@ def save_zip(filename, config, intensity, sigma, dat_template=None):
         res.append(r)
     with zipfile.ZipFile(filename, "w") as z:
         for idx, frame in enumerate(res):
-            z.writestr(destz % idx, write_ascii(frame))
+            z.writestr(dat_template % idx, write_ascii(frame))
         # TODO: save buffer, averaged-subtracted
 
 class HPLC(Plugin):
@@ -515,7 +509,7 @@ class HPLC(Plugin):
                 "interpretation"
             ] = "spectrum"
             scale = diode_raw / diode_smooth
-            I *= numpy.atleast_2d(scale).T  # noqa
+            I *= numpy.atleast_2d(scale).T
             Isum *= scale
             sigma *= numpy.atleast_2d(scale).T
             diode = diode_smooth
@@ -905,7 +899,7 @@ class HPLC(Plugin):
 
         # Stage #4 Guinier plot generation:
 
-        q, I, err = sasm.T[:3]  # noqa
+        q, I, err = sasm.T[:3]
         mask = (I > 0) & numpy.isfinite(I) & (q > 0) & numpy.isfinite(q)
         if err is not None:
             mask &= (err > 0.0) & numpy.isfinite(err)
