@@ -92,7 +92,7 @@ def build_project(name, root_dir):
         home = os.path.join(home, n)
 
     logger.warning("Building %s to %s", name, home)
-
+    print("return", home)
     return home
 
 
