@@ -9,7 +9,7 @@ example: ./bootstrap.py ipython
 __authors__ = ["Frédéric-Emmanuel Picca", "Jérôme Kieffer"]
 __contact__ = "jerome.kieffer@esrf.eu"
 __license__ = "MIT"
-__date__ = "14/04/2025"
+__date__ = "21/09/2026"
 
 import argparse
 import logging
@@ -32,7 +32,7 @@ def get_project_name(root_dir):
     :return: The name of the project stored in root_dir
     """
     print(f"Getting project name in {root_dir}")
-    
+
     with open(os.path.join(root_dir, "pyproject.toml")) as f:
         pyproject = tomli.loads(f.read())
     return pyproject.get("project", {}).get("name")
@@ -78,11 +78,12 @@ def build_project(name, root_dir):
                 python_version = f"python{sys.version_info.major}.{sys.version_info.minor}"
                 home = os.path.join(build, libdir, python_version, "site-packages")
             home = os.path.abspath(home)
-
+    print(home)
     tmp = []
     while not os.path.isdir(home):
         home, last = os.path.split(home)
         tmp.append(last)
+    print(home, tmp)
     for _ in tmp:
         for n in os.listdir(home):
             if os.path.isdir(os.path.join(home, n)):
