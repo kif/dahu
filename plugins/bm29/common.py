@@ -8,9 +8,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/09/2026"
+__date__ = "21/09/2026"
 __status__ = "development"
-__version__ = "0.0.2"
+__version__ = "0.1.0"
 
 import json
 import logging
@@ -76,6 +76,36 @@ def get_integrator(keycache):
             ai.detector.mask = mask
         shared_cache[keycache] = ai
     return ai
+
+
+def calc_spottiness(result, weighted=True):
+    """Quantify the azimuthal heterogeneity of an integrated frame.
+
+    This is the `spottiness` as defined in pyFAI, inspired by
+    doi:10.1107/S1600576713029713: the ratio of the azimuthal variance actually
+    measured in each radial bin to the one expected from the signal itself.
+    It is close to 0 for a perfectly isotropic image and grows with any
+    azimuthal anisotropy: spots, texture ... or a meniscus in the capillary.
+
+    Warning: the integration *must* have been performed with
+    `error_model="azimuthal"`, else the value is meaningless.
+
+    :param result: Integrate1dResult obtained with the azimuthal error model
+    :param weighted: weight every radial bin by its intensity. On by default:
+                     an un-weighted mean gives as much importance to the noisy
+                     high-q bins as to the informative low-q ones.
+    :return: a float which increases with the anisotropy of the signal
+    """
+    if hasattr(result, "calc_spottiness"):  # natively provided by recent pyFAI
+        return float(result.calc_spottiness(weighted))
+    intensity = numpy.maximum(0.0, result.intensity) if weighted else numpy.ones_like(result.intensity)
+    sum_variance = numpy.zeros_like(result.sum_signal) if result.sum_variance is None \
+                   else numpy.maximum(0.0, result.sum_variance)
+    sum_signal = numpy.maximum(1.0, result.sum_signal)
+    proportion = sum_variance / sum_signal ** 2
+    return float(numpy.sqrt((proportion * intensity).sum(dtype=numpy.float64) /
+                            intensity.sum(dtype=numpy.float64)))
+
 
 def _fromdict(cls, dico):
     "Mirror of _asdict: take the dict and populate the tuple to be returned"

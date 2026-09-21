@@ -455,7 +455,7 @@ class HPLC(Plugin):
                     os.path.abspath(filename),
                     os.path.dirname(os.path.abspath(self.output_file)),
                 )
-                input_grp[f"LImA_{idx:04i}"] = h5py.ExternalLink(rel_path, juice.h5path)
+                input_grp[f"LImA_{idx:04d}"] = h5py.ExternalLink(rel_path, juice.h5path)
                 self.juices.append(juice)
 
         q = self.juices[0].q

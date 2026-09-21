@@ -31,7 +31,7 @@ def get_isotime(forceTime=None):
     gmtime = time.gmtime(forceTime)
     tz_h = localtime.tm_hour - gmtime.tm_hour
     tz_m = localtime.tm_min - gmtime.tm_min
-    return time.strftime("%Y-%m-%dT%H:%M:%S", localtime)+f"{tz_h:+03i}:{tz_m:02i}"
+    return time.strftime("%Y-%m-%dT%H:%M:%S", localtime)+f"{tz_h:+03d}:{tz_m:02d}"
 
 
 def from_isotime(text, use_tz=False):
@@ -268,7 +268,7 @@ class Nexus:
 
         if not force_name:
             nb_entries = len(self.get_entries())
-            entry = f"{entry}_{nb_entries:04i}"
+            entry = f"{entry}_{nb_entries:04d}"
         entry_grp = self.h5
         for i in entry.split("/"):
             if i:

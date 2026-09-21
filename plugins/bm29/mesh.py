@@ -424,7 +424,7 @@ class Mesh(Plugin):
             juice = NexusJuice.read(filename)
             if juice is not None:
                 rel_path = os.path.relpath(os.path.abspath(filename), os.path.dirname(os.path.abspath(self.output_file)))
-                input_grp[f"LImA_{idx:04i}"] = h5py.ExternalLink(rel_path, juice.h5path)
+                input_grp[f"LImA_{idx:04d}"] = h5py.ExternalLink(rel_path, juice.h5path)
                 self.juices.append(juice)
 
         assert  self.juices
