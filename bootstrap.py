@@ -86,6 +86,7 @@ def build_project(name, root_dir):
     print(home, tmp)
     for _ in tmp:
         for n in os.listdir(home):
+            print("isdir ?", home, "/", n)
             if os.path.isdir(os.path.join(home, n)):
                 break
         home = os.path.join(home, n)
