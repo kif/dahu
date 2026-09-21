@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Data Analysis plugin for BM29: BioSaxs
 
 * SubtractBuffer: Search for the equivalence of buffers, average them and subtract from sample signal.
@@ -10,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/03/2026"
+__date__ = "17/09/2026"
 __status__ = "development"
 __version__ = "0.4.0"
 
@@ -30,8 +28,6 @@ import h5py
 import numpy
 import pyFAI
 import pyFAI.integrator.azimuthal
-from dahu.plugin import Plugin
-from dahu.utils import fully_qualified_name
 from freesas.app.extract_ascii import write_ascii
 from freesas.autorg import auto_gpa, auto_guinier, autoRg
 from freesas.bift import BIFT
@@ -40,18 +36,23 @@ from pyFAI.method_registry import IntegrationMethod
 from scipy.optimize import minimize
 from urllib3.util import parse_url
 
+from dahu.plugin import Plugin
+from dahu.utils import fully_qualified_name
+
 from .common import (
     NORMAL_STYLE,
     SAXS_STYLE,
     Ispyb,
     KeyCache,
     Sample,
+    SequenceIndex,
     cmp_float,
     create_nexus_sample,
     get_equivalent_frames,
     get_integrator,
     method,
     polarization_factor,
+    str_,
 )
 from .icat import send_icat
 from .ispyb import IspybConnector, NumpyEncoder
@@ -72,7 +73,7 @@ class NexusJuice(NamedTuple):
     npt: int
     unit: str
     q: numpy.ndarray
-    I: numpy.ndarray
+    I: numpy.ndarray  # noqa
     sigma: numpy.ndarray
     poni:str
     mask: numpy.ndarray
@@ -85,6 +86,78 @@ class NexusJuice(NamedTuple):
     sample:str
     I_all: numpy.ndarray
     sigma_all: numpy.ndarray
+
+    @classmethod
+    def read(cls, filename):
+        """Extract some NexusJuice from a HDF5 file, alternative constructor
+
+        :param filename: name of the file
+        :return: NexusJuice instance
+        """
+        with Nexus(filename, "r") as nxsr:
+            entry_grp = nxsr.get_entries()[0]
+            h5path = entry_grp.name
+            nxdata_grp = entry_grp[entry_grp.attrs["default"]]
+            signal = nxdata_grp.attrs["signal"]
+            axis = nxdata_grp.attrs["axes"]
+            I_ary = nxdata_grp[signal][()]
+            q = nxdata_grp[axis][()]
+            sigma = nxdata_grp["errors"][()]
+            npt = len(q)
+            unit = pyFAI.units.to_unit(axis + "_" + nxdata_grp[axis].attrs["units"])
+            integration_grp = nxdata_grp.parent
+            poni = integration_grp["configuration/file_name"][()]
+            poni = str_(poni).strip()
+            if not os.path.exists(poni):
+                poni = str_(integration_grp["configuration/data"][()]).strip()
+            polarization = integration_grp["configuration/polarization_factor"][()]
+            method = IntegrationMethod.select_method(**json.loads(integration_grp["configuration/integration_method"][()]))[0]
+            instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
+            detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]
+            mask = detector_grp["pixel_mask"].attrs["filename"]
+            mono_grp = nxsr.get_class(instrument_grp, class_type="NXmonochromator")[0]
+            energy = mono_grp["energy"][()]
+            img_grp = nxsr.get_class(entry_grp["3_time_average"], class_type="NXdata")[0]
+            image2d = img_grp["intensity_normed"][()]
+            error2d = img_grp["intensity_std"][()]
+            norm =  img_grp["normalization"][()] if "normalization" in img_grp else None
+            # Read the sample description:
+            sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
+            sample_name = posixpath.basename(sample_grp.name)
+
+            buffer = str_(sample_grp["buffer"][()] if "buffer" in sample_grp else "")
+            concentration = sample_grp["concentration"][()] if "concentration" in sample_grp else ""
+            description = str_(sample_grp["description"][()]) if "description" in sample_grp else ""
+            hplc = str_(sample_grp["hplc"][()]) if "hplc" in sample_grp else ""
+            temperature = sample_grp["temperature"][()] if "temperature" in sample_grp else ""
+            temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
+            sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
+
+            if "1_integration" in entry_grp:
+                I_all = entry_grp["1_integration/result/I"][()]
+                sigma_all = entry_grp["1_integration/result/errors"][()]
+            else:
+                I_all = []
+                sigma_all = []
+
+        return cls(filename=filename,
+                    h5path=h5path,
+                    npt=npt,
+                    unit=unit,
+                    q=q,
+                    I=I_ary,
+                    sigma=sigma,
+                    poni=poni,
+                    mask=mask,
+                    energy=energy,
+                    polarization=polarization,
+                    method=method,
+                    signal2d=image2d,
+                    error2d=error2d,
+                    normalization=norm,
+                    sample=sample,
+                    I_all=I_all,
+                    sigma_all=sigma_all)
 
 
 def save_zip(filename, sample_juice, buffer_juices):
@@ -101,14 +174,14 @@ def save_zip(filename, sample_juice, buffer_juices):
     if sample_juice.sample:
         sample = sample_juice.sample
         if sample.name:
-            common["sample"]: sample.name
+            common["sample"] = sample.name
             destz_sample += sample.name
         else:
             destz_sample += "sample"
 
         if sample.buffer:
             common["buffer"] = sample.buffer
-            destz_buffer += sample.buffer if isinstance(sample.buffer, str) else sample.buffer.decode()
+            destz_buffer += str_(sample.buffer)
         else:
             destz_buffer += "buffer"
 
@@ -124,22 +197,18 @@ def save_zip(filename, sample_juice, buffer_juices):
     destz_buffer +=  "_%04i.dat"
     res = {}
     # sample
-    idx = 0
-    for i, s in zip(sample_juice.I_all, sample_juice.sigma_all):
+    for idx, (i, s) in enumerate(zip(sample_juice.I_all, sample_juice.sigma_all)):
         r = copy.copy(common)
         r["I"] = i
         r["std"] = s
         res[destz_sample % idx] = r
-        idx+=1
     # buffers
     for buffer_idx, buffer in enumerate(buffer_juices):
-        idx = 0
-        for i, s in zip(buffer.I_all, buffer.sigma_all):
+        for idx, (i, s) in enumerate(zip(buffer.I_all, buffer.sigma_all)):
             r = copy.copy(common)
             r["I"] = i
             r["std"] = s
             res[destz_buffer % (buffer_idx, idx)] = r
-            idx+=1
 
     with zipfile.ZipFile(filename, "w") as z:
         for name, frame in res.items():
@@ -184,6 +253,7 @@ class SubtractBuffer(Plugin):
         self.ispyb = None
         self.to_pyarch = {}
         self.to_memcached = {}  # data to be shared via memcached
+        self.seq = SequenceIndex(0)
 
     def setup(self, kwargs=None):
         logger.debug("SubtractBuffer.setup")
@@ -250,7 +320,7 @@ class SubtractBuffer(Plugin):
     def process(self):
         Plugin.process(self)
         logger.debug("SubtractBuffer.process")
-        self.sample_juice = self.read_nexus(self.sample_file)
+        self.sample_juice = NexusJuice.read(self.sample_file)
         self.to_pyarch["basename"] = os.path.splitext(os.path.basename(self.sample_file))[0]
         try:
             self.create_nexus()
@@ -271,7 +341,7 @@ class SubtractBuffer(Plugin):
 
     def validate_buffer(self, buffer_file):
         "Validate if a buffer is consitent with the sample, return some buffer_juice or None when unconsistent"
-        buffer_juice = self.read_nexus(buffer_file)
+        buffer_juice = NexusJuice.read(buffer_file)
         if self.sample_juice.npt != buffer_juice.npt:
             self.log_warning(f"Sample {buffer_file} differs in number of points, discarding")
             return
@@ -313,8 +383,9 @@ class SubtractBuffer(Plugin):
         cfg_grp.create_dataset("format", data="text/json")
 
     # Process 0: Measurement group
-        input_grp = nxs.new_class(entry_grp, "0_measurement", "NXcollection")
-        input_grp["sequence_index"] = 0
+        seq = self.seq()
+        input_grp = nxs.new_class(entry_grp, f"{seq}_measurement", "NXcollection")
+        input_grp["sequence_index"] = seq
         rel_path = os.path.relpath(os.path.abspath(self.sample_file), os.path.dirname(os.path.abspath(self.output_file)))
         input_grp["sample"] = h5py.ExternalLink(rel_path, self.sample_juice.h5path)
 
@@ -322,7 +393,7 @@ class SubtractBuffer(Plugin):
             buffer_juice = self.validate_buffer(buffer_file)
             if buffer_juice is not None:
                 rel_path = os.path.relpath(os.path.abspath(buffer_file), os.path.dirname(os.path.abspath(self.output_file)))
-                input_grp["buffer_%i" % idx] = h5py.ExternalLink(rel_path, buffer_juice.h5path)
+                input_grp[f"buffer_{idx}"] = h5py.ExternalLink(rel_path, buffer_juice.h5path)
                 self.buffer_juices.append(buffer_juice)
 
         # Sample: outsourced !
@@ -334,8 +405,9 @@ class SubtractBuffer(Plugin):
                  self.buffer_juices)
 
     # Process 1: CorMap
-        cormap_grp = nxs.new_class(entry_grp, "1_correlation_mapping", "NXprocess")
-        cormap_grp["sequence_index"] = 1
+        seq = self.seq()
+        cormap_grp = nxs.new_class(entry_grp, f"{seq}_correlation_mapping", "NXprocess")
+        cormap_grp["sequence_index"] = seq
         cormap_grp["program"] = "freesas.cormap"
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
@@ -436,8 +508,9 @@ class SubtractBuffer(Plugin):
             self.to_pyarch["buffer"] = res2
 
     # Process 3: Azimuthal integration of the subtracted image
-        ai2_grp = nxs.new_class(entry_grp, "3_azimuthal_integration", "NXprocess")
-        ai2_grp["sequence_index"] = 3
+        seq = self.seq()
+        ai2_grp = nxs.new_class(entry_grp, f"{seq}_azimuthal_integration", "NXprocess")
+        ai2_grp["sequence_index"] = seq
         ai2_grp["program"] = "pyFAI"
         ai2_grp["version"] = pyFAI.version
         ai2_grp["date"] = get_isotime()
@@ -497,8 +570,9 @@ class SubtractBuffer(Plugin):
         entry_grp.attrs["default"] = posixpath.relpath(ai2_data.name, entry_grp.name)
 
     # Process 4: Guinier analysis
-        guinier_grp = nxs.new_class(entry_grp, "4_Guinier_analysis", "NXprocess")
-        guinier_grp["sequence_index"] = 4
+        seq = self.seq()
+        guinier_grp = nxs.new_class(entry_grp, f"{seq}_Guinier_analysis", "NXprocess")
+        guinier_grp["sequence_index"] = seq
         guinier_grp["program"] = "freesas.autorg"
         guinier_grp["version"] = freesas.version
         guinier_grp["date"] = get_isotime()
@@ -608,7 +682,7 @@ class SubtractBuffer(Plugin):
 
         q2 = q[mask] ** 2
         logI = numpy.log(I_ary[mask])
-        dlogI = err[mask] / logI
+        dlogI = err[mask] / I_ary[mask]
         q2_ds = guinier_data.create_dataset("q2", data=q2.astype(numpy.float32))
         q2_ds.attrs["unit"] = radius_unit + "⁻²"
         q2_ds.attrs["long_name"] = f"q² ({radius_unit}⁻²)"
@@ -634,8 +708,9 @@ class SubtractBuffer(Plugin):
             self.log_error("No Guinier region found, data of dubious quality", do_raise=True)
 
     # Process 5: Kratky plot
-        kratky_grp = nxs.new_class(entry_grp, "5_dimensionless_Kratky_plot", "NXprocess")
-        kratky_grp["sequence_index"] = 5
+        seq = self.seq()
+        kratky_grp = nxs.new_class(entry_grp, f"{seq}_dimensionless_Kratky_plot", "NXprocess")
+        kratky_grp["sequence_index"] = seq
         kratky_grp["program"] = "freesas.autorg"
         kratky_grp["version"] = freesas.version
         kratky_grp["date"] = get_isotime()
@@ -665,8 +740,9 @@ class SubtractBuffer(Plugin):
         kratky_data_attrs["axes"] = qRg_ds.name
 
     # stage 6: Rambo-Tainer invariant
-        rti_grp = nxs.new_class(entry_grp, "6_invariants", "NXprocess")
-        rti_grp["sequence_index"] = 6
+        seq = self.seq()
+        rti_grp = nxs.new_class(entry_grp, f"{seq}_invariants", "NXprocess")
+        rti_grp["sequence_index"] = seq
         rti_grp["program"] = "freesas.invariants"
         rti_grp["version"] = freesas.version
         rti_data = nxs.new_class(rti_grp, "result", "NXdata")
@@ -702,8 +778,9 @@ class SubtractBuffer(Plugin):
         self.to_pyarch["rti"] = rti
 
     # stage 7: Pair distribution function, what is the equivalent of datgnom
-        bift_grp = nxs.new_class(entry_grp, "7_indirect_Fourier_transformation", "NXprocess")
-        bift_grp["sequence_index"] = 6
+        seq = self.seq()
+        bift_grp = nxs.new_class(entry_grp, f"{seq}_indirect_Fourier_transformation", "NXprocess")
+        bift_grp["sequence_index"] = seq
         bift_grp["program"] = "freesas.bift"
         bift_grp["version"] = freesas.version
         bift_grp["date"] = get_isotime()
@@ -769,7 +846,7 @@ class SubtractBuffer(Plugin):
             r_ds.attrs["interpretation"] = "spectrum"
 
             r_ds.attrs["unit"] = radius_unit
-            r_ds.attrs["long_name"] = f"radius r({radius_unit})"
+            r_ds.attrs["long_name"] = "radius r(%s)" % radius_unit
             p_ds = bift_data.create_dataset("p(r)", data=stats.density_avg.astype(numpy.float32))
             p_ds.attrs["interpretation"] = "spectrum"
             bift_data["errors"] = stats.density_std
@@ -784,58 +861,6 @@ class SubtractBuffer(Plugin):
             ai2_data.attrs["auxiliary_signals"] = "BIFT"
             bift_grp.attrs["default"] = posixpath.relpath(bift_data.name, bift_grp.name)
             self.to_pyarch["bift"] = stats
-
-    @staticmethod
-    def read_nexus(filename):
-        "return some NexusJuice from a HDF5 file "
-        with Nexus(filename, "r") as nxsr:
-            entry_grp = nxsr.get_entries()[0]
-            h5path = entry_grp.name
-            nxdata_grp = entry_grp[entry_grp.attrs["default"]]
-            signal = nxdata_grp.attrs["signal"]
-            axis = nxdata_grp.attrs["axes"]
-            I_ary = nxdata_grp[signal][()]
-            q = nxdata_grp[axis][()]
-            sigma = nxdata_grp["errors"][()]
-            npt = len(q)
-            unit = pyFAI.units.to_unit(axis + "_" + nxdata_grp[axis].attrs["units"])
-            integration_grp = nxdata_grp.parent
-            poni = integration_grp["configuration/file_name"][()]
-            poni = str_(poni).strip()
-            if not os.path.exists(poni):
-                poni = str_(integration_grp["configuration/data"][()]).strip()
-            polarization = integration_grp["configuration/polarization_factor"][()]
-            method = IntegrationMethod.select_method(**json.loads(integration_grp["configuration/integration_method"][()]))[0]
-            instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
-            detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]
-            mask = detector_grp["pixel_mask"].attrs["filename"]
-            mono_grp = nxsr.get_class(instrument_grp, class_type="NXmonochromator")[0]
-            energy = mono_grp["energy"][()]
-            img_grp = nxsr.get_class(entry_grp["3_time_average"], class_type="NXdata")[0]
-            image2d = img_grp["intensity_normed"][()]
-            error2d = img_grp["intensity_std"][()]
-            norm =  img_grp["normalization"][()] if "normalization" in img_grp else None
-            # Read the sample description:
-            sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
-            sample_name = posixpath.basename(sample_grp.name)
-
-            buffer = str_(sample_grp["buffer"][()] if "buffer" in sample_grp else "")
-            concentration = sample_grp["concentration"][()] if "concentration" in sample_grp else ""
-            description = sample_grp["description"][()] if "description" in sample_grp else ""
-            hplc = sample_grp["hplc"][()] if "hplc" in sample_grp else ""
-            temperature = sample_grp["temperature"][()] if "temperature" in sample_grp else ""
-            temperature_env = sample_grp["temperature_env"][()] if "temperature_env" in sample_grp else ""
-            sample = Sample(sample_name, description, buffer, concentration, hplc, temperature_env, temperature)
-
-            if "1_integration" in entry_grp:
-                I_all = entry_grp["1_integration/result/I"][()]
-                sigma_all = entry_grp["1_integration/result/errors"][()]
-            else:
-                I_all = []
-                sigma_all = []
-
-        return NexusJuice(filename, h5path, npt, unit, q, I_ary, sigma, poni, mask, energy, polarization,
-                          method, image2d, error2d, norm, sample, I_all, sigma_all)
 
     def send_to_ispyb(self):
         if self.ispyb.url and parse_url(self.ispyb.url).host:
@@ -872,8 +897,3 @@ class SubtractBuffer(Plugin):
 
         return to_memcached(dico)
 
-def str_(smth):
-    if isinstance(smth, bytes):
-        return smth.decode()
-    else:
-        return str(smth)

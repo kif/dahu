@@ -1,16 +1,13 @@
-#!/usr/bin/env python3
-
 """Data Analysis plugin for BM29: BioSaxs
 
 * HPLC mode: Rebuild the complete chromatogram and perform basic analysis on it.
 """
-from __future__ import annotations
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/04/2026"
+__date__ = "17/09/2026"
 __status__ = "development"
 __version__ = "0.4.1"
 
@@ -33,33 +30,45 @@ import freesas.invariants
 import h5py
 import matplotlib.pyplot
 import numpy
+import h5py
 import pyFAI
 import pyFAI.integrator.azimuthal
 import pyFAI.units
 import scipy.ndimage
 import scipy.signal
-from dahu.plugin import Plugin
+import sklearn
 from freesas.app.extract_ascii import write_ascii
 from freesas.autorg import auto_gpa, auto_guinier, autoRg
 from freesas.bift import BIFT
+from freesas.app.extract_ascii import write_ascii
 from freesas.containers import UVJuice
 from freesas.plot import hplc_plot
 from pyFAI.method_registry import IntegrationMethod
 from scipy.optimize import minimize
+from sklearn.decomposition import NMF
 from urllib3.util import parse_url
 
-from .common import NORMAL_STYLE, SAXS_STYLE, Ispyb, Sample, create_nexus_sample
+from dahu.plugin import Plugin
+
+from .common import (
+    NORMAL_STYLE,
+    SAXS_STYLE,
+    Ispyb,
+    Sample,
+    SequenceIndex,
+    create_nexus_sample,
+    str_,
+)
 from .icat import send_icat
 from .ispyb import IspybConnector
 from .nexus import Nexus, get_isotime
+from .ispyb import IspybConnector
+from .icat import send_icat
+from typing import NamedTuple
+import matplotlib.pyplot
+from freesas.plot import hplc_plot
 
 logger = logging.getLogger("bm29.hplc")
-try:
-    import sklearn
-    from sklearn.decomposition import NMF
-except ImportError:
-    logger.error("Scikit-learn module is missing, the NMF decomposition will be skipped")
-    sklearn = NMF = None
 matplotlib.use("Agg")
 
 
@@ -73,7 +82,7 @@ class NexusJuice(NamedTuple):
     idx: numpy.ndarray
     Isum: numpy.ndarray
     q: numpy.ndarray
-    I: numpy.ndarray
+    I: numpy.ndarray  # noqa
     sigma: numpy.ndarray
     poni: str
     mask: numpy.ndarray
@@ -84,8 +93,106 @@ class NexusJuice(NamedTuple):
     timestamps: numpy.ndarray
     diode: numpy.ndarray | None = None
 
+    @classmethod
+    def read(cls, filename:str):
+        """Extract some NexusJuice from a HDF5 file, alternative constructor
 
-# NexusJuice = namedtuple("NexusJuice", "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps")
+        :param filename: name of the file
+        :return: NexusJuice instance
+        """
+        with Nexus(filename, "r") as nxsr:
+            entry_name = nxsr.h5.attrs["default"]
+            entry_grp = nxsr.h5[entry_name]
+            h5path = entry_grp.name
+            nxdata_grp = entry_grp[entry_grp.attrs["default"]]
+            assert nxdata_grp.name.endswith("hplc")  # we are reading HPLC data
+            signal = nxdata_grp.attrs["signal"]
+            axis = nxdata_grp.attrs["axes"]
+            Isum = nxdata_grp[signal][()]
+            idx = nxdata_grp[axis][()]
+            integrated = nxdata_grp.parent["result"]
+            signal = integrated.attrs["signal"]
+            I = integrated[signal][()]
+            axes = integrated.attrs["axes"][-1]
+            q = integrated[axes][()]
+            sigma = integrated["errors"][()]
+
+            npt = len(q)
+            unit = pyFAI.units.to_unit(axes + "_" + integrated[axes].attrs["units"])
+            integration_grp = nxdata_grp.parent
+            poni = str_(integration_grp["configuration/file_name"][()]).strip()
+            if not os.path.exists(poni):
+                poni = str_(integration_grp["configuration/data"][()]).strip()
+            polarization = integration_grp["configuration/polarization_factor"][()]
+            method = IntegrationMethod.select_method(
+                **json.loads(integration_grp["configuration/integration_method"][()])
+            )[0]
+            instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
+            detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]
+            mask = detector_grp["pixel_mask"].attrs["filename"]
+            mono_grp = nxsr.get_class(instrument_grp, class_type="NXmonochromator")[0]
+            energy = mono_grp["energy"][()]
+            #             img_grp = nxsr.get_class(entry_grp["3_time_average"], class_type="NXdata")[0]
+            #             image2d = img_grp["intensity_normed"][()]
+            #             error2d = img_grp["intensity_std"][()]
+            # Read the sample description:
+            sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
+            sample_name = posixpath.split(sample_grp.name)[-1]
+
+            buffer = str_(sample_grp["buffer"][()]) if "buffer" in sample_grp else ""
+            concentration = (
+                sample_grp["concentration"][()] if "concentration" in sample_grp else ""
+            )
+            description = (
+                str_(sample_grp["description"][()]) if "description" in sample_grp else ""
+            )
+            hplc = sample_grp["hplc"][()] if "hplc" in sample_grp else ""
+            temperature = (
+                sample_grp["temperature"][()] if "temperature" in sample_grp else ""
+            )
+            temperature_env = (
+                sample_grp["temperature_env"][()]
+                if "temperature_env" in sample_grp
+                else ""
+            )
+            sample = Sample(
+                sample_name,
+                description,
+                buffer,
+                concentration,
+                hplc,
+                temperature_env,
+                temperature,
+            )
+            meas_grp = nxsr.get_class(entry_grp, class_type="NXdata")[0]
+            timestamps = []
+            for ts_name in ("timestamps", "time-stamps"):
+                if ts_name in meas_grp:
+                    timestamps = meas_grp[ts_name][()]
+                    break
+            if "diode" in meas_grp:
+                diode = meas_grp["diode"][()]
+            else:
+                diode = []
+
+        return cls( filename=filename,
+                    h5path=h5path,
+                    npt=npt,
+                    unit=unit,
+                    idx=idx,
+                    Isum=Isum,
+                    q=q,
+                    I=I,
+                    sigma=sigma,
+                    poni=poni,
+                    mask=mask,
+                    energy=energy,
+                    polarization=polarization,
+                    method=method,
+                    sample=sample,
+                    timestamps=timestamps,
+                    diode=diode,
+                    )
 
 
 def smooth_chromatogram(signal, window):
@@ -194,7 +301,7 @@ def save_zip(filename, config, intensity, sigma, dat_template=None):
     if config.sample:
         sample = config.sample
         if sample.name:
-            common["sample"]: sample.name
+            common["sample"] = sample.name
         if sample.buffer:
             common["buffer"] = sample.buffer
         if sample.temperature_env:
@@ -211,8 +318,8 @@ def save_zip(filename, config, intensity, sigma, dat_template=None):
         res.append(r)
     with zipfile.ZipFile(filename, "w") as z:
         for idx, frame in enumerate(res):
-            z.writestr(dat_template % idx, write_ascii(frame))
-
+            z.writestr(destz % idx, write_ascii(frame))
+        # TODO: save buffer, averaged-subtracted
 
 class HPLC(Plugin):
     """Rebuild the complete chromatogram and perform basic analysis on it.
@@ -248,13 +355,8 @@ class HPLC(Plugin):
         self.nmf_components = self.NMF_COMP
         self.to_pyarch = {}
         self.ispyb = None
-        self._pid = 0
+        self.sequence_index = SequenceIndex(0)
         self._time_digits = 0
-
-    def sequence_index(self):
-        value = self._pid
-        self._pid += 1
-        return value
 
     def setup(self):
         Plugin.setup(self)
@@ -353,18 +455,18 @@ class HPLC(Plugin):
         input_grp["sequence_index"] = self.sequence_index()
 
         for idx, filename in enumerate(self.input_files):
-            juice = self.read_nexus(filename)
+            juice = NexusJuice.read(filename)
             if juice is not None:
                 rel_path = os.path.relpath(
                     os.path.abspath(filename),
                     os.path.dirname(os.path.abspath(self.output_file)),
                 )
-                input_grp["LImA_%04i" % idx] = h5py.ExternalLink(rel_path, juice.h5path)
+                input_grp[f"LImA_{idx:04i}"] = h5py.ExternalLink(rel_path, juice.h5path)
                 self.juices.append(juice)
 
         q = self.juices[0].q
         unit = self.juices[0].unit
-        radial_unit, unit_name = str(unit).split("_", 1)
+        radial_unit, unit_name = str_(unit).split("_", 1)
 
         # Sample: outsourced !
         create_nexus_sample(nxs, entry_grp, self.juices[0].sample)
@@ -413,7 +515,7 @@ class HPLC(Plugin):
                 "interpretation"
             ] = "spectrum"
             scale = diode_raw / diode_smooth
-            I *= numpy.atleast_2d(scale).T
+            I *= numpy.atleast_2d(scale).T  # noqa
             Isum *= scale
             sigma *= numpy.atleast_2d(scale).T
             diode = diode_smooth
@@ -474,7 +576,7 @@ class HPLC(Plugin):
         time_ds.attrs["long_name"] = "Time stamps (s)"
 
         integration_data = nxs.new_class(chroma_grp, "result", "NXdata")
-        chroma_grp.attrs["title"] = str(self.juices[0].sample)
+        chroma_grp.attrs["title"] = str_(self.juices[0].sample)
 
         int_ds = integration_data.create_dataset(
             "I", data=numpy.ascontiguousarray(I, dtype=numpy.float32)
@@ -543,38 +645,34 @@ class HPLC(Plugin):
         nmf_grp = nxs.new_class(entry_grp, "3_NMF", "NXprocess")
         nmf_grp["sequence_index"] = self.sequence_index()
         nmf_grp["program"] = "sklearn.decomposition.NMF"
-        if NMF is None:
-            self.log_warning("NMF data decomposition skipped: scikit-learn is missing")
-            nmf_grp["ImportError"] = "scikit-learn is missing"
+        nmf_grp["version"] = sklearn.__version__
+        nmf = NMF(n_components=self.nmf_components, init="nndsvd", max_iter=1000)
+        try:
+            W = nmf.fit_transform(I.T)
+        except ValueError as err:
+            self.log_warning(f"NMF data decomposition failed with: {err}")
+            nmf_grp[err.__class__.__name__] = str_(err)
         else:
-            nmf_grp["version"] = sklearn.__version__
-            nmf = NMF(n_components=self.nmf_components, init="nndsvd", max_iter=1000)
-            try:
-                W = nmf.fit_transform(I.T)
-            except ValueError as err:
-                self.log_warning(f"NMF data decomposition failed with: {err}")
-                nmf_grp[err.__class__.__name__] = str(err)
-            else:
-                eigen_data = nxs.new_class(nmf_grp, "eigenvectors", "NXdata")
-                eigen_ds = eigen_data.create_dataset(
-                    "W", data=numpy.ascontiguousarray(W.T, dtype=numpy.float32)
-                )
-                eigen_ds.attrs["interpretation"] = "spectrum"
-                eigen_data.attrs["signal"] = "W"
-                eigen_data.attrs["SILX_style"] = SAXS_STYLE
+            eigen_data = nxs.new_class(nmf_grp, "eigenvectors", "NXdata")
+            eigen_ds = eigen_data.create_dataset(
+                "W", data=numpy.ascontiguousarray(W.T, dtype=numpy.float32)
+            )
+            eigen_ds.attrs["interpretation"] = "spectrum"
+            eigen_data.attrs["signal"] = "W"
+            eigen_data.attrs["SILX_style"] = SAXS_STYLE
 
-                eigen_ds.attrs["units"] = "arbitrary"
-                eigen_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
+            eigen_ds.attrs["units"] = "arbitrary"
+            eigen_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
 
-                H = nmf.components_
-                chroma_data = nxs.new_class(nmf_grp, "chromatogram", "NXdata")
-                chroma_ds = chroma_data.create_dataset(
-                    "H", data=numpy.ascontiguousarray(H, dtype=numpy.float32)
-                )
-                chroma_ds.attrs["interpretation"] = "spectrum"
-                chroma_data.attrs["signal"] = "H"
-                chroma_data.attrs["SILX_style"] = NORMAL_STYLE
-                nmf_grp.attrs["default"] = posixpath.relpath(chroma_data.name, nmf_grp.name)
+            H = nmf.components_
+            chroma_data = nxs.new_class(nmf_grp, "chromatogram", "NXdata")
+            chroma_ds = chroma_data.create_dataset(
+                "H", data=numpy.ascontiguousarray(H, dtype=numpy.float32)
+            )
+            chroma_ds.attrs["interpretation"] = "spectrum"
+            chroma_data.attrs["signal"] = "H"
+            chroma_data.attrs["SILX_style"] = NORMAL_STYLE
+            nmf_grp.attrs["default"] = posixpath.relpath(chroma_data.name, nmf_grp.name)
 
         # Process 5: Background estimation
         bg_grp = nxs.new_class(entry_grp, "4_background", "NXprocess")
@@ -656,7 +754,7 @@ class HPLC(Plugin):
         q = self.juices[0].q
         unit = self.juices[0].unit
         sample = self.juices[0].sample
-        radial_unit, unit_name = str(unit).split("_", 1)
+        radial_unit, unit_name = str_(unit).split("_", 1)
 
         I_sub = self.to_pyarch["subtracted_I"]
         sigma = self.to_pyarch["subtracted_Stdev"]
@@ -807,7 +905,7 @@ class HPLC(Plugin):
 
         # Stage #4 Guinier plot generation:
 
-        q, I, err = sasm.T[:3]
+        q, I, err = sasm.T[:3]  # noqa
         mask = (I > 0) & numpy.isfinite(I) & (q > 0) & numpy.isfinite(q)
         if err is not None:
             mask &= (err > 0.0) & numpy.isfinite(err)
@@ -822,7 +920,7 @@ class HPLC(Plugin):
 
         q2 = q[mask] ** 2
         logI = numpy.log(I[mask])
-        dlogI = err[mask] / logI
+        dlogI = err[mask] / I[mask]
         q2_ds = guinier_data.create_dataset("q2", data=q2.astype(numpy.float32))
         q2_ds.attrs["unit"] = radius_unit + "⁻²"
         q2_ds.attrs["long_name"] = f"q² ({radius_unit}⁻²)"
@@ -1122,7 +1220,6 @@ class HPLC(Plugin):
         ds.attrs["info"] = (
             "Uncertainties on scattering from merged frames in each fraction"
         )
-        "", "", "", ""
         ds = ispyb_grp.create_dataset(
             "scattering_I",
             data=normalize(self.to_pyarch["scattering_I"], dtype=numpy.float32),
@@ -1190,105 +1287,6 @@ class HPLC(Plugin):
             nxs.h5[k] = ispyb_grp[k]
         ispyb_grp["end_time"] = get_isotime()
         return time.perf_counter() - start_time
-
-    @staticmethod
-    def read_nexus(filename):
-        "return some NexusJuice from a HDF5 file"
-        with Nexus(filename, "r") as nxsr:
-            entry_name = nxsr.h5.attrs["default"]
-            entry_grp = nxsr.h5[entry_name]
-            h5path = entry_grp.name
-            nxdata_grp = entry_grp[entry_grp.attrs["default"]]
-            assert nxdata_grp.name.endswith("hplc")  # we are reading HPLC data
-            signal = nxdata_grp.attrs["signal"]
-            axis = nxdata_grp.attrs["axes"]
-            Isum = nxdata_grp[signal][()]
-            idx = nxdata_grp[axis][()]
-            integrated = nxdata_grp.parent["result"]
-            signal = integrated.attrs["signal"]
-            I = integrated[signal][()]
-            axes = integrated.attrs["axes"][-1]
-            q = integrated[axes][()]
-            sigma = integrated["errors"][()]
-
-            npt = len(q)
-            unit = pyFAI.units.to_unit(axes + "_" + integrated[axes].attrs["units"])
-            integration_grp = nxdata_grp.parent
-            poni = str(integration_grp["configuration/file_name"][()]).strip()
-            if not os.path.exists(poni):
-                poni = str(integration_grp["configuration/data"][()]).strip()
-            polarization = integration_grp["configuration/polarization_factor"][()]
-            method = IntegrationMethod.select_method(
-                **json.loads(integration_grp["configuration/integration_method"][()])
-            )[0]
-            instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
-            detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]
-            mask = detector_grp["pixel_mask"].attrs["filename"]
-            mono_grp = nxsr.get_class(instrument_grp, class_type="NXmonochromator")[0]
-            energy = mono_grp["energy"][()]
-            #             img_grp = nxsr.get_class(entry_grp["3_time_average"], class_type="NXdata")[0]
-            #             image2d = img_grp["intensity_normed"][()]
-            #             error2d = img_grp["intensity_std"][()]
-            # Read the sample description:
-            sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
-            sample_name = posixpath.split(sample_grp.name)[-1]
-
-            buffer = sample_grp["buffer"][()] if "buffer" in sample_grp else ""
-            concentration = (
-                sample_grp["concentration"][()] if "concentration" in sample_grp else ""
-            )
-            description = (
-                sample_grp["description"][()] if "description" in sample_grp else ""
-            )
-            hplc = sample_grp["hplc"][()] if "hplc" in sample_grp else ""
-            temperature = (
-                sample_grp["temperature"][()] if "temperature" in sample_grp else ""
-            )
-            temperature_env = (
-                sample_grp["temperature_env"][()]
-                if "temperature_env" in sample_grp
-                else ""
-            )
-            sample = Sample(
-                sample_name,
-                description,
-                buffer,
-                concentration,
-                hplc,
-                temperature_env,
-                temperature,
-            )
-            meas_grp = nxsr.get_class(entry_grp, class_type="NXdata")[0]
-            timestamps = []
-            for ts_name in ("timestamps", "time-stamps"):
-                if ts_name in meas_grp:
-                    timestamps = meas_grp[ts_name][()]
-                    break
-            if "diode" in meas_grp:
-                diode = meas_grp["diode"][()]
-            else:
-                diode = []
-
-        return NexusJuice(
-            filename,
-            h5path,
-            npt,
-            unit,
-            idx,
-            Isum,
-            q,
-            I,
-            sigma,
-            poni,
-            mask,
-            energy,
-            polarization,
-            method,
-            sample,
-            timestamps,
-            diode,
-        )
-        "filename h5path npt unit idx Isum q I sigma poni mask energy polarization method sample timestamps diode"
 
     def build_plot(self):
         """Create a chromatogram in the gallery"""
@@ -1364,10 +1362,8 @@ class HPLC(Plugin):
         if not os.path.isdir(dirname):
             os.makedirs(dirname, exist_ok=True)
         lines = ["id,ΣI,Rg"]
-        idx = 0
-        for I, rg in zip(sum_I, Rg):
+        for idx, (I, rg) in enumerate(zip(sum_I, Rg)):
             lines.append(f"{idx},{I},{rg}")
-            idx += 1
         lines.append("")
         with open(filename, "w") as csv:
             csv.write(os.linesep.join(lines))

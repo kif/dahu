@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Data Analysis plugin for BM29: BioSaxs
 
 Everything to send data to Ispyb
@@ -10,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/03/2026"
+__date__ = "17/09/2026"
 __status__ = "development"
 __version__ = "0.2.3"
 
@@ -242,7 +240,7 @@ class IspybConnector:
                     logger.error(f"`rm {delete_me}` raised FileNotFoundError, directory creation did probably not work as expected !")
         os.stat(dest)  # this is to enforce the mounting of the directory
         if isinstance(index, int):
-            filename = os.path.join(dest, "%s_%04d%s" % (basename, index, ext))
+            filename = os.path.join(dest, f"{basename}_{index:04d}{ext}")
         else:
             filename = os.path.join(dest, f"{basename}_{index}{ext}")
         return filename
@@ -334,7 +332,7 @@ class IspybConnector:
         buf = self.save_curve("buffer_avg", data.get("buffer"), basename)
         individual_buffers = []
         for i, bufi in enumerate(data.get("buffers", [])):
-            individual_buffers.append(self.save_curve("buffer_%d" % i, bufi, basename))
+            individual_buffers.append(self.save_curve(f"buffer_{i}", bufi, basename))
 
         sample = self.save_curve("sample", data.get("sample"), basename)
         if gnom is not None:

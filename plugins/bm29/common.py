@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 """Data Analysis plugin for BM29: BioSaxs
 
 Common data structures: Sample, Ispyb
@@ -10,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/03/2026"
+__date__ = "17/09/2026"
 __status__ = "development"
 __version__ = "0.0.2"
 
@@ -26,9 +24,10 @@ import numpy
 import pyFAI
 import pyFAI.integrator.load_engines
 import pyFAI.units
-from dahu.cache import DataCache
 from hdf5plugin import Bitshuffle, Zfp
 from pyFAI.method_registry import IntegrationMethod
+
+from dahu.cache import DataCache
 
 logger = logging.getLogger("bm29.common")
 
@@ -132,6 +131,18 @@ class EquivalentFrames(NamedTuple):
     end: int=-1
 
 
+class SequenceIndex:
+    "Increment by one each time one calls it"
+    def __init__(self, start:int=0):
+        self.idx = start
+
+    def __call__(self)->int:
+        value = self.idx
+        self.idx+=1
+        return value
+
+
+
 def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
     """This function return the start and end index of a set of equivalent data:
 
@@ -193,3 +204,11 @@ def create_nexus_sample(nxs, entry, sample):
         tempv_ds = sample_grp.create_dataset("temperature_env", data=sample.temperature_env)
         tempv_ds.attrs["units"] = "°C"
         tempv_ds.attrs["comment"] = "Storage temperature"
+
+
+def str_(smth)->str:
+    "Wisely convert to string"
+    if isinstance(smth, bytes):
+        return smth.decode()
+    else:
+        return str(smth)
