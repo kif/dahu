@@ -11,15 +11,15 @@ The *dahu* server executes **jobs**:
 * The job (de-) serializes JSON strings coming from/returning to Tango
 * Jobs are executed asynchronously, the request for calculation is answered instantaneously with a *jobid* (an integer, unique for the process).
 * The *jobid* can be used to poll the server for the status of the job or for manual synchronization (mind that Tango can time-out!).
-* When jobs are finished, the client is notified via Tango events about the status
+* When jobs are finished, the client is notified via **Tango events** about the status change
 * Results can be retrieved after the job has finished.
 
 Jobs execute **plugin**:
 ------------------------
 
-* Plugins are written in Python (extension in Cython or OpenCL are common)
+* Plugins are written in Python (extensions in Cython or OpenCL are common)
 * Plugins can be classes or simple functions
-* The input and output MUST be JSON-seriablisable as simple dictionnaries
+* The input and output MUST be JSON-serializable as simple dictionaries
 * Plugins are dynamically loaded from Python modules
 * Plugins can be profiled for performance analysis
 

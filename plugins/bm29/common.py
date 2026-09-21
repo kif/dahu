@@ -1,48 +1,47 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """Data Analysis plugin for BM29: BioSaxs
 
 Common data structures: Sample, Ispyb
- 
+
 """
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "20/02/2025"
+__date__ = "21/09/2026"
 __status__ = "development"
-version = "0.0.2"
+__version__ = "0.1.0"
 
-import os
-from pathlib import Path
-from collections import namedtuple
-from typing import NamedTuple
 import json
 import logging
-logger = logging.getLogger("bm29.common")
-import numpy
-from dahu.cache import DataCache
-from hdf5plugin import Bitshuffle, Zfp
-import pyFAI, pyFAI.units
-from pyFAI.method_registry import IntegrationMethod
-import fabio
-from .nexus import Nexus, get_isotime
-# else:
-#     from pyFAI.io import Nexus, get_isotime
-    
-#cmp contains the compression options, shared by all plugins. Used mainly for images 
-cmp = cmp_int = Bitshuffle()
-cmp_float = Zfp(reversible=True) 
+import os
+from collections import namedtuple
+from pathlib import Path
+from typing import NamedTuple
 
+import fabio
+import numpy
+import pyFAI
+import pyFAI.integrator.load_engines
+import pyFAI.units
+from hdf5plugin import Bitshuffle, Zfp
+from pyFAI.method_registry import IntegrationMethod
+
+from dahu.cache import DataCache
+
+logger = logging.getLogger("bm29.common")
+
+#cmp contains the compression options, shared by all plugins. Used mainly for images
+cmp = cmp_int = Bitshuffle()
+cmp_float = Zfp(reversible=True)
+version = __version__
 
 #This is used for NXdata plot style
 SAXS_STYLE = json.dumps({"signal_scale_type": "log"},
-                        indent=2, 
+                        indent=2,
                         separators=(",\r\n", ":\t"))
 NORMAL_STYLE = json.dumps({"signal_scale_type": "linear"},
-                          indent=2, 
+                          indent=2,
                           separators=(",\r\n", ":\t"))
 
 
@@ -78,6 +77,36 @@ def get_integrator(keycache):
         shared_cache[keycache] = ai
     return ai
 
+
+def calc_spottiness(result, weighted=True):
+    """Quantify the azimuthal heterogeneity of an integrated frame.
+
+    This is the `spottiness` as defined in pyFAI, inspired by
+    doi:10.1107/S1600576713029713: the ratio of the azimuthal variance actually
+    measured in each radial bin to the one expected from the signal itself.
+    It is close to 0 for a perfectly isotropic image and grows with any
+    azimuthal anisotropy: spots, texture ... or a meniscus in the capillary.
+
+    Warning: the integration *must* have been performed with
+    `error_model="azimuthal"`, else the value is meaningless.
+
+    :param result: Integrate1dResult obtained with the azimuthal error model
+    :param weighted: weight every radial bin by its intensity. On by default:
+                     an un-weighted mean gives as much importance to the noisy
+                     high-q bins as to the informative low-q ones.
+    :return: a float which increases with the anisotropy of the signal
+    """
+    if hasattr(result, "calc_spottiness"):  # natively provided by recent pyFAI
+        return float(result.calc_spottiness(weighted))
+    intensity = numpy.maximum(0.0, result.intensity) if weighted else numpy.ones_like(result.intensity)
+    sum_variance = numpy.zeros_like(result.sum_signal) if result.sum_variance is None \
+                   else numpy.maximum(0.0, result.sum_variance)
+    sum_signal = numpy.maximum(1.0, result.sum_signal)
+    proportion = sum_variance / sum_signal ** 2
+    return float(numpy.sqrt((proportion * intensity).sum(dtype=numpy.float64) /
+                            intensity.sum(dtype=numpy.float64)))
+
+
 def _fromdict(cls, dico):
     "Mirror of _asdict: take the dict and populate the tuple to be returned"
     try:
@@ -89,7 +118,7 @@ def _fromdict(cls, dico):
 
 
 class Sample(NamedTuple):
-    """ This object represents the sample with the following representation 
+    """ This object represents the sample with the following representation
       "sample": {
         "name": "bsa",
         "description": "protein description like Bovine Serum Albumin",
@@ -97,7 +126,7 @@ class Sample(NamedTuple):
         "concentration": 0,
         "hplc": "column name and chromatography conditions",
         "temperature": 20,
-        "temperature_env": 20},  
+        "temperature_env": 20},
     """
     name: str="Unknown sample"
     description: str=None
@@ -132,6 +161,18 @@ class EquivalentFrames(NamedTuple):
     end: int=-1
 
 
+class SequenceIndex:
+    "Increment by one each time one calls it"
+    def __init__(self, start:int=0):
+        self.idx = start
+
+    def __call__(self)->int:
+        value = self.idx
+        self.idx+=1
+        return value
+
+
+
 def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
     """This function return the start and end index of a set of equivalent data:
 
@@ -150,7 +191,7 @@ def get_equivalent_frames(proba, absolute=0.1, relative=0.2):
     ext_diag = numpy.zeros(size + 1, dtype=numpy.int16)
     delta = numpy.zeros(size + 1, dtype=numpy.int16)
     ext_diag[1:-1] = numpy.diagonal(proba, 1) >= relative
-    ext_diag[0] = ext_diag[1] 
+    ext_diag[0] = ext_diag[1]
     delta[0] = ext_diag[1]
     delta[1:] = ext_diag[1:] - ext_diag[:-1]
     start = numpy.where(delta > 0)[0]
@@ -193,3 +234,11 @@ def create_nexus_sample(nxs, entry, sample):
         tempv_ds = sample_grp.create_dataset("temperature_env", data=sample.temperature_env)
         tempv_ds.attrs["units"] = "°C"
         tempv_ds.attrs["comment"] = "Storage temperature"
+
+
+def str_(smth)->str:
+    "Wisely convert to string"
+    if isinstance(smth, bytes):
+        return smth.decode()
+    else:
+        return str(smth)

@@ -4,11 +4,17 @@
 Reprocess a job using the current
 """
 
-import os, json, logging, time
+import json
+import logging
+import os
+import time
 from argparse import ArgumentParser
+
 import dahu.factory
-from dahu.job import Job
-from dahu.utils import get_workdir, NumpyEncoder
+
+from ..job import Job
+from ..utils import NumpyEncoder, get_workdir
+
 logging.basicConfig()
 
 STATE_UNINITIALIZED = Job.STATE_UNINITIALIZED
@@ -56,21 +62,20 @@ def _run_(plugin, what):
                 method()
             except Exception as error:
                 import traceback
-                err_msg = [traceback.format_exc(limit=10), ""
-                           "Error %s while calling %s.%s" %
-                           (error, plugin.__class__.__name__, what)]
+                err_msg = [traceback.format_exc(limit=10), (""
+                           f"Error {error} while calling {plugin.__class__.__name__}.{what}")]
                 print(os.linesep.join(err_msg))
                 return STATE_FAILURE
             else:
                 return STATE_RUNNING
     else:
-        print("No such method %s in class %s" % (what, plugin.__class__.__name__))
+        print(f"No such method {what} in class {plugin.__class__.__name__}")
         return STATE_FAILURE
 
 
 def process(args):
     """Process a set of arguments
-    
+
     :param args: list of files to process
     """
     working_dir = get_workdir()
@@ -80,7 +85,7 @@ def process(args):
             with open(fn, "r") as fp:
                 dico = json.load(fp)
         else:
-            logging.warning("No such file: %s" % fn)
+            logging.warning(f"No such file: {fn}")
             continue
         plugin_name = dico["plugin_name"]
         dico["job_id"] = idx
@@ -99,7 +104,7 @@ def process(args):
                 state = STATE_SUCCESS
             else:
                 state = STATE_FAILURE
-        print("Finished with state: %s" % state)
+        print(f"Finished with state: {state}")
         plugin.output["job_runtime"] = time.time() - start_time
         result = json.dumps(plugin.output, indent=4, cls=NumpyEncoder)
         print(result)

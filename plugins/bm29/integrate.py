@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """Data Analysis plugin for BM29: BioSaxs
 
 * IntegrateMultiframe: perform the integration of many frames contained in a HDF5 file and average them
@@ -11,37 +8,52 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "04/06/2025"
+__date__ = "21/09/2026"
 __status__ = "development"
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
-import os
-import time
+import copy
 import json
 import logging
-import copy
+import os
 import posixpath
-from collections import namedtuple
-from urllib3.util import parse_url
-from dahu.plugin import Plugin
-from dahu.factory import register
-from dahu.utils import fully_qualified_name
+import time
+from typing import NamedTuple
 
-import numpy
-import h5py
-import pyFAI
-import pyFAI.azimuthalIntegrator
 import freesas
 import freesas.cormap
+import h5py
+import numpy
+import pyFAI
+from urllib3.util import parse_url
 
-from .common import Sample, Ispyb, get_equivalent_frames, cmp_int, cmp_float, get_integrator, KeyCache, \
-                    method, polarization_factor, Nexus, get_isotime, SAXS_STYLE, NORMAL_STYLE, \
-                    create_nexus_sample
-from .ispyb import IspybConnector, NumpyEncoder
+from dahu.factory import register
+from dahu.plugin import Plugin
+from dahu.utils import fully_qualified_name
+
+from .common import (
+    NORMAL_STYLE,
+    SAXS_STYLE,
+    Ispyb,
+    KeyCache,
+    Sample,
+    SequenceIndex,
+    calc_spottiness,
+    cmp_float,
+    cmp_int,
+    create_nexus_sample,
+    get_equivalent_frames,
+    get_integrator,
+    method,
+    polarization_factor,
+    str_,
+)
 from .icat import send_icat
+from .ispyb import IspybConnector, NumpyEncoder
 from .memcached import to_memcached
+from .nexus import Nexus, from_isotime, get_isotime
 
-
+version = __version__
 logger = logging.getLogger("bm29.integrate")
 try:
     import numexpr
@@ -49,9 +61,38 @@ except ImportError:
     logger.error("Numexpr is not installed, falling back on numpy's implementations")
     numexpr = None
 
-IntegrationResult = namedtuple("IntegrationResult", "radial intensity sigma")
-CormapResult = namedtuple("CormapResult", "probability count tomerge")
-AverageResult = namedtuple("AverageResult", "average deviation normalization")
+
+class Accumulators(NamedTuple):
+    """Raw accumulators of the azimuthal integration, one line per frame.
+
+    They are the unreduced quantities pyFAI sums up in every radial bin, kept so
+    that frames can be merged afterwards without re-integrating anything:
+    `I = sum_signal/sum_normalization`.
+    """
+    sum_signal:numpy.ndarray
+    sum_normalization:numpy.ndarray
+    sum_variance_azimuthal:numpy.ndarray
+    sum_variance_poisson:numpy.ndarray=None  # only needed when pixel splitting is enabled
+
+
+class IntegrationResult(NamedTuple):
+    radial:numpy.ndarray
+    intensity:numpy.ndarray
+    sigma:numpy.ndarray
+    spottiness:numpy.ndarray=None
+    accumulators:Accumulators=None
+
+
+class CormapResult(NamedTuple):
+    probability:float
+    count:int
+    tomerge:int
+
+
+class AverageResult(NamedTuple):
+    average:numpy.ndarray
+    deviation:numpy.ndarray
+    normalization:numpy.ndarray
 
 
 @register
@@ -80,6 +121,7 @@ class IntegrateMultiframe(Plugin):
       "fidelity_rel": 1e-3,
       "hplc_mode": 0,
       "timeout": 10,
+      "spottiness": true,  # azimuthal integration: heterogeneity of every frame (meniscus detection) + accumulators
       "average_out_monitor_values": False,  # use this to work around noisy beam stop diode reading.
       "sample": {
         "name": "bsa",
@@ -124,8 +166,10 @@ class IntegrateMultiframe(Plugin):
         self.monitor_values = None
         self.normalization_factor = None
         self.scale_factor = None
+        self.compute_spottiness = True
         self.to_pyarch = {}  # contains all the stuff to be sent to Ispyb and pyarch
         self.to_memcached = {}  # data to be shared via memcached
+        self.seq = SequenceIndex(0)
 
     def setup(self, kwargs=None):
         logger.debug("IntegrateMultiframe.setup")
@@ -189,6 +233,8 @@ class IntegrateMultiframe(Plugin):
         self.monitor_values = numpy.array(self.input.get("monitor_values", 1), dtype=numpy.float64)
         if self.input.get("average_out_monitor_values"):
             self.monitor_values = numpy.zeros_like(self.monitor_values) + self.monitor_values.mean()
+            self.log_warning("Averaging-out the monitor values !")
+        self.compute_spottiness = bool(self.input.get("spottiness", True))
         self.normalization_factor = float(self.input.get("normalization_factor", 1))
         self.scale_factor = float(self.input.get("exposure_time", 1)) / self.normalization_factor
 
@@ -197,6 +243,7 @@ class IntegrateMultiframe(Plugin):
         logger.debug("IntegrateMultiframe.teardown")
         # export the output file location
         self.output["output_file"] = self.output_file
+        self.output["monitor_noise_%"] = 100 * self.monitor_values.std() / self.monitor_values.mean()
         if self.nxs is not None:
             self.nxs.close()
         if self.ai is not None:
@@ -218,15 +265,16 @@ class IntegrateMultiframe(Plugin):
                     if "measurement" in entry:
                         measurement = entry["measurement"]
                     else:
-                        self.log_error("No measurement in entry: %s of data_file: %s" % (entry, self.input_file))
+                        self.log_error(f"No measurement in entry: {entry} of data_file: {self.input_file}")
                     self._input_frames = measurement["data"][...]
                     try:
-                        self._start_time = entry["start_time"][()]
-                        self._end_time = entry["end_time"][()]
+                        # h5py hands over `bytes` for string datasets: decode them here
+                        self._start_time = str_(entry["start_time"][()])
+                        self._end_time = str_(entry["end_time"][()])
                     except Exception as err:
-                        self.log_error("Unable to read time %s: %s" % (type(err), str(err)), do_raise=False)
+                        self.log_error(f"Unable to read time {type(err)}: {err!s}", do_raise=False)
             except Exception as err:
-                self.log_error("Unable to read images %s: %s" % (type(err), str(err)), do_raise=True)
+                self.log_error(f"Unable to read images {type(err)}: {err!s}", do_raise=True)
         return self._input_frames
 
     def process(self):
@@ -249,7 +297,7 @@ class IntegrateMultiframe(Plugin):
 	"""
         timeout = self.timeout if timeout is None else timeout
         end_time = time.perf_counter() + timeout
-        dirname = os.path.dirname(filename)
+        dirname = os.path.dirname(filename) or "."
         while not os.path.isdir(dirname):
             if time.perf_counter() > end_time:
                 self.log_error(f"Filename {filename} did not appear in {timeout} seconds")
@@ -273,8 +321,9 @@ class IntegrateMultiframe(Plugin):
 
     def create_nexus(self):
         "create the nexus result file with basic structure"
-        if not os.path.isdir(os.path.dirname(self.output_file)):
-            os.makedirs(os.path.dirname(self.output_file))
+        dirname = os.path.dirname(self.output_file)
+        if dirname and not os.path.isdir(dirname):
+            os.makedirs(dirname)
         creation_time = os.stat(self.input_file).st_ctime
         nxs = self.nxs = Nexus(self.output_file, mode="w", creator="dahu")
 
@@ -291,6 +340,8 @@ class IntegrateMultiframe(Plugin):
         # Process 0: Measurement group
         measurement_grp = nxs.new_class(entry_grp, "0_measurement", "NXdata")
         measurement_grp.attrs["SILX_style"] = SAXS_STYLE
+        measurement_grp["sequence_index"] = self.seq()
+
         # Instrument
         instrument_grp = nxs.new_instrument(entry_grp, "BM29")
         instrument_grp["name"] = "BioSaxs"
@@ -336,9 +387,17 @@ class IntegrateMultiframe(Plugin):
         ct_ds.attrs["units"] = "s"
         timestamps = self.input.get("timestamps")
         if not timestamps:
+            # No timestamp provided: interpolate between the start and the end of the scan
             nframes = self.input_frames.shape[0]
-            start = time.mktime(time.strptime(self._start_time, "%Y-%m-%dT%H:%M:%SZ"))
-            stop = time.mktime(time.strptime(self._end_time, "%Y-%m-%dT%H:%M:%SZ"))
+            try:
+                start = from_isotime(self._start_time)
+                stop = from_isotime(self._end_time)
+            except Exception as err:
+                start = stop = None
+                self.log_warning(f"Unable to parse the acquisition time of {self.input_file}. {type(err)}: {err}")
+            if start is None or stop is None:
+                self.log_warning(f"No timestamp available for {self.input_file}, using the file creation time")
+                start = stop = creation_time
             timestamps = numpy.linspace(start, stop, nframes)
         time_ds = detector_grp.create_dataset("timestamps",
                                               data=numpy.ascontiguousarray(timestamps, dtype=numpy.float64))
@@ -362,7 +421,7 @@ class IntegrateMultiframe(Plugin):
                 if "measurement" in entry:
                     measurement = entry["measurement"]
                 else:
-                    self.log_error("No measurement in entry: %s of data_file: %s" % (entry, self.input_file))
+                    self.log_error(f"No measurement in entry: {entry} of data_file: {self.input_file}")
                 h5path = measurement["data"].name
             rel_path = os.path.relpath(os.path.abspath(self.input_file), os.path.dirname(os.path.abspath(self.output_file)))
             measurement_grp["images"] = detector_grp["frames"] = h5py.ExternalLink(rel_path, h5path)
@@ -384,7 +443,7 @@ class IntegrateMultiframe(Plugin):
 
     # Process 1: pyFAI
         integration_grp = nxs.new_class(entry_grp, "1_integration", "NXprocess")
-        integration_grp["sequence_index"] = 1
+        integration_grp["sequence_index"] = self.seq()
         integration_grp["program"] = "pyFAI"
         integration_grp["version"] = pyFAI.version
         integration_grp["date"] = get_isotime()
@@ -395,15 +454,15 @@ class IntegrateMultiframe(Plugin):
         pol_ds = cfg_grp.create_dataset("polarization_factor", data=polarization_factor)
         pol_ds.attrs["comment"] = "Between -1 and +1, 0 for circular"
         cfg_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
-        integration_data = nxs.new_class(integration_grp, "results", "NXdata")
+        integration_data = nxs.new_class(integration_grp, "result", "NXdata")
         integration_grp.attrs["title"] = str(self.sample)
 
     # Stage 1 processing: Integration frame per frame
-        integrate1_results = self.process1_integration(self.input_frames)
+        integrate1_result = self.process1_integration(self.input_frames)
         radial_unit, unit_name = str(self.unit).split("_", 1)
-        q = numpy.ascontiguousarray(integrate1_results.radial, numpy.float32)
-        I = numpy.ascontiguousarray(integrate1_results.intensity, dtype=numpy.float32)
-        sigma = numpy.ascontiguousarray(integrate1_results.sigma, dtype=numpy.float32)
+        q = numpy.ascontiguousarray(integrate1_result.radial, numpy.float32)
+        I = numpy.ascontiguousarray(integrate1_result.intensity, dtype=numpy.float32)
+        sigma = numpy.ascontiguousarray(integrate1_result.sigma, dtype=numpy.float32)
 
         self.to_memcached[radial_unit] = q
         self.to_memcached["I"] = I
@@ -426,14 +485,52 @@ class IntegrateMultiframe(Plugin):
         int_ds.attrs["scale"] = "log"
         std_ds.attrs["interpretation"] = "spectrum"
 
+        if integrate1_result.accumulators is not None:
+            acc = integrate1_result.accumulators
+            acc_grp = nxs.new_class(integration_grp, "accumulators", "NXcollection")
+            acc_grp.attrs["comment"] = ("Unreduced sums of the azimuthal integration, one line per frame. "
+                                        "The intensity of a set of frames is obtained without re-integrating "
+                                        "anything: sum_signal.sum(axis=0)/sum_normalization.sum(axis=0)")
+            acc_grp[radial_unit] = q_ds
+            acc_grp["frame_ids"] = frame_ds
+            datasets = [("sum_signal", acc.sum_signal, "Σᵢ signalᵢ"),
+                        ("sum_normalization", acc.sum_normalization, "Σᵢ normalizationᵢ"),
+                        ("sum_variance_azimuthal", acc.sum_variance_azimuthal, "Σᵢ varianceᵢ, azimuthal error model")]
+            if acc.sum_variance_poisson is not None:
+                datasets.append(("sum_variance_poisson", acc.sum_variance_poisson,
+                                 "Σᵢ varianceᵢ, poissonian error model"))
+            for name, data, long_name in datasets:
+                acc_ds = acc_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32))
+                acc_ds.attrs["interpretation"] = "spectrum"
+                acc_ds.attrs["long_name"] = long_name
+            if acc.sum_variance_poisson is None:
+                # Without pixel splitting every coefficient is 1, hence the poissonian
+                # variance of a bin is simply the sum of the signal it contains.
+                acc_grp["sum_variance_poisson"] = acc_grp["sum_signal"]
+
         hplc_data = nxs.new_class(integration_grp, "hplc", "NXdata")
         hplc_data.attrs["title"] = "Chromatogram"
-        sum_ds = hplc_data.create_dataset("sum", data=numpy.ascontiguousarray(integrate1_results.intensity.sum(axis=-1), dtype=numpy.float32))
+        sum_ds = hplc_data.create_dataset("sum", data=numpy.ascontiguousarray(integrate1_result.intensity.sum(axis=-1), dtype=numpy.float32))
         sum_ds.attrs["interpretation"] = "spectrum"
         sum_ds.attrs["long_name"] = "Summed Intensity"
         hplc_data["frame_ids"] = frame_ds
         hplc_data.attrs["signal"] = "sum"
         hplc_data.attrs["axes"] = "frame_ids"
+
+        if integrate1_result.spottiness is not None and integrate1_result.spottiness.size:
+            spottiness = numpy.ascontiguousarray(integrate1_result.spottiness, dtype=numpy.float32)
+            self.to_memcached["spottiness"] = spottiness
+            spot_ds = hplc_data.create_dataset("spottiness", data=spottiness)
+            spot_ds.attrs["interpretation"] = "spectrum"
+            spot_ds.attrs["long_name"] = "Spottiness (azimuthal heterogeneity)"
+            spot_ds.attrs["formula"] = "sqrt(sum_q(I(q)*variance_azim(q)/signal(q)**2)/sum_q(I(q)))"
+            spot_ds.attrs["comment"] = ("Ratio of the azimuthal variance actually measured to the one expected "
+                                        "from the signal itself. Grows with any anisotropy of the scattering: "
+                                        "meniscus in the capillary, parasitic scattering, crystallites... "
+                                        "Frames departing from the baseline of this curve are to be masked out.")
+            hplc_data.attrs["auxiliary_signals"] = ["spottiness"]
+            self.output["spottiness_median"] = float(numpy.median(spottiness))
+            self.output["spottiness_max"] = float(spottiness.max())
 
         if self.input.get("hplc_mode"):
             entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
@@ -445,11 +542,11 @@ class IntegrateMultiframe(Plugin):
 
     # Process 2: Freesas cormap
         cormap_grp = nxs.new_class(entry_grp, "2_correlation_mapping", "NXprocess")
-        cormap_grp["sequence_index"] = 2
+        cormap_grp["sequence_index"] = self.seq()
         cormap_grp["program"] = "freesas.cormap"
         cormap_grp["version"] = freesas.version
         cormap_grp["date"] = get_isotime()
-        cormap_data = nxs.new_class(cormap_grp, "results", "NXdata")
+        cormap_data = nxs.new_class(cormap_grp, "result", "NXdata")
         cormap_data.attrs["SILX_style"] = NORMAL_STYLE
         cfg_grp = nxs.new_class(cormap_grp, "configuration", "NXcollection")
 
@@ -459,33 +556,33 @@ class IntegrateMultiframe(Plugin):
         cfg_grp["fidelity_rel"] = fidelity_rel
 
     # Stage 2 processing
-        cormap_results = self.process2_cormap(integrate1_results.intensity, fidelity_abs, fidelity_rel)
+        cormap_result = self.process2_cormap(integrate1_result.intensity, fidelity_abs, fidelity_rel)
         cormap_data.attrs["signal"] = "probability"
-        cormap_ds = cormap_data.create_dataset("probability", data=cormap_results.probability)
+        cormap_ds = cormap_data.create_dataset("probability", data=cormap_result.probability)
         cormap_ds.attrs["interpretation"] = "image"
         cormap_ds.attrs["long_name"] = "Probability to be the same"
 
-        count_ds = cormap_data.create_dataset("count", data=cormap_results.count)
+        count_ds = cormap_data.create_dataset("count", data=cormap_result.count)
         count_ds.attrs["interpretation"] = "image"
         count_ds.attrs["long_name"] = "Longest sequence where curves do not cross each other"
 
-        to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*cormap_results.tomerge, dtype=numpy.uint16))
+        to_merge_ds = cormap_data.create_dataset("to_merge", data=numpy.arange(*cormap_result.tomerge, dtype=numpy.uint16))
         to_merge_ds.attrs["long_name"] = "Index of equivalent frames"
         cormap_grp.attrs["default"] = posixpath.relpath(cormap_data.name, cormap_grp.name)
         if self.ispyb.url:
-            self.to_pyarch["merged"] = cormap_results.tomerge
+            self.to_pyarch["merged"] = cormap_result.tomerge
 
     # Process 3: time average and standard deviation
         average_grp = nxs.new_class(entry_grp, "3_time_average", "NXprocess")
-        average_grp["sequence_index"] = 3
+        average_grp["sequence_index"] = self.seq()
         average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
-        average_data = nxs.new_class(average_grp, "results", "NXdata")
+        average_data = nxs.new_class(average_grp, "result", "NXdata")
         average_data.attrs["SILX_style"] = SAXS_STYLE
         average_data.attrs["signal"] = "intensity_normed"
 
     # Stage 3 processing
-        res3 = self.process3_average(cormap_results.tomerge)
+        res3 = self.process3_average(cormap_result.tomerge)
 
         Iavg = numpy.ascontiguousarray(res3.average, dtype=numpy.float32)
         sigma_avg = numpy.ascontiguousarray(res3.deviation, dtype=numpy.float32)
@@ -510,11 +607,11 @@ class IntegrateMultiframe(Plugin):
 
     # Process 4: Azimuthal integration of the time average image
         ai2_grp = nxs.new_class(entry_grp, "4_azimuthal_integration", "NXprocess")
-        ai2_grp["sequence_index"] = 4
+        ai2_grp["sequence_index"] = self.seq()
         ai2_grp["program"] = "pyFAI"
         ai2_grp["version"] = pyFAI.version
         ai2_grp["date"] = get_isotime()
-        ai2_data = nxs.new_class(ai2_grp, "results", "NXdata")
+        ai2_data = nxs.new_class(ai2_grp, "result", "NXdata")
         ai2_data.attrs["signal"] = "I"
         ai2_data.attrs["axes"] = radial_unit
         ai2_data.attrs["SILX_style"] = SAXS_STYLE
@@ -569,6 +666,16 @@ class IntegrateMultiframe(Plugin):
         logger.debug("in process1_integration")
         intensity = numpy.empty((self.nb_frames, self.npt), dtype=numpy.float32)
         sigma = numpy.empty((self.nb_frames, self.npt), dtype=numpy.float32)
+        if self.compute_spottiness:
+            shape = (self.nb_frames, self.npt)
+            spottiness = numpy.zeros(self.nb_frames, dtype=numpy.float32)
+            accumulators = Accumulators(numpy.zeros(shape, dtype=numpy.float32),
+                                        numpy.zeros(shape, dtype=numpy.float32),
+                                        numpy.zeros(shape, dtype=numpy.float32),
+                                        # redundant with sum_signal unless pixels are split
+                                        None if method.split == "no" else numpy.zeros(shape, dtype=numpy.float32))
+        else:
+            spottiness = accumulators = None
         idx = 0
         for i1, frame in zip(self.monitor_values, data):
             res = self.ai._integrate1d_ng(frame, self.npt,
@@ -580,6 +687,26 @@ class IntegrateMultiframe(Plugin):
                                           method=method)
             intensity[idx] = res.intensity
             sigma[idx] = res.sigma
+            if spottiness is not None:
+                # A second integration is needed: the azimuthal error model provides the
+                # scatter of the pixels within each ring, which the poissonian one does not.
+                try:
+                    azim = self.ai._integrate1d_ng(frame, self.npt,
+                                                   normalization_factor=i1 * self.scale_factor,
+                                                   error_model="azimuthal",
+                                                   polarization_factor=polarization_factor,
+                                                   unit=self.unit,
+                                                   safe=False,
+                                                   method=method)
+                    spottiness[idx] = calc_spottiness(azim)
+                    accumulators.sum_signal[idx] = azim.sum_signal
+                    accumulators.sum_normalization[idx] = azim.sum_normalization
+                    accumulators.sum_variance_azimuthal[idx] = azim.sum_variance
+                    if accumulators.sum_variance_poisson is not None:
+                        accumulators.sum_variance_poisson[idx] = res.sum_variance
+                except Exception as err:
+                    self.log_warning(f"Unable to perform the azimuthal integration, disabling it. {type(err)}: {err}")
+                    spottiness = accumulators = None
             if self.ispyb.url:
                 self.to_pyarch[idx] = res
             idx += 1
@@ -588,7 +715,7 @@ class IntegrateMultiframe(Plugin):
             radial = numpy.zeros(self.npt, dtype=numpy.float32)
         else:
             radial = res.radial
-        return IntegrationResult(radial, intensity, sigma)
+        return IntegrationResult(radial, intensity, sigma, spottiness, accumulators)
 
     def process2_cormap(self, curves, fidelity_abs, fidelity_rel):
         "Take the integrated data as input, returns a CormapResult namedtuple"
@@ -610,7 +737,9 @@ class IntegrateMultiframe(Plugin):
         logger.debug("in process3_average")
         valid_slice = slice(*tomerge)
         mask = self.ai.detector.mask
-        sum_data = (self.input_frames[valid_slice]).sum(axis=0)
+        # Accumulate in float64: integer detector data would overflow and, worse,
+        # an unsigned accumulator is rejected by numexpr further down.
+        sum_data = (self.input_frames[valid_slice]).sum(axis=0, dtype=numpy.float64)
         sum_norm = self.scale_factor * sum(self.monitor_values[valid_slice])
         if numexpr is not None:
             # Numexpr is many-times faster than numpy when it comes to element-wise operations
@@ -656,6 +785,7 @@ class IntegrateMultiframe(Plugin):
                          raw=os.path.dirname(os.path.dirname(os.path.abspath(self.input_file))),
                          path=os.path.dirname(os.path.abspath(self.output_file)),
                          data=to_icat,
+                         dataset = "integrate",
                          gallery=self.ispyb.gallery or os.path.join(os.path.dirname(os.path.abspath(self.output_file)), "gallery"),
                          metadata=metadata)
 

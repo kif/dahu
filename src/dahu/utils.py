@@ -1,7 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-#
-
 """
 Data Analysis RPC server over Tango:  
 
@@ -16,12 +12,12 @@ __date__ = "08/10/2020"
 __status__ = "production"
 
 
-import time
+import json
 import os
 import tempfile
-import json
-import numpy
+import time
 
+import numpy
 
 workdir = None
 
@@ -74,7 +70,7 @@ def get_workdir(basedir=None):
             # likely the time has already been added
             workdir = os.path.abspath(basedir)
         else:
-            subdir = "dahu_%s" % get_isotime(for_path=True)
+            subdir = f"dahu_{get_isotime(for_path=True)}"
             workdir = os.path.join(basedir, subdir)
         if not os.path.isdir(workdir):
             os.makedirs(workdir)

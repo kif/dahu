@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 
 """
-Data Analysis RPC server over Tango: 
+Data Analysis RPC server over Tango:
 
 Factory for the loading of plugins
 """
@@ -12,25 +11,27 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/03/2020"
+__date__ = "11/03/2026"
 __status__ = "production"
 
+import contextlib
+import importlib.util
+import logging
 import os
 import os.path as op
-import logging
 from collections import OrderedDict
-logger = logging.getLogger("dahu.factory")
 from threading import Semaphore
-from .utils import get_workdir, fully_qualified_name
 
-import importlib.util
+from .utils import fully_qualified_name, get_workdir
+
+logger = logging.getLogger("dahu.factory")
 
 
 def load_source(module_name, file_path):
     "Plugin loader which does not pollute sys.module"
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     #module = importlib.util.module_from_spec(spec)
-    #spec.loader.exec_module(module)    
+    #spec.loader.exec_module(module)
     module = spec.loader.load_module(spec.name)
     #Option: remove from sys.modules ...
     return module
@@ -39,12 +40,13 @@ def load_source(module_name, file_path):
 dahu_root = os.path.dirname(os.path.abspath(__file__))
 
 
-class Factory(object):
+class Factory:
     """
     This is a factory, it instanciates a plugin from it name
     """
     registry = {}
     modules = {}
+    unavailable = {}  # key: fqn of the plugin, value: reason why it could not be registered
     plugin_dirs = OrderedDict()  # key: directory name, value=list of modules
     reg_sem = Semaphore()
 
@@ -68,7 +70,7 @@ class Factory(object):
     def add_directory(self, directory):
         abs_dir = os.path.abspath(directory)
         if not os.path.isdir(directory):
-            logger.warning("No such directory: %s" % directory)
+            logger.warning(f"No such directory: {directory}")
             return
         python_files = []
         for i in os.listdir(abs_dir):
@@ -77,7 +79,7 @@ class Factory(object):
                 python_files.append(i[:-3])
             if op.isdir(j) and op.exists(op.join(j, "__init__.py")):
                 python_files.append(i)
-                                         
+
         logger.info(f"Available modules in dahu from {directory}:{os.linesep}" + " ".join(python_files))
         with self._sem:
             self.plugin_dirs[abs_dir] = python_files
@@ -85,10 +87,10 @@ class Factory(object):
     def search_plugin(self, plugin_name):
         """
         Search for a given plugins ...
-        starting from the FQN package.class, 
+        starting from the FQN package.class,
         """
         if "." not in plugin_name:
-            logger.error("plugin name have to be fully qualified, here: %s" % plugin_name)
+            logger.error(f"plugin name have to be fully qualified, here: {plugin_name}")
             return
         splitted = plugin_name.split(".")
         module_name = ".".join(splitted[:-1])
@@ -101,7 +103,7 @@ class Factory(object):
                 elif op.isfile(dst+".py"):
                     fname = dst+".py"
                 else:
-                    raise RuntimeError("Unable to find module source for %s in %s"%(module_name, dirname))
+                    raise RuntimeError(f"Unable to find module source for {module_name} in {dirname}")
                 logger.info("load %s from %s",module_name, fname)
                 mod = load_source(module_name, os.path.join(dirname, fname))
                 with self.reg_sem:
@@ -110,7 +112,7 @@ class Factory(object):
     def __call__(self, plugin_name):
         """
         create a plugin instance from its name
-        
+
         @param plugin_name: name of the plugin as a string
         @return: plugin instance
         """
@@ -121,7 +123,7 @@ class Factory(object):
             self.search_plugin(plugin_name)
         if plugin_name not in self.registry:
             logger.error("Plugin directories have been searched but plugin"
-                         " %s was not found" % plugin_name)
+                         f" {plugin_name} was not found")
         else:
             return self.registry[plugin_name]()
 
@@ -129,21 +131,50 @@ class Factory(object):
     def register(cls, klass, fqn=None):
         """
         Register a class as a plugin which can be instanciated.
-        
+
         This can be used as a decorator
-        
-        @plugin_factor.register 
-        
+
+        @plugin_factor.register
+
         @param klass: class to be registered as a plugin
-        @param fqn: fully qualified name 
+        @param fqn: fully qualified name
         @return klass
         """
         if fqn is None:
             fqn = fully_qualified_name(klass)
-        logger.debug("Registering plugin %s as %s" % (klass, fqn))
+        logger.debug(f"Registering plugin {klass} as {fqn}")
         with cls.reg_sem:
             cls.registry[fqn] = klass
         return klass
+
+@contextlib.contextmanager
+def optional_plugin(fqn):
+    """Isolate the import and the registration of a single plugin.
+
+    Any failure disables only this plugin, not the other ones defined in the same
+    package. Meant to be used in the `__init__.py` of a beamline, one block per
+    plugin exposed::
+
+        with optional_plugin("bm29.hplc"):
+            from .hplc import HPLC
+            register(HPLC, fqn="bm29.hplc")
+
+    The reason for a failure is logged and kept in `Factory.unavailable[fqn]`.
+
+    @param fqn: fully qualified name of the plugin being registered
+    """
+    try:
+        yield
+    except Exception as error:
+        reason = f"{type(error).__name__}: {error}"
+        logger.error(f"Plugin {fqn} is unavailable, {reason}")
+        logger.debug("Traceback:", exc_info=True)
+        with Factory.reg_sem:
+            Factory.unavailable[fqn] = reason
+    else:
+        with Factory.reg_sem:
+            Factory.unavailable.pop(fqn, None)
+
 
 plugin_factory = Factory(get_workdir())
 register = plugin_factory.register
