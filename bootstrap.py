@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 Bootstrap helps you to test scripts without installing them
 by patching your PYTHONPATH on the fly
@@ -12,11 +11,12 @@ __contact__ = "jerome.kieffer@esrf.eu"
 __license__ = "MIT"
 __date__ = "14/04/2025"
 
-import sys
-import os
 import argparse
-import subprocess
 import logging
+import os
+import subprocess
+import sys
+
 if sys.version_info[:2] < (3, 11):
     import tomli
 else:
@@ -250,7 +250,7 @@ def main(argv):
             logger.error("Script %s not found", options.script)
 
     elif options.module:
-        logging.info("Running module %s", options.module)
+        logger.info("Running module %s", options.module)
         import runpy
 
         module = options.module[0]
@@ -262,7 +262,7 @@ def main(argv):
             sys.argv = old
 
     else:
-        logging.info("Running IPython by default")
+        logger.info("Running IPython by default")
         try:
             from IPython import start_ipython
         except Exception as err:
