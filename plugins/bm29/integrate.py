@@ -173,7 +173,7 @@ class IntegrateMultiframe(Plugin):
         self.to_memcached = {}  # data to be shared via memcached
         self.seq = SequenceIndex(0)
         self.spot_thres = 3
-        self.masked = None  # Frames with flares
+        self.valid_frames = None  # Frames with flares
 
     def setup(self, kwargs=None):
         logger.debug("IntegrateMultiframe.setup")
@@ -540,8 +540,10 @@ class IntegrateMultiframe(Plugin):
             hplc_data.attrs["auxiliary_signals"] = ["spottiness"]
             self.output["spottiness_median"] = float(numpy.median(spottiness))
             self.output["spottiness_max"] = float(spottiness.max())
-            self.masked = integrate1_result.spottiness < (numpy.median(integrate1_result.spottiness) + self.spot_thres * numpy.std(integrate1_result.spottiness))
-            hplc_data.create_dataset("isotropic", data=self.masked)
+            median = numpy.median(integrate1_result.spottiness)
+            mad = numpy.median(abs(integrate1_result.spottiness-median))
+            self.valid_frames = integrate1_result.spottiness < (median + self.spot_thres * mad)
+            hplc_data.create_dataset("isotropic", data=self.valid_frames)
         if self.input.get("hplc_mode"):
             entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
             integration_grp.attrs["default"] = posixpath.relpath(hplc_data.name, integration_grp.name)
@@ -733,12 +735,12 @@ class IntegrateMultiframe(Plugin):
         count = numpy.empty((self.nb_frames, self.nb_frames), dtype=numpy.uint16)
         proba = numpy.empty((self.nb_frames, self.nb_frames), dtype=numpy.float32)
         for i in range(self.nb_frames):
-            if self.mask[i]:
+            if not self.valid_frames[i]:
                 # Discard this frame !
                 proba[i, :] = 0.0
                 proba[:, i] = 0.0
-                count[:, i] = numpy.inf
-                count[i, :] = numpy.inf
+                count[:, i] = 65535
+                count[i, :] = 65535
             else:
                 proba[i, i] = 1.0
                 count[i, i] = 0
@@ -821,7 +823,7 @@ class IntegrateMultiframe(Plugin):
         linear regression of the diode values.
         """
         diode = self.monitor_values
-        mask = self.masked
+        mask = self.valid_frames
         x = numpy.arange(len(diode))
         linreg = scipy.stats.linregress(x[mask], diode[mask])
         smooth_diode = linreg.slope * x + linreg.intercept
