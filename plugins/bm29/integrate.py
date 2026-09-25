@@ -8,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/09/2026"
+__date__ = "25/09/2026"
 __status__ = "development"
 __version__ = "0.4.0"
 
@@ -81,6 +81,7 @@ class IntegrationResult(NamedTuple):
     sigma:numpy.ndarray
     spottiness:numpy.ndarray=None
     accumulators:Accumulators=None
+    raw_results:list=[]
 
 
 class CormapResult(NamedTuple):
@@ -170,6 +171,8 @@ class IntegrateMultiframe(Plugin):
         self.to_pyarch = {}  # contains all the stuff to be sent to Ispyb and pyarch
         self.to_memcached = {}  # data to be shared via memcached
         self.seq = SequenceIndex(0)
+        seld.spot_thres = 3
+        self.masked = None  # Frames with flares
 
     def setup(self, kwargs=None):
         logger.debug("IntegrateMultiframe.setup")
@@ -194,14 +197,17 @@ class IntegrateMultiframe(Plugin):
             lst = list(os.path.splitext(self.input_file))
             lst.insert(1, "-integrate")
             dirname, basename = os.path.split("".join(lst))
-            dirname = dirname.replace("RAW_DATA", "PROCESSED_DATA")
+            if __status__ == "development":
+                dirname = dirname.replace("RAW_DATA", "NOBACKUP")
+            else:
+                dirname = dirname.replace("RAW_DATA", "PROCESSED_DATA")
             dirname = os.path.dirname(dirname)
             # dirname = os.path.join(dirname, "processed")
             dirname = os.path.join(dirname, "integrate")
             self.output_file = os.path.join(dirname, basename)
             if not os.path.isdir(dirname):
                 try:
-                    os.makedirs(dirname)
+                    os.makedirs(dirname, exist_ok=True)
                 except Exception as err:
                     self.log_warning(f"Unable to create dir {dirname}. {type(err)}: {err}")
 
@@ -232,8 +238,11 @@ class IntegrateMultiframe(Plugin):
             self.energy = numpy.float32(self.energy)  # It is important to fix the datatype of the energy
         self.monitor_values = numpy.array(self.input.get("monitor_values", 1), dtype=numpy.float64)
         if self.input.get("average_out_monitor_values"):
-            self.monitor_values = numpy.zeros_like(self.monitor_values) + self.monitor_values.mean()
             self.log_warning("Averaging-out the monitor values !")
+            self.monitor_values = numpy.zeros_like(self.monitor_values) + self.monitor_values.mean()
+
+            self.
+
         self.compute_spottiness = bool(self.input.get("spottiness", True))
         self.normalization_factor = float(self.input.get("normalization_factor", 1))
         self.scale_factor = float(self.input.get("exposure_time", 1)) / self.normalization_factor
@@ -459,6 +468,7 @@ class IntegrateMultiframe(Plugin):
 
     # Stage 1 processing: Integration frame per frame
         integrate1_result = self.process1_integration(self.input_frames)
+
         radial_unit, unit_name = str(self.unit).split("_", 1)
         q = numpy.ascontiguousarray(integrate1_result.radial, numpy.float32)
         I = numpy.ascontiguousarray(integrate1_result.intensity, dtype=numpy.float32)
@@ -531,7 +541,8 @@ class IntegrateMultiframe(Plugin):
             hplc_data.attrs["auxiliary_signals"] = ["spottiness"]
             self.output["spottiness_median"] = float(numpy.median(spottiness))
             self.output["spottiness_max"] = float(spottiness.max())
-
+            self.masked = result.spottiness < (numpy.median(integrate1_result.spottiness) + seld.spot_thres * numpy.std(integrate1_result.spottiness)
+            isotropic_ds = hplc_data.create_dataset("isotropic", data=self.masked)
         if self.input.get("hplc_mode"):
             entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
             integration_grp.attrs["default"] = posixpath.relpath(hplc_data.name, integration_grp.name)
@@ -666,6 +677,7 @@ class IntegrateMultiframe(Plugin):
         logger.debug("in process1_integration")
         intensity = numpy.empty((self.nb_frames, self.npt), dtype=numpy.float32)
         sigma = numpy.empty((self.nb_frames, self.npt), dtype=numpy.float32)
+        raw = []
         if self.compute_spottiness:
             shape = (self.nb_frames, self.npt)
             spottiness = numpy.zeros(self.nb_frames, dtype=numpy.float32)
@@ -675,9 +687,8 @@ class IntegrateMultiframe(Plugin):
                                         # redundant with sum_signal unless pixels are split
                                         None if method.split == "no" else numpy.zeros(shape, dtype=numpy.float32))
         else:
-            spottiness = accumulators = None
-        idx = 0
-        for i1, frame in zip(self.monitor_values, data):
+            accumulators = spottiness = None
+        for idx, (i1, frame) in enumerate(zip(self.monitor_values, data)):
             res = self.ai._integrate1d_ng(frame, self.npt,
                                           normalization_factor=i1 * self.scale_factor,
                                           error_model="poisson",
@@ -687,6 +698,7 @@ class IntegrateMultiframe(Plugin):
                                           method=method)
             intensity[idx] = res.intensity
             sigma[idx] = res.sigma
+            raw.append(res)
             if spottiness is not None:
                 # A second integration is needed: the azimuthal error model provides the
                 # scatter of the pixels within each ring, which the poissonian one does not.
@@ -709,26 +721,32 @@ class IntegrateMultiframe(Plugin):
                     spottiness = accumulators = None
             if self.ispyb.url:
                 self.to_pyarch[idx] = res
-            idx += 1
-        if idx == 0:
+        if len(self.monitor_values) == 0 or len(data)==0:
             self.log_error(f"No frame iterated over in process1_integration! len(frames): {len(data)} len(monitor): {len(self.monitor_values)}", do_raise=False)
             radial = numpy.zeros(self.npt, dtype=numpy.float32)
         else:
             radial = res.radial
-        return IntegrationResult(radial, intensity, sigma, spottiness, accumulators)
+        return IntegrationResult(radial, intensity, sigma, spottiness, accumulators, raw)
 
-    def process2_cormap(self, curves, fidelity_abs, fidelity_rel):
+    def process2_cormap(self, curves, fidelity_abs, fidelity_rel, spottiness=None):
         "Take the integrated data as input, returns a CormapResult namedtuple"
         logger.debug("in process2_cormap")
         count = numpy.empty((self.nb_frames, self.nb_frames), dtype=numpy.uint16)
         proba = numpy.empty((self.nb_frames, self.nb_frames), dtype=numpy.float32)
         for i in range(self.nb_frames):
-            proba[i, i] = 1.0
-            count[i, i] = 0
-            for j in range(i):
-                res = freesas.cormap.gof(curves[i], curves[j])
-                proba[i, j] = proba[j, i] = res.P
-                count[i, j] = count[j, i] = res.c
+            if self.mask[i]:
+                # Discard this frame !
+                proba[i, :] = 0.0
+                proba[:, i] = 0.0
+                count[:, i] = numpy.inf
+                count[i, :] = numpy.inf
+            else:
+                proba[i, i] = 1.0
+                count[i, i] = 0
+                for j in range(i):
+                    res = freesas.cormap.gof(curves[i], curves[j])
+                    proba[i, j] = proba[j, i] = res.P
+                    count[i, j] = count[j, i] = res.c
         tomerge = get_equivalent_frames(proba, fidelity_abs, fidelity_rel)
         return CormapResult(proba, count, tomerge)
 
@@ -798,3 +816,30 @@ class IntegrateMultiframe(Plugin):
             dico[key] = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
         return to_memcached(dico)
 
+    def renormalize(self, result:IntegrationResult):
+        """When in sample-changer mode:
+        renormalize intensities and sem based on the the
+        linear regression of the diode values.
+        """
+        diode = self.monitor_values
+        mask = self.masked
+        x = numpy.arange(len(diode))
+        linreg = scipy.stats.linregress(x[mask], diode[mask])
+        smooth_diode = linreg.slope * x + linreg.intercept
+        var_diode = (diode-smooth_diode)**2
+        var_diode = std_diode[mask]
+        var_diode = var_diode.mean()
+        for idx, azim in enumerate(result.raw_results):
+            azim.renormalize(smooth_diode[idx] * self.scale_factor,
+                             copy=False)
+
+            azim._sum_variance += (var_diode/azim.intensity**2) * azim.sum_signal**2
+            # Nota: r.std is wrong but r.sem is correct !
+            # see: https://github.com/silx-kit/pyFAI/issues/2955
+            azim.__recalculate_means__()
+            result.accumulators.sum_normalization[idx] = azim.sum_normalization
+            # result.accumulators.sum_variance_azimuthal[idx] = azim.sum_variance
+            if accumulators.sum_variance_poisson is not None:
+                accumulators.sum_variance_poisson[idx] = res.sum_variance
+            result.intensity[idx] = azim.intensity
+            result.sigma[idx] = azim.sem
