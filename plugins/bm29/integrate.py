@@ -25,6 +25,7 @@ import freesas.cormap
 import h5py
 import numpy
 import pyFAI
+import scipy
 from urllib3.util import parse_url
 
 from dahu.factory import register
@@ -81,7 +82,7 @@ class IntegrationResult(NamedTuple):
     sigma:numpy.ndarray
     spottiness:numpy.ndarray=None
     accumulators:Accumulators=None
-    raw_results:list=[]
+    raw_results:list=None
 
 
 class CormapResult(NamedTuple):
@@ -171,7 +172,7 @@ class IntegrateMultiframe(Plugin):
         self.to_pyarch = {}  # contains all the stuff to be sent to Ispyb and pyarch
         self.to_memcached = {}  # data to be shared via memcached
         self.seq = SequenceIndex(0)
-        seld.spot_thres = 3
+        self.spot_thres = 3
         self.masked = None  # Frames with flares
 
     def setup(self, kwargs=None):
@@ -240,8 +241,6 @@ class IntegrateMultiframe(Plugin):
         if self.input.get("average_out_monitor_values"):
             self.log_warning("Averaging-out the monitor values !")
             self.monitor_values = numpy.zeros_like(self.monitor_values) + self.monitor_values.mean()
-
-            self.
 
         self.compute_spottiness = bool(self.input.get("spottiness", True))
         self.normalization_factor = float(self.input.get("normalization_factor", 1))
@@ -541,8 +540,8 @@ class IntegrateMultiframe(Plugin):
             hplc_data.attrs["auxiliary_signals"] = ["spottiness"]
             self.output["spottiness_median"] = float(numpy.median(spottiness))
             self.output["spottiness_max"] = float(spottiness.max())
-            self.masked = result.spottiness < (numpy.median(integrate1_result.spottiness) + seld.spot_thres * numpy.std(integrate1_result.spottiness)
-            isotropic_ds = hplc_data.create_dataset("isotropic", data=self.masked)
+            self.masked = integrate1_result.spottiness < (numpy.median(integrate1_result.spottiness) + self.spot_thres * numpy.std(integrate1_result.spottiness))
+            hplc_data.create_dataset("isotropic", data=self.masked)
         if self.input.get("hplc_mode"):
             entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
             integration_grp.attrs["default"] = posixpath.relpath(hplc_data.name, integration_grp.name)
@@ -826,20 +825,20 @@ class IntegrateMultiframe(Plugin):
         x = numpy.arange(len(diode))
         linreg = scipy.stats.linregress(x[mask], diode[mask])
         smooth_diode = linreg.slope * x + linreg.intercept
-        var_diode = (diode-smooth_diode)**2
-        var_diode = std_diode[mask]
-        var_diode = var_diode.mean()
+        delta2 = (diode-smooth_diode)**2
+        delta2 = delta2[mask]
+        var_diode = delta2.mean()
         for idx, azim in enumerate(result.raw_results):
             azim.renormalize(smooth_diode[idx] * self.scale_factor,
                              copy=False)
-
-            azim._sum_variance += (var_diode/azim.intensity**2) * azim.sum_signal**2
-            # Nota: r.std is wrong but r.sem is correct !
+            azim._sum_variance += (var_diode/smooth_diode[idx]**2) * azim.sum_signal**2
+            # Nota: r.sem is correct but r.std is wrong !
             # see: https://github.com/silx-kit/pyFAI/issues/2955
             azim.__recalculate_means__()
-            result.accumulators.sum_normalization[idx] = azim.sum_normalization
-            # result.accumulators.sum_variance_azimuthal[idx] = azim.sum_variance
+            accumulators = result.accumulators
+            accumulators.sum_normalization[idx] = azim.sum_normalization
+            # accumulators.sum_variance_azimuthal[idx] = azim.sum_variance
             if accumulators.sum_variance_poisson is not None:
-                accumulators.sum_variance_poisson[idx] = res.sum_variance
+                accumulators.sum_variance_poisson[idx] = azim.sum_variance
             result.intensity[idx] = azim.intensity
             result.sigma[idx] = azim.sem
