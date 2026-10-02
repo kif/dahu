@@ -39,15 +39,10 @@ from .common import (
     NORMAL_STYLE,
     SAXS_STYLE,
     Ispyb,
-    KeyCache,
     Sample,
     SequenceIndex,
-    cmp_float,
     create_nexus_sample,
     get_equivalent_frames,
-    get_integrator,
-    method,
-    polarization_factor,
     str_,
 )
 from .icat import send_icat
@@ -510,124 +505,72 @@ class SubtractBuffer(Plugin):
         to_merge_ds.attrs["long_name"] = "Index of equivalent frames"
         cormap_grp.attrs["default"] = posixpath.relpath(cormap_data.name, cormap_grp.name)
 
-    # Process 2: Image processing: subtraction with standard deviation
-        average_grp = nxs.new_class(entry_grp, "2_buffer_subtraction", "NXprocess")
-        average_grp["sequence_index"] = 2
-        average_grp["program"] = fully_qualified_name(self.__class__)
-        average_grp["version"] = __version__
-        average_data = nxs.new_class(average_grp, "result", "NXdata")
-        average_data.attrs["SILX_style"] = SAXS_STYLE
-        average_data.attrs["signal"] = "intensity_normed"
-    # Stage 2 processing
+    # Process 2: Average the equivalent buffers and subtract them from the sample, in 1D
+        seq = self.seq()
+        sub_grp = nxs.new_class(entry_grp, f"{seq}_buffer_subtraction", "NXprocess")
+        sub_grp["sequence_index"] = seq
+        sub_grp["program"] = fully_qualified_name(self.__class__)
+        sub_grp["version"] = __version__
+        sub_grp["date"] = get_isotime()
+        radial_unit, unit_name = str(self.sample_juice.unit).split("_", 1)
+        radius_unit = "nm" if "nm" in unit_name else "Å"
 
+    # Stage 2 processing
         # Average of the equivalent buffers, weighted by their normalization (i.e. the number of frames merged)
         buffer_average = self.average_buffers(to_merge_idx)
-        # TODO: the subtraction hereafter still works on 2D images and needs to be rewritten in 1D
-        sample_average = self.sample_juice.signal2d
-        sample_variance = self.sample_juice.error2d ** 2
-        sub_average = sample_average - buffer_average
-        sub_variance = sample_variance + buffer_variance
-        sub_std = numpy.sqrt(sub_variance)
+        # From now on, accumulators are no more needed: subtraction of curves with quadratic sum of errors
+        q = numpy.asarray(self.sample_juice.q, dtype=numpy.float64)
+        sample_I = numpy.asarray(self.sample_juice.I, dtype=numpy.float64)
+        sample_sigma = numpy.asarray(self.sample_juice.sigma, dtype=numpy.float64)
+        sub_I = sample_I - buffer_average.intensity
+        sub_sigma = numpy.sqrt(sample_sigma**2 + buffer_average.sigma**2)
+        subtracted = Integrate1dResult(q, sub_I, sub_sigma)
 
-        int_avg_ds = average_data.create_dataset("intensity_normed",
-                                                 data=numpy.ascontiguousarray(sub_average, dtype=numpy.float32),
-                                                 **cmp_float)
-        int_avg_ds.attrs["interpretation"] = "image"
-        int_avg_ds.attrs["formula"] = "sample_signal - weighted_mean(buffer_signal_i)"
-        int_std_ds = average_data.create_dataset("intensity_std",
-                                                 data=numpy.ascontiguousarray(sub_std, dtype=numpy.float32),
-                                                 **cmp_float)
-        int_std_ds.attrs["interpretation"] = "image"
-        int_std_ds.attrs["formula"] = "sqrt( sample_variance + weighted_mean(buffer_variance_i) )"
-        int_std_ds.attrs["method"] = "quadratic sum of sample error and buffer errors"
-        average_grp.attrs["default"] = posixpath.relpath(average_data.name, average_grp.name)
+        buffer_data = nxs.new_class(sub_grp, "buffer_average", "NXdata")
+        buffer_data.attrs["SILX_style"] = SAXS_STYLE
+        buffer_data.attrs["title"] = f"Average of buffers {', '.join(str(i) for i in to_merge_idx)}"
+        buffer_data.attrs["signal"] = "I"
+        buffer_data.attrs["axes"] = radial_unit
+        for name, data in ((radial_unit, q), ("I", buffer_average.intensity), ("errors", buffer_average.sigma)):
+            buffer_data.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32))
+        buffer_data[radial_unit].attrs["units"] = unit_name
+        buffer_data["I"].attrs["formula"] = "Σᵢ sum_signalᵢ / Σᵢ sum_normalizationᵢ"
+        buffer_data["errors"].attrs["formula"] = "√(Σᵢ sum_varianceᵢ) / Σᵢ sum_normalizationᵢ"
 
-        key_cache = KeyCache(self.sample_juice.npt, self.sample_juice.unit, self.sample_juice.poni, self.sample_juice.mask, self.sample_juice.energy)
-        ai = get_integrator(key_cache)
-
-        if self.ispyb.url and parse_url(self.ispyb.url).host:
-            # we need to provide the sample record and the best_buffer so let's generate it
-            # This is a waist of time & resources ...
-            res1 = ai._integrate1d_ng(sample_average, key_cache.npt,
-                                      variance=sample_variance,
-                                      polarization_factor=self.sample_juice.polarization,
-                                      unit=key_cache.unit,
-                                      safe=False,
-                                      method=self.sample_juice.method)
-            self.to_pyarch["sample"] = res1
-            # Integrate also the buffer
-            res2 = ai._integrate1d_ng(buffer_average, key_cache.npt,
-                                      variance=buffer_variance,
-                                      polarization_factor=self.sample_juice.polarization,
-                                      unit=key_cache.unit,
-                                      safe=False,
-                                      method=self.sample_juice.method)
-            self.to_pyarch["buffer"] = res2
-
-    # Process 3: Azimuthal integration of the subtracted image
-        seq = self.seq()
-        ai2_grp = nxs.new_class(entry_grp, f"{seq}_azimuthal_integration", "NXprocess")
-        ai2_grp["sequence_index"] = seq
-        ai2_grp["program"] = "pyFAI"
-        ai2_grp["version"] = pyFAI.version
-        ai2_grp["date"] = get_isotime()
-        radial_unit, unit_name = str(key_cache.unit).split("_", 1)
-        ai2_data = nxs.new_class(ai2_grp, "result", "NXdata")
+        ai2_data = nxs.new_class(sub_grp, "result", "NXdata")
         ai2_data.attrs["SILX_style"] = SAXS_STYLE
         ai2_data.attrs["title"] = f"{self.sample_juice.sample.name}, subtracted"
         ai2_data.attrs["signal"] = "I"
         ai2_data.attrs["axes"] = radial_unit
-        ai2_grp.attrs["default"] = posixpath.relpath(ai2_data.name, ai2_grp.name)
-        cfg_grp = nxs.new_class(ai2_grp, "configuration", "NXnote")
-        cfg_grp.create_dataset("data", data=json.dumps(ai.get_config(), indent=2, separators=(",\r\n", ": ")))
-        cfg_grp.create_dataset("format", data="text/json")
-        if os.path.exists(key_cache.poni):
-            cfg_grp.create_dataset("file_name", data=key_cache.poni)
-        pol_ds = cfg_grp.create_dataset("polarization_factor", data=polarization_factor)
-        pol_ds.attrs["comment"] = "Between -1 and +1, 0 for circular"
-        cfg_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
+        sub_grp.attrs["default"] = posixpath.relpath(ai2_data.name, sub_grp.name)
 
-    # Stage 3 processing: azimuthal integration
-        res3 = ai._integrate1d_ng(sub_average, key_cache.npt,
-                                  variance=sub_variance,
-                                  polarization_factor=self.sample_juice.polarization,
-                                  unit=key_cache.unit,
-                                  safe=False,
-                                  method=self.sample_juice.method)
-
-        ai2_q_ds = ai2_data.create_dataset(radial_unit,
-                                           data=numpy.ascontiguousarray(res3.radial, dtype=numpy.float32))
+        ai2_q_ds = ai2_data.create_dataset(radial_unit, data=numpy.ascontiguousarray(q, dtype=numpy.float32))
         ai2_q_ds.attrs["units"] = unit_name
-        radius_unit = "nm" if "nm" in unit_name else "Å"
         ai2_q_ds.attrs["long_name"] = f"Scattering vector q ({radius_unit}⁻¹)"
-
-        ai2_int_ds = ai2_data.create_dataset("I", data=numpy.ascontiguousarray(res3.intensity, dtype=numpy.float32))
-        ai2_std_ds = ai2_data.create_dataset("errors",
-                                             data=numpy.ascontiguousarray(res3.sigma, dtype=numpy.float32))
-
+        ai2_int_ds = ai2_data.create_dataset("I", data=numpy.ascontiguousarray(sub_I, dtype=numpy.float32))
         ai2_int_ds.attrs["interpretation"] = "spectrum"
         ai2_int_ds.attrs["units"] = "arbitrary"
         ai2_int_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
-        #  ai2_int_ds.attrs["uncertainties"] = "errors" #this does not work
+        ai2_int_ds.attrs["formula"] = "I_sample - weighted_mean(I_buffer_i)"
+        ai2_std_ds = ai2_data.create_dataset("errors", data=numpy.ascontiguousarray(sub_sigma, dtype=numpy.float32))
         ai2_std_ds.attrs["interpretation"] = "spectrum"
-        ai2_int_ds.attrs["units"] = "arbitrary"
+        ai2_std_ds.attrs["formula"] = "sqrt(sigma_sample² + sigma_buffer²)"
+        ai2_std_ds.attrs["method"] = "quadratic sum of sample error and buffer errors"
 
         if self.ispyb.url and parse_url(self.ispyb.url).host:
-            self.to_pyarch["subtracted"] = res3
-        # Export this to the output JSON
-        #self.output["q"] = res3.radial
-        #self.output["I"] = res3.intensity
-        #self.output["std"] = res3.sigma
-        self.to_memcached["q"] = res3.radial
-        self.to_memcached["I"] = res3.intensity
-        self.to_memcached["std"] = res3.sigma
+            self.to_pyarch["sample"] = Integrate1dResult(q, sample_I, sample_sigma)
+            self.to_pyarch["buffer"] = buffer_average
+            self.to_pyarch["subtracted"] = subtracted
+        self.to_memcached["q"] = q
+        self.to_memcached["I"] = sub_I
+        self.to_memcached["std"] = sub_sigma
 
         #  Finally declare the default entry and default dataset ...
         #  overlay the BIFT fitted data on top of the scattering curve
         entry_grp.attrs["default"] = posixpath.relpath(ai2_data.name, entry_grp.name)
 
     # Process 4-7: Guinier analysis, Kratky plot, invariants and BIFT
-        sasm = numpy.vstack((res3.radial, res3.intensity, res3.sigma)).T
+        sasm = numpy.vstack((q, sub_I, sub_sigma)).T
         analysis = saxs_analysis(nxs, entry_grp, sasm, radius_unit, self.seq, curve_data=ai2_data)
         guinier = analysis.guinier
         if self.ispyb.url and parse_url(self.ispyb.url).host:

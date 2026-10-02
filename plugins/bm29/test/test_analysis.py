@@ -142,41 +142,51 @@ def run_hplc(workdir, hplc_module=None, seed=0):
     return summarize(filename), attrs
 
 
-def run_subtract(workdir, subtract_module=None, seed=1, noise=0.01, signal=1.0):
-    """Run the SubtractBuffer plugin on synthetic images (2 buffers, 1 sample)
+def run_subtract(workdir, subtract_module=None, seed=1, background=1000.0, signal=10.0):
+    """Run the SubtractBuffer plugin on synthetic data (2 buffers, 1 sample)
 
-    The reading of input files and the azimuthal integrator are mocked.
+    Images are photon-counting like: Poissonian noise, the variance being the number of counts.
+    Each buffer has its own realization of the noise.
+    Synthetic images are integrated with pyFAI to provide the accumulators; the reading of input files is mocked.
 
     :param workdir: directory where to write
     :param subtract_module: module containing the SubtractBuffer plugin (allows to test an other version)
     :param seed: seed for the random number generator
-    :param noise: relative noise on the sample signal
-    :param signal: scale of the sample signal (negative to have no Guinier region)
+    :param background: number of counts per pixel scattered by the buffer
+    :param signal: forward scattering of the sample relative to the buffer (negative to have no Guinier region)
     :return: summary of the HDF5 file, plugin attributes, plugin
     """
     subtract_module = subtract_module or subtracte
     rng = numpy.random.default_rng(seed)
     detector = pyFAI.detectors.Detector(pixel1=172e-6, pixel2=172e-6, max_shape=(200, 200))
-    ai = AzimuthalIntegrator(dist=2.0, poni1=0.0, poni2=0.0, detector=detector, wavelength=1e-10)
+    ai = AzimuthalIntegrator(dist=1.0, poni1=0.0, poni2=0.0, detector=detector, wavelength=1e-10)
     unit = pyFAI.units.to_unit("q_nm^-1")
     npt = 300
     method = pyFAI.method_registry.IntegrationMethod.select_one_available(("no", "histogram", "cython"), dim=1)
-    res = ai.integrate1d(numpy.ones(detector.shape), npt, unit=unit, method=method)
     qimg = ai.array_from_unit(unit=unit)
 
     def juice(sample, img):
+        res = ai._integrate1d_ng(img, npt, variance=numpy.maximum(img, 0), polarization_factor=0.9,
+                                 unit=unit, method=method)
         return subtract_module.NexusJuice(filename="dummy.h5", h5path="/entry_0000", npt=npt, unit=unit,
-                                          q=res.radial, I=res.intensity, sigma=0.01 * res.intensity,
+                                          q=res.radial, I=res.intensity, sigma=res.sigma,
                                           poni="dummy.poni", mask="", energy=12.4, polarization=0.9,
-                                          method=method, signal2d=img, error2d=0.01 * img + 1e-3,
-                                          normalization=numpy.ones(detector.shape), sample=sample,
-                                          I_all=[res.intensity], sigma_all=[0.01 * res.intensity])
+                                          method=method, sum_signal=res.sum_signal, sum_variance=res.sum_variance,
+                                          sum_normalization=res.sum_normalization, sample=sample,
+                                          I_all=[res.intensity], sigma_all=[res.sigma],
+                                          sum_normalization2=res.sum_normalization2, count=res.count,
+                                          error_model=res.error_model.name)
 
-    buffer_img = numpy.ones(detector.shape)
-    sample_img = buffer_img + signal * sphere(qimg) * (1 + noise * rng.standard_normal(detector.shape))
-    juices = {"sample.h5": juice(Sample("lysozyme", buffer="tris", concentration=1.0), sample_img),
-              "buffer_1.h5": juice(Sample("buffer", buffer="tris"), buffer_img),
-              "buffer_2.h5": juice(Sample("buffer", buffer="tris"), buffer_img * 1.0001)}
+    def counts(expected):
+        "Photon counting: Poissonian noise"
+        return rng.poisson(numpy.maximum(expected, 0)).astype(numpy.float64)
+
+    buffer_expected = numpy.full(detector.shape, background)
+    form_factor = sphere(qimg, I0=1.0) - 1e-3  # without the constant background of `sphere`
+    sample_expected = buffer_expected + background * signal * form_factor
+    juices = {"sample.h5": juice(Sample("lysozyme", buffer="tris", concentration=1.0), counts(sample_expected)),
+              "buffer_1.h5": juice(Sample("buffer", buffer="tris"), counts(buffer_expected)),
+              "buffer_2.h5": juice(Sample("buffer", buffer="tris"), counts(buffer_expected))}
     for name in juices:
         open(os.path.join(workdir, name), "w").close()
 
@@ -188,8 +198,7 @@ def run_subtract(workdir, subtract_module=None, seed=1, noise=0.01, signal=1.0):
     plugin.ispyb = Ispyb._fromdict({"gallery": workdir})
     plugin.sample_juice = juices["sample.h5"]
     with mock.patch.object(subtract_module.NexusJuice, "read",
-                           side_effect=lambda filename: juices[os.path.basename(filename)]), \
-         mock.patch.object(subtract_module, "get_integrator", return_value=ai):
+                           side_effect=lambda filename: juices[os.path.basename(filename)]):
         try:
             plugin.create_nexus()
         finally:
@@ -281,10 +290,15 @@ class TestAnalysis(unittest.TestCase):
         ref = self.reference["subtract"]
         self.compare_hdf5(h5, ref["hdf5"])
         self.assert_close(to_json(attrs), ref["attrs"], "attrs")
+        # Physical sanity, independent from the reference: sphere of radius 3 nm, I0 = 10 x buffer
+        self.assertAlmostEqual(attrs["Rg"], 3.0 * numpy.sqrt(3 / 5), delta=0.1, msg="Rg of a sphere")
+        self.assertAlmostEqual(attrs["I0"], 10000, delta=100, msg="I0")
+        self.assertAlmostEqual(attrs["Dmax"], 6.0, delta=0.5, msg="Dmax of a sphere")
 
     def test_subtract_bift_failure(self):
-        "A BIFT which does not converge (noiseless data) is recorded as failed instead of crashing"
-        h5, attrs, plugin = run_subtract(self.workdir, noise=0.0)
+        "A BIFT which fails is recorded as failed instead of crashing"
+        with mock.patch.object(analysis, "BIFT", side_effect=RuntimeError("Simulated failure of the BIFT")):
+            h5, attrs, plugin = run_subtract(self.workdir)
         bift = [k for k in h5 if k.endswith("indirect_Fourier_transformation")]
         self.assertEqual(len(bift), 1, "one BIFT group")
         self.assertIn(f"{bift[0]}/{FAILED}", h5, "BIFT failure is recorded")
@@ -295,12 +309,12 @@ class TestAnalysis(unittest.TestCase):
     def test_subtract_guinier_failure(self):
         "Without Guinier region, SubtractBuffer raises and the analysis stops after the Guinier step"
         with self.assertRaises(RuntimeError):
-            run_subtract(self.workdir, signal=-2.0)
+            run_subtract(self.workdir, signal=-20.0)
         with h5py.File(os.path.join(self.workdir, "subtracted.h5"), "r") as h5:
             entry = h5[h5.attrs["default"]]
             self.assertTrue(any(k.endswith("Guinier_analysis") for k in entry))
             self.assertFalse(any(k.endswith("Kratky_plot") for k in entry))
-            self.assertTrue(entry.attrs["default"].endswith("azimuthal_integration/result"))
+            self.assertTrue(entry.attrs["default"].endswith("buffer_subtraction/result"))
 
     def test_saxs_analysis_naming(self):
         "Groups are named after the sequence index or after a local step number"

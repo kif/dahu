@@ -828,24 +828,24 @@
  },
  "subtract": {
   "attrs": {
-   "Dmax": 6.166437930209519,
-   "I0": 100.12935181894996,
-   "Rg": 2.363124811209809,
-   "Vc": 4.203627275121983,
-   "mass": 60.74404234553558,
+   "Dmax": 5.769368414241513,
+   "I0": 10014.293643952946,
+   "Rg": 2.3600232107079786,
+   "Vc": 4.134414060037919,
+   "mass": 58.837418618327305,
    "to_pyarch": [
     "bift",
     "buffers",
     "rti",
     "volume"
    ],
-   "volume": 143.3707453433545
+   "volume": 126.71369083668267
   },
   "hdf5": {
    "entry_0000": {
     "attrs": {
      "NX_class": "NXentry",
-     "default": "2_azimuthal_integration/result"
+     "default": "2_buffer_subtraction/result"
     }
    },
    "entry_0000/0_measurement": {
@@ -895,14 +895,14 @@
     "value": {
      "first": 0.0,
      "last": 0.0,
-     "max": 0.0,
-     "mean": 0.0,
+     "max": 7.0,
+     "mean": 3.5,
      "min": 0.0,
      "shape": [
       2,
       2
      ],
-     "std": 0.0
+     "std": 3.5
     }
    },
    "entry_0000/1_correlation_mapping/result/probability": {
@@ -914,13 +914,13 @@
      "first": 1.0,
      "last": 1.0,
      "max": 1.0,
-     "mean": 1.0,
-     "min": 1.0,
+     "mean": 0.9559865295886993,
+     "min": 0.9119730591773987,
      "shape": [
       2,
       2
      ],
-     "std": 0.0
+     "std": 0.04401347041130066
     }
    },
    "entry_0000/1_correlation_mapping/result/to_merge": {
@@ -943,116 +943,67 @@
     "attrs": {},
     "value": 1
    },
-   "entry_0000/2_azimuthal_integration": {
-    "attrs": {
-     "NX_class": "NXprocess",
-     "default": "result"
-    }
-   },
-   "entry_0000/2_azimuthal_integration/configuration": {
-    "attrs": {
-     "NX_class": "NXnote"
-    }
-   },
-   "entry_0000/2_azimuthal_integration/configuration/format": {
-    "attrs": {},
-    "value": "text/json"
-   },
-   "entry_0000/2_azimuthal_integration/configuration/polarization_factor": {
-    "attrs": {
-     "comment": "Between -1 and +1, 0 for circular"
-    },
-    "value": 0.9
-   },
-   "entry_0000/2_azimuthal_integration/program": {
-    "attrs": {},
-    "value": "pyFAI"
-   },
-   "entry_0000/2_azimuthal_integration/result": {
-    "attrs": {
-     "NX_class": "NXdata",
-     "SILX_style": "{\n  \"signal_scale_type\":\t\"log\"\n}",
-     "auxiliary_signals": "BIFT",
-     "axes": "q",
-     "signal": "I",
-     "title": "lysozyme, subtracted"
-    }
-   },
-   "entry_0000/2_azimuthal_integration/result/BIFT": {
-    "attrs": {
-     "interpretation": "spectrum"
-    },
-    "value": {
-     "first": 100.46981048583984,
-     "last": 0.01947540044784546,
-     "max": 100.46981048583984,
-     "mean": 40.84234944797742,
-     "min": 0.0030608358792960644,
-     "shape": [
-      300
-     ],
-     "std": 36.22431590262808
-    }
-   },
-   "entry_0000/2_azimuthal_integration/result/I": {
-    "attrs": {
-     "interpretation": "spectrum",
-     "long_name": "Intensity (absolute, normalized on water)",
-     "units": "arbitrary"
-    },
-    "value": {
-     "first": 100.98974609375,
-     "last": 0.011148710735142231,
-     "max": 100.98974609375,
-     "mean": 40.750031952430724,
-     "min": 0.0010503883240744472,
-     "shape": [
-      300
-     ],
-     "std": 36.07687435582105
-    }
-   },
-   "entry_0000/2_azimuthal_integration/result/errors": {
-    "attrs": {
-     "interpretation": "spectrum"
-    },
-    "value": {
-     "first": 0.5894606113433838,
-     "last": 0.009038046933710575,
-     "max": 0.7089082598686218,
-     "mean": 0.05760454588026429,
-     "min": 0.0023249653168022633,
-     "shape": [
-      300
-     ],
-     "std": 0.08969567789067204
-    }
-   },
-   "entry_0000/2_azimuthal_integration/result/q": {
-    "attrs": {
-     "long_name": "Scattering vector q (nm⁻¹)",
-     "units": "nm^-1"
-    },
-    "value": {
-     "first": 0.006354835350066423,
-     "last": 1.5216606855392456,
-     "max": 1.5216606855392456,
-     "mean": 0.7640077335340902,
-     "min": 0.006354835350066423,
-     "shape": [
-      300
-     ],
-     "std": 0.43889164669051506
-    }
-   },
-   "entry_0000/2_azimuthal_integration/sequence_index": {
-    "attrs": {},
-    "value": 2
-   },
    "entry_0000/2_buffer_subtraction": {
     "attrs": {
      "NX_class": "NXprocess",
      "default": "result"
+    }
+   },
+   "entry_0000/2_buffer_subtraction/buffer_average": {
+    "attrs": {
+     "NX_class": "NXdata",
+     "SILX_style": "{\n  \"signal_scale_type\":\t\"log\"\n}",
+     "axes": "q",
+     "signal": "I",
+     "title": "Average of buffers 0, 1"
+    }
+   },
+   "entry_0000/2_buffer_subtraction/buffer_average/I": {
+    "attrs": {
+     "formula": "Σᵢ sum_signalᵢ / Σᵢ sum_normalizationᵢ"
+    },
+    "value": {
+     "first": 1014.3334350585938,
+     "last": 986.9492797851562,
+     "max": 1020.0408325195312,
+     "mean": 1001.2997729492188,
+     "min": 979.75048828125,
+     "shape": [
+      300
+     ],
+     "std": 3.8458708543541764
+    }
+   },
+   "entry_0000/2_buffer_subtraction/buffer_average/errors": {
+    "attrs": {
+     "formula": "√(Σᵢ sum_varianceᵢ) / Σᵢ sum_normalizationᵢ"
+    },
+    "value": {
+     "first": 13.002137184143066,
+     "last": 12.855523109436035,
+     "max": 15.650486946105957,
+     "mean": 2.659359661738078,
+     "min": 1.2911252975463867,
+     "shape": [
+      300
+     ],
+     "std": 1.9859419594187548
+    }
+   },
+   "entry_0000/2_buffer_subtraction/buffer_average/q": {
+    "attrs": {
+     "units": "nm^-1"
+    },
+    "value": {
+     "first": 0.012706311419606209,
+     "last": 3.041309118270874,
+     "max": 3.041309118270874,
+     "mean": 1.5270076635479928,
+     "min": 0.012706311419606209,
+     "shape": [
+      300
+     ],
+     "std": 0.8772014414320729
     }
    },
    "entry_0000/2_buffer_subtraction/program": {
@@ -1063,44 +1014,80 @@
     "attrs": {
      "NX_class": "NXdata",
      "SILX_style": "{\n  \"signal_scale_type\":\t\"log\"\n}",
-     "signal": "intensity_normed"
+     "auxiliary_signals": "BIFT",
+     "axes": "q",
+     "signal": "I",
+     "title": "lysozyme, subtracted"
     }
    },
-   "entry_0000/2_buffer_subtraction/result/intensity_normed": {
+   "entry_0000/2_buffer_subtraction/result/BIFT": {
     "attrs": {
-     "formula": "sample_signal - weighted_mean(buffer_signal_i)",
-     "interpretation": "image"
+     "interpretation": "spectrum"
     },
     "value": {
-     "first": 100.34390258789062,
-     "last": 0.013384010642766953,
-     "max": 102.4922103881836,
-     "mean": 31.36749734943408,
-     "min": 0.0009326566359959543,
+     "first": 9997.8125,
+     "last": 12.889118194580078,
+     "max": 9997.8125,
+     "mean": 2040.5492528426648,
+     "min": 0.6189137697219849,
      "shape": [
-      200,
-      200
+      300
      ],
-     "std": 27.344042078520733
+     "std": 3245.8052427093785
     }
    },
-   "entry_0000/2_buffer_subtraction/result/intensity_std": {
+   "entry_0000/2_buffer_subtraction/result/I": {
     "attrs": {
-     "formula": "sqrt( sample_variance + weighted_mean(buffer_variance_i) )",
-     "interpretation": "image",
+     "formula": "I_sample - weighted_mean(I_buffer_i)",
+     "interpretation": "spectrum",
+     "long_name": "Intensity (absolute, normalized on water)",
+     "units": "arbitrary"
+    },
+    "value": {
+     "first": 9986.66796875,
+     "last": 71.66852569580078,
+     "max": 10015.2548828125,
+     "mean": 2040.9196895554414,
+     "min": -6.920620918273926,
+     "shape": [
+      300
+     ],
+     "std": 3246.408948519978
+    }
+   },
+   "entry_0000/2_buffer_subtraction/result/errors": {
+    "attrs": {
+     "formula": "sqrt(sigma_sample² + sigma_buffer²)",
+     "interpretation": "spectrum",
      "method": "quadratic sum of sample error and buffer errors"
     },
     "value": {
-     "first": 1.0144991874694824,
-     "last": 0.01565198227763176,
-     "max": 1.0359810590744019,
-     "mean": 0.32524390899280553,
-     "min": 0.015563652850687504,
+     "first": 61.9359016418457,
+     "last": 22.79901885986328,
+     "max": 75.7789077758789,
+     "mean": 7.444019229412079,
+     "min": 2.2726213932037354,
      "shape": [
-      200,
-      200
+      300
      ],
-     "std": 0.27298578291916786
+     "std": 8.949938638351597
+    }
+   },
+   "entry_0000/2_buffer_subtraction/result/q": {
+    "attrs": {
+     "long_name": "Scattering vector q (nm⁻¹)",
+     "units": "nm^-1"
+    },
+    "value": {
+     "first": 0.012706311419606209,
+     "last": 3.041309118270874,
+     "max": 3.041309118270874,
+     "mean": 1.5270076635479928,
+     "min": 0.012706311419606209,
+     "shape": [
+      300
+     ],
+     "std": 0.8772014414320729
     }
    },
    "entry_0000/2_buffer_subtraction/sequence_index": {
@@ -1120,23 +1107,23 @@
    },
    "entry_0000/3_Guinier_analysis/autorg/I0": {
     "attrs": {},
-    "value": 100.48336309447852
+    "value": 10041.520881918017
    },
    "entry_0000/3_Guinier_analysis/autorg/I0_error": {
     "attrs": {},
-    "value": 8.194308123039308
+    "value": 822.6278739356508
    },
    "entry_0000/3_Guinier_analysis/autorg/Rg": {
     "attrs": {
      "unit": "nm"
     },
-    "value": 2.3760718884606877
+    "value": 2.372629554197311
    },
    "entry_0000/3_Guinier_analysis/autorg/Rg_error": {
     "attrs": {
      "unit": "nm"
     },
-    "value": 0.21613597707161142
+    "value": 0.17765317584627932
    },
    "entry_0000/3_Guinier_analysis/autorg/aggregated": {
     "attrs": {},
@@ -1144,23 +1131,23 @@
    },
    "entry_0000/3_Guinier_analysis/autorg/end_point": {
     "attrs": {},
-    "value": 109
+    "value": 53
    },
    "entry_0000/3_Guinier_analysis/autorg/quality": {
     "attrs": {},
-    "value": 0.9963399746169281
+    "value": 0.9960620280729099
    },
    "entry_0000/3_Guinier_analysis/autorg/qₘᵢₙ·Rg": {
     "attrs": {},
-    "value": 0.255934027824259
+    "value": 0.22240830085139265
    },
    "entry_0000/3_Guinier_analysis/autorg/qₘₐₓ·Rg": {
     "attrs": {},
-    "value": 1.3156057478910703
+    "value": 1.279843417918432
    },
    "entry_0000/3_Guinier_analysis/autorg/start_point": {
     "attrs": {},
-    "value": 20
+    "value": 8
    },
    "entry_0000/3_Guinier_analysis/gpa": {
     "attrs": {
@@ -1169,39 +1156,39 @@
    },
    "entry_0000/3_Guinier_analysis/gpa/I0": {
     "attrs": {},
-    "value": 100.53585146112978
+    "value": 10061.42173172899
    },
    "entry_0000/3_Guinier_analysis/gpa/I0_error": {
     "attrs": {},
-    "value": 0.05101108811948589
+    "value": 11.186258981725114
    },
    "entry_0000/3_Guinier_analysis/gpa/Rg": {
     "attrs": {
      "unit": "nm"
     },
-    "value": 2.375612297569503
+    "value": 2.3776069061735616
    },
    "entry_0000/3_Guinier_analysis/gpa/Rg_error": {
     "attrs": {
      "unit": "nm"
     },
-    "value": 0.0017772051096679117
+    "value": 0.003841332471878416
    },
    "entry_0000/3_Guinier_analysis/gpa/aggregated": {
     "attrs": {},
-    "value": -0.0077692877487395605
+    "value": -0.005486651494915996
    },
    "entry_0000/3_Guinier_analysis/gpa/end_point": {
     "attrs": {},
-    "value": 107
+    "value": 53
    },
    "entry_0000/3_Guinier_analysis/gpa/quality": {
     "attrs": {},
-    "value": 0.8392264685065239
+    "value": 0.8393018203985669
    },
    "entry_0000/3_Guinier_analysis/gpa/start_point": {
     "attrs": {},
-    "value": 41
+    "value": 20
    },
    "entry_0000/3_Guinier_analysis/guinier": {
     "attrs": {
@@ -1210,47 +1197,47 @@
    },
    "entry_0000/3_Guinier_analysis/guinier/I0": {
     "attrs": {},
-    "value": 100.12935181894996
+    "value": 10014.293643952946
    },
    "entry_0000/3_Guinier_analysis/guinier/I0_error": {
     "attrs": {},
-    "value": 0.2095498185442573
+    "value": 20.443441720922365
    },
    "entry_0000/3_Guinier_analysis/guinier/Rg": {
     "attrs": {
      "unit": "nm"
     },
-    "value": 2.363124811209809
+    "value": 2.3600232107079786
    },
    "entry_0000/3_Guinier_analysis/guinier/Rg_error": {
     "attrs": {
      "unit": "nm"
     },
-    "value": 0.013995930692746133
+    "value": 0.01685159871596062
    },
    "entry_0000/3_Guinier_analysis/guinier/aggregated": {
     "attrs": {},
-    "value": -0.00792795862357625
+    "value": -0.009222829623997725
    },
    "entry_0000/3_Guinier_analysis/guinier/end_point": {
     "attrs": {},
-    "value": 107
+    "value": 53
    },
    "entry_0000/3_Guinier_analysis/guinier/quality": {
     "attrs": {},
-    "value": 0.8966868079729783
+    "value": 0.8949840124984713
    },
    "entry_0000/3_Guinier_analysis/guinier/qₘᵢₙ·Rg": {
     "attrs": {},
-    "value": 0.07489781663895491
+    "value": 0.07779704096133659
    },
    "entry_0000/3_Guinier_analysis/guinier/qₘₐₓ·Rg": {
     "attrs": {},
-    "value": 1.284484869962129
+    "value": 1.273043306324821
    },
    "entry_0000/3_Guinier_analysis/guinier/start_point": {
     "attrs": {},
-    "value": 5
+    "value": 2
    },
    "entry_0000/3_Guinier_analysis/program": {
     "attrs": {},
@@ -1271,32 +1258,32 @@
      "interpretation": "spectrum"
     },
     "value": {
-     "first": 0.005836836062371731,
-     "last": 0.0007874920847825706,
-     "max": 0.007149974349886179,
-     "mean": 0.0014341633251470124,
-     "min": 0.0007649458711966872,
+     "first": 0.0062018586322665215,
+     "last": 0.0017972794594243169,
+     "max": 0.0075663491152226925,
+     "mean": 0.0023103797143595593,
+     "min": 0.0016467750538140535,
      "shape": [
-      124
+      62
      ],
-     "std": 0.0009931486038982755
+     "std": 0.0011450957152082302
     }
    },
    "entry_0000/3_Guinier_analysis/result/fit": {
     "attrs": {
-     "intercept": 4.606462868303672,
-     "slope": -1.861452957785132
+     "intercept": 9.211768715802584,
+     "slope": -1.8565698516934654
     },
     "value": {
-     "first": 4.606387695509813,
-     "last": 3.868336765658427,
-     "max": 4.606387695509813,
-     "mean": 4.356932704059178,
-     "min": 3.868336765658427,
+     "first": 9.211468971940953,
+     "last": 8.47353457104954,
+     "max": 9.211468971940953,
+     "mean": 8.958695680464297,
+     "min": 8.47353457104954,
      "shape": [
-      124
+      62
      ],
-     "std": 0.22165864878619168
+     "std": 0.22325191476171297
     }
    },
    "entry_0000/3_Guinier_analysis/result/logI": {
@@ -1305,15 +1292,15 @@
      "long_name": "log(I)"
     },
     "value": {
-     "first": 4.615018844604492,
-     "last": 3.849559783935547,
-     "max": 4.615018844604492,
-     "mean": 4.355748528434384,
-     "min": 3.849559783935547,
+     "first": 9.209006309509277,
+     "last": 8.454435348510742,
+     "max": 9.211864471435547,
+     "mean": 8.956933313800443,
+     "min": 8.454435348510742,
      "shape": [
-      124
+      62
      ],
-     "std": 0.22470867261297062
+     "std": 0.22714903527628064
     }
    },
    "entry_0000/3_Guinier_analysis/result/q2": {
@@ -1323,15 +1310,15 @@
      "unit": "nm⁻²"
     },
     "value": {
-     "first": 4.038393308292143e-05,
-     "last": 0.39653223752975464,
-     "max": 0.39653223752975464,
-     "mean": 0.13405128713915357,
-     "min": 4.038393308292143e-05,
+     "first": 0.0001614503562450409,
+     "last": 0.3976333737373352,
+     "max": 0.3976333737373352,
+     "mean": 0.13631215414516779,
+     "min": 0.0001614503562450409,
      "shape": [
-      124
+      62
      ],
-     "std": 0.11907829798048503
+     "std": 0.12024967182954956
     }
    },
    "entry_0000/3_Guinier_analysis/result/source": {
@@ -1366,15 +1353,15 @@
      "interpretation": "spectrum"
     },
     "value": {
-     "first": 1.3276247727844748e-06,
-     "last": 0.0011671377578750253,
-     "max": 0.0011671377578750253,
-     "mean": 0.0004772342707955583,
-     "min": 1.3276247727844748e-06,
+     "first": 5.561522357311333e-06,
+     "last": 0.11728689074516296,
+     "max": 0.11728689074516296,
+     "mean": 0.008629805457599105,
+     "min": 5.561522357311333e-06,
      "shape": [
       300
      ],
-     "std": 0.00023802120910192866
+     "std": 0.014659714014954707
     }
    },
    "entry_0000/4_dimensionless_Kratky_plot/result/q2Rg2I÷I0": {
@@ -1383,15 +1370,15 @@
      "long_name": "q²Rg²I(q)/I₀"
     },
     "value": {
-     "first": 0.00022745622845832258,
-     "last": 0.0014397006016224623,
-     "max": 1.06220281124115,
-     "mean": 0.5057013453644564,
-     "min": 0.00013116301852278411,
+     "first": 0.0008967508911155164,
+     "last": 0.3686903715133667,
+     "max": 1.061828851699829,
+     "mean": 0.2861408855555904,
+     "min": -0.0348944365978241,
      "shape": [
       300
      ],
-     "std": 0.37969225840045046
+     "std": 0.3482100679470612
     }
    },
    "entry_0000/4_dimensionless_Kratky_plot/result/qRg": {
@@ -1400,15 +1387,15 @@
      "long_name": "q·Rg (unit-less)"
     },
     "value": {
-     "first": 0.015017269179224968,
-     "last": 3.595874071121216,
-     "max": 3.595874071121216,
-     "mean": 1.8054456305814286,
-     "min": 0.015017269179224968,
+     "first": 0.029987189918756485,
+     "last": 7.177559852600098,
+     "max": 7.177559852600098,
+     "mean": 3.603773522898555,
+     "min": 0.029987189918756485,
      "shape": [
       300
      ],
-     "std": 1.0371557378634282
+     "std": 2.0702157574881146
     }
    },
    "entry_0000/4_dimensionless_Kratky_plot/sequence_index": {
@@ -1434,46 +1421,46 @@
      "formula": "Rambo-Tainer: Qr = Vc/Rg",
      "unit": "nm"
     },
-    "value": 7.477591612735431
+    "value": 7.242886231916092
    },
    "entry_0000/5_invariants/result/Qr_error": {
     "attrs": {
      "unit": "nm"
     },
-    "value": 0.09025958466250963
+    "value": 0.13338658421680033
    },
    "entry_0000/5_invariants/result/Vc": {
     "attrs": {
      "formula": "Rambo-Tainer: Vc = I₀/(sum_q qI(q) dq)",
      "unit": "nm²"
     },
-    "value": 4.203627275121983
+    "value": 4.134414060037919
    },
    "entry_0000/5_invariants/result/Vc_error": {
     "attrs": {
      "unit": "nm²"
     },
-    "value": 0.012922031723401483
+    "value": 0.023309375841921543
    },
    "entry_0000/5_invariants/result/mass": {
     "attrs": {
      "formula": "Rambo-Tainer: mass = (Qr/ec)^(1/k)",
      "unit": "kDa"
     },
-    "value": 60.74404234553558
+    "value": 58.837418618327305
    },
    "entry_0000/5_invariants/result/mass_error": {
     "attrs": {
      "unit": "kDa"
     },
-    "value": 0.733221646324205
+    "value": 1.0835628287311154
    },
    "entry_0000/5_invariants/result/volume": {
     "attrs": {
      "formula": "Porod: V = 2*π²I₀²/(sum_q I(q)q² dq)",
      "unit": "nm³"
     },
-    "value": 143.3707453433545
+    "value": 126.71369083668267
    },
    "entry_0000/5_invariants/sequence_index": {
     "attrs": {},
@@ -1487,51 +1474,51 @@
    },
    "entry_0000/6_indirect_Fourier_transformation/Chi2r": {
     "attrs": {},
-    "value": 6.978138606663934
+    "value": 1.3528041426503075
    },
    "entry_0000/6_indirect_Fourier_transformation/Chi2r_error": {
     "attrs": {},
-    "value": 0.01413032971352073
+    "value": 0.0024470855841109856
    },
    "entry_0000/6_indirect_Fourier_transformation/Dmax": {
     "attrs": {},
-    "value": 6.166437930209519
+    "value": 5.769368414241513
    },
    "entry_0000/6_indirect_Fourier_transformation/Dmax_error": {
     "attrs": {},
-    "value": 0.00039405062595763025
+    "value": 0.014288731403164426
    },
    "entry_0000/6_indirect_Fourier_transformation/I0": {
     "attrs": {},
-    "value": 100.47716871230155
+    "value": 10000.585547415181
    },
    "entry_0000/6_indirect_Fourier_transformation/I0_error": {
     "attrs": {},
-    "value": 0.00048534615376822564
+    "value": 0.6576682001068763
    },
    "entry_0000/6_indirect_Fourier_transformation/Rg": {
     "attrs": {},
-    "value": 2.335446717072066
+    "value": 2.3237227800453146
    },
    "entry_0000/6_indirect_Fourier_transformation/Rg_error": {
     "attrs": {},
-    "value": 1.385687647409433e-05
+    "value": 0.0001418156266842991
    },
    "entry_0000/6_indirect_Fourier_transformation/S0": {
     "attrs": {},
-    "value": 0.0006580743353801065
+    "value": 0.08461296717174045
    },
    "entry_0000/6_indirect_Fourier_transformation/S0_error": {
     "attrs": {},
-    "value": 4.603908330630732e-07
+    "value": 0.0032991485880966495
    },
    "entry_0000/6_indirect_Fourier_transformation/alpha": {
     "attrs": {},
-    "value": 292934.18351629947
+    "value": 18.144283951169413
    },
    "entry_0000/6_indirect_Fourier_transformation/alpha_error": {
     "attrs": {},
-    "value": 580.3650627713624
+    "value": 4.8537366927833085
    },
    "entry_0000/6_indirect_Fourier_transformation/configuration": {
     "attrs": {
@@ -1540,7 +1527,7 @@
    },
    "entry_0000/6_indirect_Fourier_transformation/configuration/Dmax_inf": {
     "attrs": {},
-    "value": 4.726249622419618
+    "value": 4.720046421415957
    },
    "entry_0000/6_indirect_Fourier_transformation/configuration/Dmax_scan_steps": {
     "attrs": {},
@@ -1548,7 +1535,7 @@
    },
    "entry_0000/6_indirect_Fourier_transformation/configuration/Dmax_sup": {
     "attrs": {},
-    "value": 9.452499244839236
+    "value": 9.440092842831914
    },
    "entry_0000/6_indirect_Fourier_transformation/configuration/Dmax÷Rg": {
     "attrs": {},
@@ -1560,15 +1547,15 @@
    },
    "entry_0000/6_indirect_Fourier_transformation/configuration/Powell_steps": {
     "attrs": {},
-    "value": 122
+    "value": 58
    },
    "entry_0000/6_indirect_Fourier_transformation/configuration/Rg": {
     "attrs": {},
-    "value": 2.363124811209809
+    "value": 2.3600232107079786
    },
    "entry_0000/6_indirect_Fourier_transformation/configuration/alpha_inf": {
     "attrs": {},
-    "value": 7.72086607218841e-10
+    "value": 3.3054360377162328e-06
    },
    "entry_0000/6_indirect_Fourier_transformation/configuration/alpha_scan_steps": {
     "attrs": {},
@@ -1576,7 +1563,7 @@
    },
    "entry_0000/6_indirect_Fourier_transformation/configuration/alpha_sup": {
     "attrs": {},
-    "value": 1295191485.8387887
+    "value": 302531.9469472816
    },
    "entry_0000/6_indirect_Fourier_transformation/configuration/npt": {
     "attrs": {},
@@ -1584,11 +1571,11 @@
    },
    "entry_0000/6_indirect_Fourier_transformation/logP": {
     "attrs": {},
-    "value": -1035.9525809498696
+    "value": -177.47876726157546
    },
    "entry_0000/6_indirect_Fourier_transformation/logP_error": {
     "attrs": {},
-    "value": 2.020190749727024
+    "value": 0.37532428869271295
    },
    "entry_0000/6_indirect_Fourier_transformation/program": {
     "attrs": {},
@@ -1607,14 +1594,14 @@
     "attrs": {},
     "value": {
      "first": 0.0,
-     "last": 0.00018874230008823238,
-     "max": 0.00018874230008823238,
-     "mean": 3.853201222131795e-05,
+     "last": 0.8481603770452174,
+     "max": 1.0804563889934025,
+     "mean": 0.20976516031227532,
      "min": 0.0,
      "shape": [
       65
      ],
-     "std": 3.138125759502748e-05
+     "std": 0.2108986678660446
     }
    },
    "entry_0000/6_indirect_Fourier_transformation/result/p(r)": {
@@ -1623,14 +1610,14 @@
     },
     "value": {
      "first": 0.0,
-     "last": 3.519905294524506e-05,
-     "max": 2.6557421684265137,
-     "mean": 1.276718085756315,
+     "last": 0.23415762186050415,
+     "max": 250.81997680664062,
+     "mean": 135.83576677487446,
      "min": 0.0,
      "shape": [
       65
      ],
-     "std": 0.8937102380740739
+     "std": 85.90886912686221
     }
    },
    "entry_0000/6_indirect_Fourier_transformation/result/r": {
@@ -1641,14 +1628,14 @@
     },
     "value": {
      "first": 0.0,
-     "last": 6.166365146636963,
-     "max": 6.166365146636963,
-     "mean": 3.0831824805874093,
+     "last": 5.7686448097229,
+     "max": 5.7686448097229,
+     "mean": 2.884322422628219,
      "min": 0.0,
      "shape": [
       65
      ],
-     "std": 1.807675962316465
+     "std": 1.691083907685725
     }
    },
    "entry_0000/6_indirect_Fourier_transformation/sequence_index": {
