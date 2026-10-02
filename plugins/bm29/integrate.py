@@ -8,9 +8,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "25/09/2026"
+__date__ = "02/10/2026"
 __status__ = "development"
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 import copy
 import json
@@ -544,11 +544,80 @@ class IntegrateMultiframe(Plugin):
             mad = numpy.median(abs(integrate1_result.spottiness-median))
             self.valid_frames = integrate1_result.spottiness < (median + self.spot_thres * mad)
             hplc_data.create_dataset("isotropic", data=self.valid_frames)
+
         if self.input.get("hplc_mode"):
             entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
             integration_grp.attrs["default"] = posixpath.relpath(hplc_data.name, integration_grp.name)
             self.log_warning("HPLC mode detected, stopping after frame per frame integration")
             return
+        # IF in HPLC mode, TOP HERE !
+
+    # Process 1bis: renormalize curves based on smoothed beam-stop diode values (& updated variance)
+        renormalize_grp = nxs.new_class(entry_grp, "1bis_renormalize", "NXprocess")
+        integrate1bis_result = self.process1bis_renormalize(self.input_frames)
+
+        q = numpy.ascontiguousarray(integrate1bis_result.radial, numpy.float32)
+        I = numpy.ascontiguousarray(integrate1bis_result.intensity, dtype=numpy.float32)
+        sigma = numpy.ascontiguousarray(integrate1bis_result.sigma, dtype=numpy.float32)
+
+        self.to_memcached[radial_unit] = q
+        self.to_memcached["I"] = I
+        self.to_memcached["sigma"] = sigma
+
+        renormalize_grp["sequence_index"] = self.seq()
+        renormalize_grp["program"] = "dahu.plugins.bm29.integrate"
+        renormalize_grp["version"] = __version__
+        renormalize_grp["date"] = get_isotime()
+        cfg_grp = nxs.new_class(renormalize_grp, "configuration", "NXnote")
+        cfg_grp.create_dataset("Smoothing", data="linear")
+        cfg_grp.create_dataset("format", data="text/json")
+        cfg_grp.create_dataset("file_name", data=self.poni)
+        pol_ds = cfg_grp.create_dataset("polarization_factor", data=polarization_factor)
+        pol_ds.attrs["comment"] = "Between -1 and +1, 0 for circular"
+        cfg_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
+        integration_data = nxs.new_class(integration_grp, "result", "NXdata")
+        integration_grp.attrs["title"] = str(self.sample)
+
+
+        q_ds = integration_data.create_dataset(radial_unit, data=q)
+        q_ds.attrs["units"] = unit_name
+        q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
+
+        int_ds = integration_data.create_dataset("I", data=I)
+        std_ds = integration_data.create_dataset("errors", data=sigma)
+        integration_data.attrs["signal"] = "I"
+        integration_data.attrs["axes"] = [".", radial_unit]
+        integration_data.attrs["SILX_style"] = SAXS_STYLE
+
+        int_ds.attrs["interpretation"] = "spectrum"
+        int_ds.attrs["units"] = "arbitrary"
+        int_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
+        # int_ds.attrs["uncertainties"] = "errors" This does not work
+        int_ds.attrs["scale"] = "log"
+        std_ds.attrs["interpretation"] = "spectrum"
+
+        if integrate1_result.accumulators is not None:
+            acc = integrate1_result.accumulators
+            acc_grp = nxs.new_class(integration_grp, "accumulators", "NXcollection")
+            acc_grp.attrs["comment"] = ("Unreduced sums of the azimuthal integration, one line per frame. "
+                                        "The intensity of a set of frames is obtained without re-integrating "
+                                        "anything: sum_signal.sum(axis=0)/sum_normalization.sum(axis=0)")
+            acc_grp[radial_unit] = q_ds
+            acc_grp["frame_ids"] = frame_ds
+            datasets = [("sum_signal", acc.sum_signal, "Σᵢ signalᵢ"),
+                        ("sum_normalization", acc.sum_normalization, "Σᵢ normalizationᵢ"),
+                        ("sum_variance_azimuthal", acc.sum_variance_azimuthal, "Σᵢ varianceᵢ, azimuthal error model")]
+            if acc.sum_variance_poisson is not None:
+                datasets.append(("sum_variance_poisson", acc.sum_variance_poisson,
+                                 "Σᵢ varianceᵢ, poissonian error model"))
+            for name, data, long_name in datasets:
+                acc_ds = acc_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32))
+                acc_ds.attrs["interpretation"] = "spectrum"
+                acc_ds.attrs["long_name"] = long_name
+            if acc.sum_variance_poisson is None:
+                # Without pixel splitting every coefficient is 1, hence the poissonian
+                # variance of a bin is simply the sum of the signal it contains.
+                acc_grp["sum_variance_poisson"] = acc_grp["sum_signal"]
 
         integration_grp.attrs["default"] = posixpath.relpath(integration_data.name, integration_grp.name)
 
@@ -692,7 +761,7 @@ class IntegrateMultiframe(Plugin):
         for idx, (i1, frame) in enumerate(zip(self.monitor_values, data)):
             res = self.ai._integrate1d_ng(frame, self.npt,
                                           normalization_factor=i1 * self.scale_factor,
-                                          error_model="poisson",
+                                          variance = numpy.maximum(0, frame),
                                           polarization_factor=polarization_factor,
                                           unit=self.unit,
                                           safe=False,
@@ -728,6 +797,36 @@ class IntegrateMultiframe(Plugin):
         else:
             radial = res.radial
         return IntegrationResult(radial, intensity, sigma, spottiness, accumulators, raw)
+
+    def process1bis_renormalize(self, result:IntegrationResult):
+        """When in sample-changer mode:
+        renormalize intensities and sem based on the the
+        linear regression of the diode values.
+        Inject the variance of the diode into the corresponding array.
+        """
+        diode = self.monitor_values
+        mask = self.valid_frames
+        x = numpy.arange(len(diode))
+        linreg = scipy.stats.linregress(x[mask], diode[mask])
+        smooth_diode = linreg.slope * x + linreg.intercept
+        delta2 = (diode-smooth_diode)**2
+        delta2 = delta2[mask]
+        var_diode = delta2.mean()
+        for idx, azim in enumerate(result.raw_results):
+            azim.renormalize(smooth_diode[idx] * self.scale_factor,
+                             copy=False)
+            azim._sum_variance += (var_diode/smooth_diode[idx]**2) * azim.sum_signal**2
+            # Nota: r.sem is correct but r.std is wrong !
+            # see: https://github.com/silx-kit/pyFAI/issues/2955
+            azim.__recalculate_means__()
+            accumulators = result.accumulators
+            accumulators.sum_normalization[idx] = azim.sum_normalization
+            # accumulators.sum_variance_azimuthal[idx] = azim.sum_variance
+            if accumulators.sum_variance_poisson is not None:
+                accumulators.sum_variance_poisson[idx] = azim.sum_variance
+            result.intensity[idx] = azim.intensity
+            result.sigma[idx] = azim.sem
+        return result # Modified in place !
 
     def process2_cormap(self, curves, fidelity_abs, fidelity_rel, spottiness=None):
         "Take the integrated data as input, returns a CormapResult namedtuple"
@@ -816,31 +915,3 @@ class IntegrateMultiframe(Plugin):
             key = f"{key_base}_{k}"
             dico[key] = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
         return to_memcached(dico)
-
-    def renormalize(self, result:IntegrationResult):
-        """When in sample-changer mode:
-        renormalize intensities and sem based on the the
-        linear regression of the diode values.
-        """
-        diode = self.monitor_values
-        mask = self.valid_frames
-        x = numpy.arange(len(diode))
-        linreg = scipy.stats.linregress(x[mask], diode[mask])
-        smooth_diode = linreg.slope * x + linreg.intercept
-        delta2 = (diode-smooth_diode)**2
-        delta2 = delta2[mask]
-        var_diode = delta2.mean()
-        for idx, azim in enumerate(result.raw_results):
-            azim.renormalize(smooth_diode[idx] * self.scale_factor,
-                             copy=False)
-            azim._sum_variance += (var_diode/smooth_diode[idx]**2) * azim.sum_signal**2
-            # Nota: r.sem is correct but r.std is wrong !
-            # see: https://github.com/silx-kit/pyFAI/issues/2955
-            azim.__recalculate_means__()
-            accumulators = result.accumulators
-            accumulators.sum_normalization[idx] = azim.sum_normalization
-            # accumulators.sum_variance_azimuthal[idx] = azim.sum_variance
-            if accumulators.sum_variance_poisson is not None:
-                accumulators.sum_variance_poisson[idx] = azim.sum_variance
-            result.intensity[idx] = azim.intensity
-            result.sigma[idx] = azim.sem
