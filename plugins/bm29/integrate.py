@@ -556,7 +556,7 @@ class IntegrateMultiframe(Plugin):
 
     # Process 2: renormalize curves based on smoothed beam-stop diode values (& updated variance)
         renormalize_grp = nxs.new_class(entry_grp, "2_renormalize", "NXprocess")
-        renormalize_result = self.process2_renormalize(self.input_frames)
+        renormalize_result = self.process2_renormalize(integrate1_result)
 
         q = numpy.ascontiguousarray(renormalize_result.radial, numpy.float32)
         I = numpy.ascontiguousarray(renormalize_result.intensity, dtype=numpy.float32)
