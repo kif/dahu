@@ -694,14 +694,15 @@ class IntegrateMultiframe(Plugin):
 
         # Provide also accumulators:
         accu2_grp = nxs.new_class(average_grp, "accumulators", "NXcollection")
-        accu2_grp.attrs["comment"] = ("Unreduced sums of the azimuthal integration, one line per frame. "
-                                        "The intensity of a set of frames is obtained without re-integrating "
-                                        "anything: sum_signal.sum(axis=0)/sum_normalization.sum(axis=0)")
+        accu2_grp.attrs["comment"] = ("Unreduced sums of the renormalized azimuthal integration, summed over "
+                                      "the merged frames (listed in `merged`). The averaged intensity is "
+                                      "sum_signal/sum_normalization and its uncertainty "
+                                      "sqrt(sum_variance)/sum_normalization")
         accu2_grp[radial_unit] = ai2_q_ds
         accu2_grp["merged"] = numpy.arange(self.nb_frames)[slice(*cormap_result.tomerge)]
         datasets = [("sum_signal", res3.sum_signal, "Σᵢ signalᵢ"),
                     ("sum_normalization", res3.sum_normalization, "Σᵢ normalizationᵢ"),
-                    ("sum_variance", res3.sum_variance_azimuthal, "Σᵢ varianceᵢ, Poissonnian error-model")]
+                    ("sum_variance", res3.sum_variance, "Σᵢ varianceᵢ, Poissonnian error-model + diode noise")]
         for name, data, long_name in datasets:
             acc_ds = accu2_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32))
             acc_ds.attrs["interpretation"] = "spectrum"

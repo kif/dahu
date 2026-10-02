@@ -347,8 +347,8 @@
     "attrs": {
      "NX_class": "NXdata",
      "SILX_style": "{\n  \"signal_scale_type\":\t\"linear\"\n}",
-     "axes": "/entry_0000/02s-12s/3_dimensionless_Kratky_plot/result/qRg",
-     "signal": "/entry_0000/02s-12s/3_dimensionless_Kratky_plot/result/q2Rg2I÷I0",
+     "axes": "qRg",
+     "signal": "q2Rg2I÷I0",
      "title": "Dimensionless Kratky plots"
     }
    },
@@ -1356,8 +1356,8 @@
     "attrs": {
      "NX_class": "NXdata",
      "SILX_style": "{\n  \"signal_scale_type\":\t\"linear\"\n}",
-     "axes": "/entry_0000/4_dimensionless_Kratky_plot/result/qRg",
-     "signal": "/entry_0000/4_dimensionless_Kratky_plot/result/q2Rg2I÷I0",
+     "axes": "qRg",
+     "signal": "q2Rg2I÷I0",
      "title": "Dimensionless Kratky plots"
     }
    },
