@@ -76,9 +76,9 @@ class NexusJuice(NamedTuple):
     energy: float
     polarization: float
     method: tuple
-    signal2d: numpy.ndarray
-    error2d: numpy.ndarray
-    normalization: numpy.ndarray
+    sum_signal: numpy.ndarray
+    sum_variance: numpy.ndarray
+    sum_normalization: numpy.ndarray
     sample:str
     I_all: numpy.ndarray
     sigma_all: numpy.ndarray
@@ -94,29 +94,39 @@ class NexusJuice(NamedTuple):
             entry_grp = nxsr.get_entries()[0]
             h5path = entry_grp.name
             nxdata_grp = entry_grp[entry_grp.attrs["default"]]
-            signal = nxdata_grp.attrs["signal"]
+            signal = str_(nxdata_grp.attrs["signal"])
             axis = nxdata_grp.attrs["axes"]
+            if not isinstance(axis, str):  # list of axes, the radial one is the last
+                axis = str_(axis[-1])
             I_ary = nxdata_grp[signal][()]
             q = nxdata_grp[axis][()]
             sigma = nxdata_grp["errors"][()]
             npt = len(q)
-            unit = pyFAI.units.to_unit(axis + "_" + nxdata_grp[axis].attrs["units"])
-            integration_grp = nxdata_grp.parent
-            poni = integration_grp["configuration/file_name"][()]
-            poni = str_(poni).strip()
+            unit = pyFAI.units.to_unit(axis + "_" + str_(nxdata_grp[axis].attrs["units"]))
+            # Configuration of the azimuthal integration: next to the averaged data or in the integration step
+            average_grp = nxdata_grp.parent
+            if "configuration" in average_grp:
+                config_grp = average_grp["configuration"]
+            else:
+                config_grp = entry_grp["1_integration/configuration"]
+            poni = str_(config_grp["file_name"][()]).strip()
             if not os.path.exists(poni):
-                poni = str_(integration_grp["configuration/data"][()]).strip()
-            polarization = integration_grp["configuration/polarization_factor"][()]
-            method = IntegrationMethod.select_method(**json.loads(integration_grp["configuration/integration_method"][()]))[0]
+                poni = str_(config_grp["data"][()]).strip()
+            polarization = config_grp["polarization_factor"][()]
+            method = IntegrationMethod.select_method(**json.loads(config_grp["integration_method"][()]))[0]
+            # Accumulators of the frames merged in the average, unavailable in former files
+            if "accumulators" in average_grp:
+                accumulators_grp = average_grp["accumulators"]
+                sum_signal = accumulators_grp["sum_signal"][()]
+                sum_variance = accumulators_grp["sum_variance"][()]
+                sum_normalization = accumulators_grp["sum_normalization"][()]
+            else:
+                sum_signal = sum_variance = sum_normalization = None
             instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
             detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]
             mask = detector_grp["pixel_mask"].attrs["filename"]
             mono_grp = nxsr.get_class(instrument_grp, class_type="NXmonochromator")[0]
             energy = mono_grp["energy"][()]
-            img_grp = nxsr.get_class(entry_grp["3_time_average"], class_type="NXdata")[0]
-            image2d = img_grp["intensity_normed"][()]
-            error2d = img_grp["intensity_std"][()]
-            norm =  img_grp["normalization"][()] if "normalization" in img_grp else None
             # Read the sample description:
             sample_grp = nxsr.get_class(entry_grp, class_type="NXsample")[0]
             sample_name = posixpath.basename(sample_grp.name)
@@ -148,9 +158,9 @@ class NexusJuice(NamedTuple):
                     energy=energy,
                     polarization=polarization,
                     method=method,
-                    signal2d=image2d,
-                    error2d=error2d,
-                    normalization=norm,
+                    sum_signal=sum_signal,
+                    sum_variance=sum_variance,
+                    sum_normalization=sum_normalization,
                     sample=sample,
                     I_all=I_all,
                     sigma_all=sigma_all)
