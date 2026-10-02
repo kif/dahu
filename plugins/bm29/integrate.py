@@ -542,7 +542,7 @@ class IntegrateMultiframe(Plugin):
             self.output["spottiness_max"] = float(spottiness.max())
             median = numpy.median(integrate1_result.spottiness)
             mad = numpy.median(abs(integrate1_result.spottiness-median))
-            self.valid_frames = integrate1_result.spottiness < (median + self.spot_thres * mad)
+            self.valid_frames = integrate1_result.spottiness < max(median + self.spot_thres * mad, 1.1 * median)
             hplc_data.create_dataset("isotropic", data=self.valid_frames)
 
         if self.input.get("hplc_mode"):
@@ -551,14 +551,16 @@ class IntegrateMultiframe(Plugin):
             self.log_warning("HPLC mode detected, stopping after frame per frame integration")
             return
         # IF in HPLC mode, TOP HERE !
+        integration_grp.attrs["default"] = posixpath.relpath(integration_data.name, integration_grp.name)
+
 
     # Process 1bis: renormalize curves based on smoothed beam-stop diode values (& updated variance)
         renormalize_grp = nxs.new_class(entry_grp, "1bis_renormalize", "NXprocess")
-        integrate1bis_result = self.process1bis_renormalize(self.input_frames)
+        renormalize_result = self.process1bis_renormalize(self.input_frames)
 
-        q = numpy.ascontiguousarray(integrate1bis_result.radial, numpy.float32)
-        I = numpy.ascontiguousarray(integrate1bis_result.intensity, dtype=numpy.float32)
-        sigma = numpy.ascontiguousarray(integrate1bis_result.sigma, dtype=numpy.float32)
+        q = numpy.ascontiguousarray(renormalize_result.radial, numpy.float32)
+        I = numpy.ascontiguousarray(renormalize_result.intensity, dtype=numpy.float32)
+        sigma = numpy.ascontiguousarray(renormalize_result.sigma, dtype=numpy.float32)
 
         self.to_memcached[radial_unit] = q
         self.to_memcached["I"] = I
@@ -569,25 +571,20 @@ class IntegrateMultiframe(Plugin):
         renormalize_grp["version"] = __version__
         renormalize_grp["date"] = get_isotime()
         cfg_grp = nxs.new_class(renormalize_grp, "configuration", "NXnote")
-        cfg_grp.create_dataset("Smoothing", data="linear")
+        cfg_grp.create_dataset("Smoothing", data='"linear"')
         cfg_grp.create_dataset("format", data="text/json")
-        cfg_grp.create_dataset("file_name", data=self.poni)
-        pol_ds = cfg_grp.create_dataset("polarization_factor", data=polarization_factor)
-        pol_ds.attrs["comment"] = "Between -1 and +1, 0 for circular"
-        cfg_grp.create_dataset("integration_method", data=json.dumps(method.method._asdict()))
-        integration_data = nxs.new_class(integration_grp, "result", "NXdata")
-        integration_grp.attrs["title"] = str(self.sample)
+        renormalize_data = nxs.new_class(renormalize_grp, "result", "NXdata")
+        renormalize_grp.attrs["title"] = str(self.sample)
 
-
-        q_ds = integration_data.create_dataset(radial_unit, data=q)
+        q_ds = renormalize_data.create_dataset(radial_unit, data=q)
         q_ds.attrs["units"] = unit_name
         q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
 
-        int_ds = integration_data.create_dataset("I", data=I)
-        std_ds = integration_data.create_dataset("errors", data=sigma)
-        integration_data.attrs["signal"] = "I"
-        integration_data.attrs["axes"] = [".", radial_unit]
-        integration_data.attrs["SILX_style"] = SAXS_STYLE
+        int_ds = renormalize_data.create_dataset("I", data=I)
+        std_ds = renormalize_data.create_dataset("errors", data=sigma)
+        renormalize_data.attrs["signal"] = "I"
+        renormalize_data.attrs["axes"] = [".", radial_unit]
+        renormalize_data.attrs["SILX_style"] = SAXS_STYLE
 
         int_ds.attrs["interpretation"] = "spectrum"
         int_ds.attrs["units"] = "arbitrary"
@@ -596,9 +593,9 @@ class IntegrateMultiframe(Plugin):
         int_ds.attrs["scale"] = "log"
         std_ds.attrs["interpretation"] = "spectrum"
 
-        if integrate1_result.accumulators is not None:
-            acc = integrate1_result.accumulators
-            acc_grp = nxs.new_class(integration_grp, "accumulators", "NXcollection")
+        if renormalize_data.accumulators is not None:
+            acc = renormalize_data.accumulators
+            acc_grp = nxs.new_class(renormalize_grp, "accumulators", "NXcollection")
             acc_grp.attrs["comment"] = ("Unreduced sums of the azimuthal integration, one line per frame. "
                                         "The intensity of a set of frames is obtained without re-integrating "
                                         "anything: sum_signal.sum(axis=0)/sum_normalization.sum(axis=0)")
@@ -619,7 +616,7 @@ class IntegrateMultiframe(Plugin):
                 # variance of a bin is simply the sum of the signal it contains.
                 acc_grp["sum_variance_poisson"] = acc_grp["sum_signal"]
 
-        integration_grp.attrs["default"] = posixpath.relpath(integration_data.name, integration_grp.name)
+        renormalize_grp.attrs["default"] = posixpath.relpath(renormalize_data.name, renormalize_grp.name)
 
     # Process 2: Freesas cormap
         cormap_grp = nxs.new_class(entry_grp, "2_correlation_mapping", "NXprocess")
@@ -653,94 +650,64 @@ class IntegrateMultiframe(Plugin):
         if self.ispyb.url:
             self.to_pyarch["merged"] = cormap_result.tomerge
 
-    # Process 3: time average and standard deviation
-        average_grp = nxs.new_class(entry_grp, "3_time_average", "NXprocess")
+    # Process 4: Average together diffierent frames from a time-sery
+        average_grp = nxs.new_class(entry_grp, "4_time_average", "NXprocess")
         average_grp["sequence_index"] = self.seq()
         average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
         average_data = nxs.new_class(average_grp, "result", "NXdata")
         average_data.attrs["SILX_style"] = SAXS_STYLE
-        average_data.attrs["signal"] = "intensity_normed"
+        average_data.attrs["signal"] = "I"
+        average_data.attrs["axes"] = [radial_unit]
 
-    # Stage 3 processing
-        res3 = self.process3_average(cormap_result.tomerge)
+    # Stage 4 merging
+        res3 = self.process4_merge(renormalize_result, cormap_result.tomerge)
 
-        Iavg = numpy.ascontiguousarray(res3.average, dtype=numpy.float32)
-        sigma_avg = numpy.ascontiguousarray(res3.deviation, dtype=numpy.float32)
-        norm = numpy.ascontiguousarray(res3.normalization, dtype=numpy.float32)
+        Iavg = numpy.ascontiguousarray(res3.intensity, dtype=numpy.float32)
+        sigma_avg = numpy.ascontiguousarray(res3.sem, dtype=numpy.float32)
+        norm = numpy.ascontiguousarray(res3.sum_norm, dtype=numpy.float32)
 
-        int_avg_ds = average_data.create_dataset("intensity_normed",
-                                                  data=Iavg,
-                                                  **cmp_float)
-        int_avg_ds.attrs["interpretation"] = "image"
-        int_avg_ds.attrs["formula"] = "sum_i(signal_i))/sum_i(normalization_i)"
-        int_std_ds = average_data.create_dataset("intensity_std",
-                                                   data=sigma_avg,
-                                                   **cmp_float)
-        int_std_ds.attrs["interpretation"] = "image"
-        int_std_ds.attrs["formula"] = "sqrt(sum_i(variance_i)/sum_i(normalization_i))"
+        int_avg_ds = average_data.create_dataset("I", data=Iavg)
+        int_avg_ds.attrs["interpretation"] = "spectrum"
+        int_avg_ds.attrs["formula"] = "sum_i(sum_signal_i))/sum_i(sum_normalization_i)"
+        int_avg_ds.attrs["units"] = "arbitrary"
+        int_avg_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
+
+        int_std_ds = average_data.create_dataset("errors", data=sigma)
+        int_std_ds.attrs["interpretation"] = "spectrum"
+        int_std_ds.attrs["formula"] = "sqrt(sum_i(sum_variance_i))/sum_i(sum_normalization_i)"
         int_std_ds.attrs["method"] = "Propagated error from weighted mean assuming poissonian behavour of every data-point"
-
-        int_nrm_ds = average_data.create_dataset("normalization", data=norm)
+        int_nrm_ds = average_data.create_dataset("normalization", data=sigma_avg)
         int_nrm_ds.attrs["formula"] = "sum_i(normalization_i))"
-
         average_grp.attrs["default"] = posixpath.relpath(average_data.name, average_grp.name)
 
-    # Process 4: Azimuthal integration of the time average image
-        ai2_grp = nxs.new_class(entry_grp, "4_azimuthal_integration", "NXprocess")
-        ai2_grp["sequence_index"] = self.seq()
-        ai2_grp["program"] = "pyFAI"
-        ai2_grp["version"] = pyFAI.version
-        ai2_grp["date"] = get_isotime()
-        ai2_data = nxs.new_class(ai2_grp, "result", "NXdata")
-        ai2_data.attrs["signal"] = "I"
-        ai2_data.attrs["axes"] = radial_unit
-        ai2_data.attrs["SILX_style"] = SAXS_STYLE
-        ai2_data.attrs["title"] = str(self.sample)
-
-        ai2_grp["configuration"] = integration_grp["configuration"]
-        # ai2_grp["polarization_factor"] = integration_grp["polarization_factor"]
-        # ai2_grp["integration_method"] = integration_grp["integration_method"]
-        ai2_grp.attrs["default"] = posixpath.relpath(ai2_data.name, ai2_grp.name)
-
-    # Stage 4 processing
         intensity_std = res3.deviation
-        if numexpr is None:
-            variance = intensity_std * intensity_std
-        else:
-            variance = numexpr.evaluate("intensity_std**2")
-        res2 = self.ai._integrate1d_ng(res3.average, self.npt,
-                                       variance=variance,
-                                       polarization_factor=polarization_factor,
-                                       unit=self.unit,
-                                       safe=False,
-                                       method=method)
         if self.ispyb.url:
-            self.to_pyarch["avg"] = res2
+            self.to_pyarch["avg"] = res3
 
-        _, self.to_memcached["I_avg"], self.to_memcached["sigma_avg"] = res2
-        ai2_q_ds = ai2_data.create_dataset(radial_unit,
+        _, self.to_memcached["I_avg"], self.to_memcached["sigma_avg"] = res3
+        ai2_q_ds = average_data.create_dataset(radial_unit,
                                            data=numpy.ascontiguousarray(res2.radial, dtype=numpy.float32))
         ai2_q_ds.attrs["units"] = unit_name
         ai2_q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
 
-        ai2_int_ds = ai2_data.create_dataset("I", data=numpy.ascontiguousarray(res2.intensity, dtype=numpy.float32))
-        ai2_std_ds = ai2_data.create_dataset("errors",
-                                             data=numpy.ascontiguousarray(res2.sigma, dtype=numpy.float32))
+        # Provide also accumulators:
+        accu2_grp = nxs.new_class(average_grp, "accumulators", "NXcollection")
+        accu2_grp.attrs["comment"] = ("Unreduced sums of the azimuthal integration, one line per frame. "
+                                    "The intensity of a set of frames is obtained without re-integrating "
+                                    "anything: sum_signal.sum(axis=0)/sum_normalization.sum(axis=0)")
+        accu2_grp[radial_unit] = ai2_q_ds
+        accu2_grp["merged"] = numpy.arange(self.nb_frames)[slice(*cormap_result.tomerge)]
+        datasets = [("sum_signal", acc.sum_signal, "Σᵢ signalᵢ"),
+                    ("sum_normalization", acc.sum_normalization, "Σᵢ normalizationᵢ"),
+                    ("sum_variance", acc.sum_variance_azimuthal, "Σᵢ varianceᵢ, Poissonnian error-model")]
+        for name, data, long_name in datasets:
+            acc_ds = accu2_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32))
+            acc_ds.attrs["interpretation"] = "spectrum"
+            acc_ds.attrs["long_name"] = long_name
 
-        ai2_int_ds.attrs["interpretation"] = "spectrum"
-        ai2_int_ds.attrs["units"] = "arbitrary"
-        ai2_int_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
-        # ai2_int_ds.attrs["uncertainties"] = "errors" #this does not work
-        ai2_std_ds.attrs["interpretation"] = "spectrum"
-        ai2_int_ds.attrs["units"] = "arbitrary"
-        # Finally declare the default entry and default dataset ...
-        entry_grp.attrs["default"] = posixpath.relpath(ai2_data.name, entry_grp.name)
+        entry_grp.attrs["default"] = posixpath.relpath(average_data.name, entry_grp.name)
 
-        # Export this to the output JSON
-        # self.output["q"] = res2.radial
-        # self.output["I"] = res2.intensity
-        # self.output["std"] = res2.sigma
 
     def process1_integration(self, data):
         "First step of the processing, integrate all frames, return a IntegrationResult namedtuple"
@@ -828,7 +795,7 @@ class IntegrateMultiframe(Plugin):
             result.sigma[idx] = azim.sem
         return result # Modified in place !
 
-    def process2_cormap(self, curves, fidelity_abs, fidelity_rel, spottiness=None):
+    def process3_cormap(self, curves, fidelity_abs, fidelity_rel, spottiness=None):
         "Take the integrated data as input, returns a CormapResult namedtuple"
         logger.debug("in process2_cormap")
         count = numpy.empty((self.nb_frames, self.nb_frames), dtype=numpy.uint16)
@@ -844,33 +811,27 @@ class IntegrateMultiframe(Plugin):
                 proba[i, i] = 1.0
                 count[i, i] = 0
                 for j in range(i):
-                    res = freesas.cormap.gof(curves[i], curves[j])
-                    proba[i, j] = proba[j, i] = res.P
-                    count[i, j] = count[j, i] = res.c
+                    if self.valid_frames[j]:
+                        res = freesas.cormap.gof(curves[i], curves[j])
+                        proba[i, j] = proba[j, i] = res.P
+                        count[i, j] = count[j, i] = res.c
+
         tomerge = get_equivalent_frames(proba, fidelity_abs, fidelity_rel)
         return CormapResult(proba, count, tomerge)
 
-    def process3_average(self, tomerge):
-        "Average out the valid frames and return an AverageResult namedtuple"
-        logger.debug("in process3_average")
+    def process4_merge(self, result:IntegrationResult, tomerge:list):
+        "Average out the valid results. Return a single IntegrateResult"
+        logger.debug("in process4_merge")
         valid_slice = slice(*tomerge)
-        mask = self.ai.detector.mask
-        # Accumulate in float64: integer detector data would overflow and, worse,
-        # an unsigned accumulator is rejected by numexpr further down.
-        sum_data = (self.input_frames[valid_slice]).sum(axis=0, dtype=numpy.float64)
-        sum_norm = self.scale_factor * sum(self.monitor_values[valid_slice])
-        if numexpr is not None:
-            # Numexpr is many-times faster than numpy when it comes to element-wise operations
-            intensity_avg = numexpr.evaluate("where(mask==0, sum_data/sum_norm, 0.0)")
-            intensity_std = numexpr.evaluate("where(mask==0, sqrt(sum_data)/sum_norm, 0.0)") # Assuming Poisson, no uncertainties on the diode
+        valid_results = result.raw_results[valid_slice]
+        if len(valid_results)>1:
+            out = copy.deepcopy(valid_results[0])
+            for other in valid_results[1:]:
+                out = out.union(other)
         else:
-            with numpy.errstate(divide='ignore'):
-                intensity_avg = sum_data / sum_norm
-                intensity_std = numpy.sqrt(sum_data)/sum_norm
-            wmask = numpy.where(mask)
-            intensity_avg[wmask] = 0.0
-            intensity_std[wmask] = 0.0
-        return AverageResult(intensity_avg, intensity_std, sum_norm)
+            out = valid_results[0]
+        return out
+
 
     def send_to_ispyb(self):
         if self.input.get("hplc_mode") == 0:
