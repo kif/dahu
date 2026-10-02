@@ -27,7 +27,7 @@ import numpy
 import pyFAI
 import pyFAI.integrator.azimuthal
 from freesas.app.extract_ascii import write_ascii
-from pyFAI.containers import Integrate1dResult
+from pyFAI.containers import ErrorModel, Integrate1dResult
 from pyFAI.method_registry import IntegrationMethod
 from urllib3.util import parse_url
 
@@ -82,6 +82,9 @@ class NexusJuice(NamedTuple):
     sample:str
     I_all: numpy.ndarray
     sigma_all: numpy.ndarray
+    sum_normalization2: numpy.ndarray = None
+    count: numpy.ndarray = None
+    error_model: str = None
 
     @classmethod
     def read(cls, filename):
@@ -120,8 +123,11 @@ class NexusJuice(NamedTuple):
                 sum_signal = accumulators_grp["sum_signal"][()]
                 sum_variance = accumulators_grp["sum_variance"][()]
                 sum_normalization = accumulators_grp["sum_normalization"][()]
+                sum_normalization2 = accumulators_grp["sum_normalization2"][()] if "sum_normalization2" in accumulators_grp else None
+                count = accumulators_grp["count"][()] if "count" in accumulators_grp else None
+                error_model = str_(accumulators_grp.attrs.get("error_model", "VARIANCE"))
             else:
-                sum_signal = sum_variance = sum_normalization = None
+                sum_signal = sum_variance = sum_normalization = sum_normalization2 = count = error_model = None
             instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
             detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]
             mask = detector_grp["pixel_mask"].attrs["filename"]
@@ -163,7 +169,40 @@ class NexusJuice(NamedTuple):
                     sum_normalization=sum_normalization,
                     sample=sample,
                     I_all=I_all,
-                    sigma_all=sigma_all)
+                    sigma_all=sigma_all,
+                    sum_normalization2=sum_normalization2,
+                    count=count,
+                    error_model=error_model)
+
+    def to_result(self):
+        """Rebuild a pyFAI Integrate1dResult from the accumulators, i.e. to average several of them with `union`
+
+        :return: Integrate1dResult instance
+        """
+        missing = [k for k in ("sum_signal", "sum_variance", "sum_normalization", "sum_normalization2", "count")
+                   if getattr(self, k) is None]
+        if missing:
+            raise ValueError(f"Unable to rebuild an Integrate1dResult from {self.filename}: missing {', '.join(missing)}")
+        sum_signal = numpy.asarray(self.sum_signal, dtype=numpy.float64)
+        sum_variance = numpy.asarray(self.sum_variance, dtype=numpy.float64)
+        sum_normalization = numpy.asarray(self.sum_normalization, dtype=numpy.float64)
+        sum_normalization2 = numpy.asarray(self.sum_normalization2, dtype=numpy.float64)
+        npt = sum_signal.size
+        result = Integrate1dResult(numpy.asarray(self.q, dtype=numpy.float64),
+                                   numpy.zeros(npt, dtype=numpy.float64),
+                                   numpy.zeros(npt, dtype=numpy.float64))
+        result._set_sum_signal(sum_signal)
+        result._set_sum_variance(sum_variance)
+        result._set_sum_normalization(sum_normalization)
+        result._set_sum_normalization2(sum_normalization2)
+        result._set_count(numpy.asarray(self.count, dtype=numpy.float64))
+        result._set_sem(numpy.zeros(npt, dtype=numpy.float64))
+        result._set_std(numpy.zeros(npt, dtype=numpy.float64))
+        result._set_unit(self.unit)
+        result._set_polarization_factor(self.polarization)
+        result._set_method(self.method)
+        result._set_error_model(ErrorModel[self.error_model or "VARIANCE"])
+        return result.__recalculate_means__()
 
 
 def save_zip(filename, sample_juice, buffer_juices):
@@ -376,6 +415,25 @@ class SubtractBuffer(Plugin):
         buffers.append(Integrate1dResult(buffer_juice.q, buffer_juice.I, buffer_juice.sigma))
         return buffer_juice
 
+    def average_buffers(self, indices):
+        """Average the buffers which are equivalent, according to CorMap.
+
+        An Integrate1dResult is rebuilt from the accumulators of each buffer and they are merged with `union`,
+        i.e. sum of signal, normalization and variance:
+            I = Σ sum_signalᵢ / Σ sum_normalizationᵢ
+            σ = √(Σ sum_varianceᵢ) / Σ sum_normalizationᵢ
+
+        :param indices: indices of the buffers to merge in self.buffer_juices
+        :return: Integrate1dResult with the averaged buffer
+        """
+        results = [self.buffer_juices[i].to_result() for i in indices]
+        if not results:
+            self.log_error("No valid buffer to average", do_raise=True)
+        average = results[0]
+        for other in results[1:]:
+            average = average.union(other)
+        return average
+
     def create_nexus(self):
         nxs = self.nxs = Nexus(self.output_file, mode="w")
         entry_grp = nxs.new_entry("entry", self.input.get("plugin_name", "dahu"),
@@ -462,16 +520,9 @@ class SubtractBuffer(Plugin):
         average_data.attrs["signal"] = "intensity_normed"
     # Stage 2 processing
 
-        # Nota: This formula takes into account the number of input frames in each averaged buffer !
-        #  avg = Σdata / Σnorm
-        #  var = sigma² = ΣV / Σnorm
-        # TODO implement those math using numexpr:
-        sum_signal = sum(self.buffer_juices[i].normalization * self.buffer_juices[i].signal2d for i in to_merge_idx)
-        sum_variance = sum((self.buffer_juices[i].normalization * self.buffer_juices[i].error2d) ** 2 for i in to_merge_idx)
-        sum_norm = sum(self.buffer_juices[i].normalization for i in to_merge_idx)
-        sum_norm2 = sum(self.buffer_juices[i].normalization**2 for i in to_merge_idx)
-        buffer_average = sum_signal / sum_norm
-        buffer_variance = sum_variance / sum_norm2
+        # Average of the equivalent buffers, weighted by their normalization (i.e. the number of frames merged)
+        buffer_average = self.average_buffers(to_merge_idx)
+        # TODO: the subtraction hereafter still works on 2D images and needs to be rewritten in 1D
         sample_average = self.sample_juice.signal2d
         sample_variance = self.sample_juice.error2d ** 2
         sub_average = sample_average - buffer_average

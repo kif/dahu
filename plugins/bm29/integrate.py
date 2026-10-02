@@ -698,11 +698,15 @@ class IntegrateMultiframe(Plugin):
                                       "the merged frames (listed in `merged`). The averaged intensity is "
                                       "sum_signal/sum_normalization and its uncertainty "
                                       "sqrt(sum_variance)/sum_normalization")
+        accu2_grp.attrs["error_model"] = res3.error_model.name
         accu2_grp[radial_unit] = ai2_q_ds
         accu2_grp["merged"] = numpy.arange(self.nb_frames)[slice(*cormap_result.tomerge)]
+        # sum_normalization2 and count are needed to rebuild an Integrate1dResult (i.e. for `union`)
         datasets = [("sum_signal", res3.sum_signal, "Σᵢ signalᵢ"),
                     ("sum_normalization", res3.sum_normalization, "Σᵢ normalizationᵢ"),
-                    ("sum_variance", res3.sum_variance, "Σᵢ varianceᵢ, Poissonnian error-model + diode noise")]
+                    ("sum_normalization2", res3.sum_normalization2, "Σᵢ normalizationᵢ²"),
+                    ("sum_variance", res3.sum_variance, "Σᵢ varianceᵢ, Poissonnian error-model + diode noise"),
+                    ("count", res3.count, "Σᵢ pixel countᵢ")]
         for name, data, long_name in datasets:
             acc_ds = accu2_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32))
             acc_ds.attrs["interpretation"] = "spectrum"
