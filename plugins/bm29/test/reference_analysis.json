@@ -1,0 +1,1694 @@
+{
+ "hplc": {
+  "attrs": {
+   "Dmax": 9.609008132925876,
+   "Vc": 4.14581953292004,
+   "mass": 58.923290496314195
+  },
+  "hdf5": {
+   "entry_0000": {
+    "attrs": {
+     "NX_class": "NXentry"
+    }
+   },
+   "entry_0000/02s-12s": {
+    "attrs": {
+     "NX_class": "NXprocess",
+     "default": "1_average"
+    }
+   },
+   "entry_0000/02s-12s/1_average": {
+    "attrs": {
+     "NX_class": "NXdata",
+     "SILX_style": "{\n  \"signal_scale_type\":\t\"log\"\n}",
+     "auxiliary_signals": "BIFT",
+     "axes": "q",
+     "signal": "I",
+     "title": "lysozyme, frames 2-12 averaged (02s-12s), buffer subtracted"
+    }
+   },
+   "entry_0000/02s-12s/1_average/BIFT": {
+    "attrs": {
+     "interpretation": "spectrum"
+    },
+    "value": {
+     "first": 124.03126525878906,
+     "last": 0.03731760010123253,
+     "max": 124.03126525878906,
+     "mean": 12.940991870786064,
+     "min": 0.0024387722369283438,
+     "shape": [
+      500
+     ],
+     "std": 29.63163492164046
+    }
+   },
+   "entry_0000/02s-12s/1_average/I": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "Intensity (absolute, normalized on water)",
+     "units": "arbitrary"
+    },
+    "value": {
+     "first": 99.96723937988281,
+     "last": 0.035140033811330795,
+     "max": 99.96723937988281,
+     "mean": 14.70909004723234,
+     "min": 0.0010009168181568384,
+     "shape": [
+      500
+     ],
+     "std": 28.560200726668615
+    }
+   },
+   "entry_0000/02s-12s/1_average/errors": {
+    "attrs": {
+     "interpretation": "spectrum"
+    },
+    "value": {
+     "first": 0.31616950035095215,
+     "last": 0.0001427472452633083,
+     "max": 0.31616950035095215,
+     "mean": 0.046547933835929145,
+     "min": 3.47879649780225e-05,
+     "shape": [
+      500
+     ],
+     "std": 0.09031932538890823
+    }
+   },
+   "entry_0000/02s-12s/1_average/q": {
+    "attrs": {
+     "long_name": "Scattering vector q (nm⁻¹)",
+     "units": "nm^-1"
+    },
+    "value": {
+     "first": 0.05000000074505806,
+     "last": 4.0,
+     "max": 4.0,
+     "mean": 2.0250000011324882,
+     "min": 0.05000000074505806,
+     "shape": [
+      500
+     ],
+     "std": 1.142549601036708
+    }
+   },
+   "entry_0000/02s-12s/1_average/sequence_index": {
+    "attrs": {},
+    "value": 1
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis": {
+    "attrs": {
+     "NX_class": "NXprocess",
+     "default": "result"
+    }
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/autorg": {
+    "attrs": {
+     "NX_class": "NXcollection"
+    }
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/autorg/I0": {
+    "attrs": {},
+    "value": 100.47045285366865
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/autorg/I0_error": {
+    "attrs": {},
+    "value": 8.127398615532103
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/autorg/Rg": {
+    "attrs": {
+     "unit": "nm"
+    },
+    "value": 2.376762289996972
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/autorg/Rg_error": {
+    "attrs": {
+     "unit": "nm"
+    },
+    "value": 0.18924941874775383
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/autorg/aggregated": {
+    "attrs": {},
+    "value": false
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/autorg/end_point": {
+    "attrs": {},
+    "value": 65
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/autorg/quality": {
+    "attrs": {},
+    "value": 0.995245104604442
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/autorg/qₘᵢₙ·Rg": {
+    "attrs": {},
+    "value": 0.26935051603071897
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/autorg/qₘₐₓ·Rg": {
+    "attrs": {},
+    "value": 1.3229373267468119
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/autorg/start_point": {
+    "attrs": {},
+    "value": 8
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/gpa": {
+    "attrs": {
+     "NX_class": "NXcollection"
+    }
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/gpa/I0": {
+    "attrs": {},
+    "value": 100.81397715596643
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/gpa/I0_error": {
+    "attrs": {},
+    "value": 0.15360411986024933
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/gpa/Rg": {
+    "attrs": {
+     "unit": "nm"
+    },
+    "value": 2.386829205728314
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/gpa/Rg_error": {
+    "attrs": {
+     "unit": "nm"
+    },
+    "value": 0.004854213438123346
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/gpa/aggregated": {
+    "attrs": {},
+    "value": -0.00975915918880917
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/gpa/end_point": {
+    "attrs": {},
+    "value": 63
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/gpa/quality": {
+    "attrs": {},
+    "value": 0.8370652446839757
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/gpa/start_point": {
+    "attrs": {},
+    "value": 21
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/guinier": {
+    "attrs": {
+     "NX_class": "NXcollection"
+    }
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/guinier/I0": {
+    "attrs": {},
+    "value": 100.34379658833444
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/guinier/I0_error": {
+    "attrs": {},
+    "value": 0.4017738909883304
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/guinier/Rg": {
+    "attrs": {
+     "unit": "nm"
+    },
+    "value": 2.369603825753288
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/guinier/Rg_error": {
+    "attrs": {
+     "unit": "nm"
+    },
+    "value": 0.021720071645770313
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/guinier/aggregated": {
+    "attrs": {},
+    "value": -0.010045862043904712
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/guinier/end_point": {
+    "attrs": {},
+    "value": 63
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/guinier/quality": {
+    "attrs": {},
+    "value": 0.8586867312930939
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/guinier/qₘᵢₙ·Rg": {
+    "attrs": {},
+    "value": 0.3248114262154808
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/guinier/qₘₐₓ·Rg": {
+    "attrs": {},
+    "value": 1.2814380608808114
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/guinier/start_point": {
+    "attrs": {},
+    "value": 11
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/program": {
+    "attrs": {},
+    "value": "freesas.autorg"
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/result": {
+    "attrs": {
+     "NX_class": "NXdata",
+     "SILX_style": "{\n  \"signal_scale_type\":\t\"linear\"\n}",
+     "auxiliary_signals": "fit",
+     "axes": "q2",
+     "signal": "logI",
+     "title": "Guinier analysis"
+    }
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/result/errors": {
+    "attrs": {
+     "interpretation": "spectrum"
+    },
+    "value": {
+     "first": 0.003162731183692813,
+     "last": 0.0031630811281502247,
+     "max": 0.0031631099991500378,
+     "mean": 0.0031628389119145437,
+     "min": 0.0031626529525965452,
+     "shape": [
+      74
+     ],
+     "std": 1.1012101114179358e-07
+    }
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/result/fit": {
+    "attrs": {
+     "intercept": 4.608602255577036,
+     "slope": -1.8716740970082064
+    },
+    "value": {
+     "first": 4.603923070334516,
+     "last": 3.870783096393403,
+     "max": 4.603923070334516,
+     "mean": 4.340090214967236,
+     "min": 3.870783096393403,
+     "shape": [
+      74
+     ],
+     "std": 0.21979001254983535
+    }
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/result/logI": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "log(I)"
+    },
+    "value": {
+     "first": 4.604842662811279,
+     "last": 3.853151321411133,
+     "max": 4.604842662811279,
+     "mean": 4.338255637400859,
+     "min": 3.853151321411133,
+     "shape": [
+      74
+     ],
+     "std": 0.22243239190744887
+    }
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/result/q2": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "q² (nm⁻²)",
+     "unit": "nm⁻²"
+    },
+    "value": {
+     "first": 0.0024999999441206455,
+     "last": 0.3942027986049652,
+     "max": 0.3942027986049652,
+     "mean": 0.14346089569625217,
+     "min": 0.0024999999441206455,
+     "shape": [
+      74
+     ],
+     "std": 0.11742963960296826
+    }
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/result/source": {
+    "attrs": {},
+    "value": "auto_guinier"
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/sequence_index": {
+    "attrs": {},
+    "value": 2
+   },
+   "entry_0000/02s-12s/3_dimensionless_Kratky_plot": {
+    "attrs": {
+     "NX_class": "NXprocess",
+     "default": "result"
+    }
+   },
+   "entry_0000/02s-12s/3_dimensionless_Kratky_plot/program": {
+    "attrs": {},
+    "value": "freesas.autorg"
+   },
+   "entry_0000/02s-12s/3_dimensionless_Kratky_plot/result": {
+    "attrs": {
+     "NX_class": "NXdata",
+     "SILX_style": "{\n  \"signal_scale_type\":\t\"linear\"\n}",
+     "axes": "/entry_0000/02s-12s/3_dimensionless_Kratky_plot/result/qRg",
+     "signal": "/entry_0000/02s-12s/3_dimensionless_Kratky_plot/result/q2Rg2I÷I0",
+     "title": "Dimensionless Kratky plots"
+    }
+   },
+   "entry_0000/02s-12s/3_dimensionless_Kratky_plot/result/errors": {
+    "attrs": {
+     "interpretation": "spectrum"
+    },
+    "value": {
+     "first": 4.4230408093426377e-05,
+     "last": 0.0001278052368434146,
+     "max": 0.003379885805770755,
+     "mean": 0.000726531523911035,
+     "min": 4.37561084254412e-06,
+     "shape": [
+      500
+     ],
+     "std": 0.0010262774795323653
+    }
+   },
+   "entry_0000/02s-12s/3_dimensionless_Kratky_plot/result/q2Rg2I÷I0": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "q²Rg²I(q)/I₀"
+    },
+    "value": {
+     "first": 0.013984877616167068,
+     "last": 0.03146176412701607,
+     "max": 1.0685144662857056,
+     "mean": 0.22671410941457726,
+     "min": 0.00012699163926299661,
+     "shape": [
+      500
+     ],
+     "std": 0.3260961961212853
+    }
+   },
+   "entry_0000/02s-12s/3_dimensionless_Kratky_plot/result/qRg": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "q·Rg (unit-less)"
+    },
+    "value": {
+     "first": 0.11848019063472748,
+     "last": 9.478415489196777,
+     "max": 9.478415489196777,
+     "mean": 4.798447746962309,
+     "min": 0.11848019063472748,
+     "shape": [
+      500
+     ],
+     "std": 2.707389903638223
+    }
+   },
+   "entry_0000/02s-12s/3_dimensionless_Kratky_plot/sequence_index": {
+    "attrs": {},
+    "value": 3
+   },
+   "entry_0000/02s-12s/4_invariants": {
+    "attrs": {
+     "NX_class": "NXprocess"
+    }
+   },
+   "entry_0000/02s-12s/4_invariants/program": {
+    "attrs": {},
+    "value": "freesas.invariants"
+   },
+   "entry_0000/02s-12s/4_invariants/result": {
+    "attrs": {
+     "NX_class": "NXdata"
+    }
+   },
+   "entry_0000/02s-12s/4_invariants/result/Qr": {
+    "attrs": {
+     "formula": "Rambo-Tainer: Qr = Vc/Rg",
+     "unit": "nm"
+    },
+    "value": 7.253457060096278
+   },
+   "entry_0000/02s-12s/4_invariants/result/Qr_error": {
+    "attrs": {
+     "unit": "nm"
+    },
+    "value": 0.17094478094693635
+   },
+   "entry_0000/02s-12s/4_invariants/result/Vc": {
+    "attrs": {
+     "formula": "Rambo-Tainer: Vc = I₀/(sum_q qI(q) dq)",
+     "unit": "nm²"
+    },
+    "value": 4.14581953292004
+   },
+   "entry_0000/02s-12s/4_invariants/result/Vc_error": {
+    "attrs": {
+     "unit": "nm²"
+    },
+    "value": 0.02985245714799213
+   },
+   "entry_0000/02s-12s/4_invariants/result/mass": {
+    "attrs": {
+     "formula": "Rambo-Tainer: mass = (Qr/ec)^(1/k)",
+     "unit": "kDa"
+    },
+    "value": 58.923290496314195
+   },
+   "entry_0000/02s-12s/4_invariants/result/mass_error": {
+    "attrs": {
+     "unit": "kDa"
+    },
+    "value": 1.3886659703244217
+   },
+   "entry_0000/02s-12s/4_invariants/result/volume": {
+    "attrs": {
+     "formula": "Porod: V = 2*π²I₀²/(sum_q I(q)q² dq)",
+     "unit": "nm³"
+    },
+    "value": 123.5105537435045
+   },
+   "entry_0000/02s-12s/4_invariants/sequence_index": {
+    "attrs": {},
+    "value": 4
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation": {
+    "attrs": {
+     "NX_class": "NXprocess",
+     "default": "result"
+    }
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/Chi2r": {
+    "attrs": {},
+    "value": 6278.074242603552
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/Chi2r_error": {
+    "attrs": {},
+    "value": 7.791099346814083
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/Dmax": {
+    "attrs": {},
+    "value": 9.609008132925876
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/Dmax_error": {
+    "attrs": {},
+    "value": 0.019412490778802357
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/I0": {
+    "attrs": {},
+    "value": 125.32259942123727
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/I0_error": {
+    "attrs": {},
+    "value": 0.2781684054235348
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/Rg": {
+    "attrs": {},
+    "value": 3.5305394733184445
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/Rg_error": {
+    "attrs": {},
+    "value": 0.008546224412759637
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/S0": {
+    "attrs": {},
+    "value": 0.003496751542803544
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/S0_error": {
+    "attrs": {},
+    "value": 1.345378874384318e-05
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/alpha": {
+    "attrs": {},
+    "value": 102555847.57744315
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/alpha_error": {
+    "attrs": {},
+    "value": 139622.54647863234
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration": {
+    "attrs": {
+     "NX_class": "NXcollection"
+    }
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration/Dmax_inf": {
+    "attrs": {},
+    "value": 4.739207651506576
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration/Dmax_scan_steps": {
+    "attrs": {},
+    "value": 5
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration/Dmax_sup": {
+    "attrs": {},
+    "value": 9.478415303013152
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration/Dmax÷Rg": {
+    "attrs": {},
+    "value": 3
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration/Monte-Carlo_steps": {
+    "attrs": {},
+    "value": 0
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration/Powell_steps": {
+    "attrs": {},
+    "value": 217
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration/Rg": {
+    "attrs": {},
+    "value": 2.369603825753288
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration/alpha_inf": {
+    "attrs": {},
+    "value": 4.4672563141955585e-11
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration/alpha_scan_steps": {
+    "attrs": {},
+    "value": 11
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration/alpha_sup": {
+    "attrs": {},
+    "value": 22385104629.4861
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration/npt": {
+    "attrs": {},
+    "value": 64
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/logP": {
+    "attrs": {},
+    "value": -1727267.7644055698
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/logP_error": {
+    "attrs": {},
+    "value": 244.61200791896792
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/program": {
+    "attrs": {},
+    "value": "freesas.bift"
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/result": {
+    "attrs": {
+     "NX_class": "NXdata",
+     "SILX_style": "{\n  \"signal_scale_type\":\t\"linear\"\n}",
+     "axes": "r",
+     "signal": "p(r)",
+     "title": "Pair distance distribution function p(r)"
+    }
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/result/errors": {
+    "attrs": {},
+    "value": {
+     "first": 0.0,
+     "last": 0.00633562297635554,
+     "max": 0.010174103028746629,
+     "mean": 0.004172654951716186,
+     "min": 0.0,
+     "shape": [
+      65
+     ],
+     "std": 0.0032802860041084765
+    }
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/result/p(r)": {
+    "attrs": {
+     "interpretation": "spectrum"
+    },
+    "value": {
+     "first": 0.0,
+     "last": 0.004257191438227892,
+     "max": 1.8956276178359985,
+     "mean": 1.0227563469240872,
+     "min": 0.0,
+     "shape": [
+      65
+     ],
+     "std": 0.5997276009944755
+    }
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/result/r": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "radius r(nm)",
+     "unit": "nm"
+    },
+    "value": {
+     "first": 0.0,
+     "last": 9.601251602172852,
+     "max": 9.601251602172852,
+     "mean": 4.800625988611809,
+     "min": 0.0,
+     "shape": [
+      65
+     ],
+     "std": 2.814616473077325
+    }
+   },
+   "entry_0000/02s-12s/5_indirect_Fourier_transformation/sequence_index": {
+    "attrs": {},
+    "value": 5
+   },
+   "entry_0000/02s-12s/first_frame": {
+    "attrs": {},
+    "value": 2
+   },
+   "entry_0000/02s-12s/last_frame": {
+    "attrs": {},
+    "value": 12
+   },
+   "entry_0000/02s-12s/sequence_index": {
+    "attrs": {},
+    "value": 0
+   },
+   "entry_0000/13s-18s": {
+    "attrs": {
+     "NX_class": "NXprocess",
+     "default": "1_average"
+    }
+   },
+   "entry_0000/13s-18s/1_average": {
+    "attrs": {
+     "NX_class": "NXdata",
+     "SILX_style": "{\n  \"signal_scale_type\":\t\"log\"\n}",
+     "axes": "q",
+     "signal": "I",
+     "title": "lysozyme, frames 13-18 averaged (13s-18s), buffer subtracted"
+    }
+   },
+   "entry_0000/13s-18s/1_average/I": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "Intensity (absolute, normalized on water)",
+     "units": "arbitrary"
+    },
+    "value": {
+     "first": -1.0,
+     "last": -1.0,
+     "max": -1.0,
+     "mean": -1.0,
+     "min": -1.0,
+     "shape": [
+      500
+     ],
+     "std": 0.0
+    }
+   },
+   "entry_0000/13s-18s/1_average/errors": {
+    "attrs": {
+     "interpretation": "spectrum"
+    },
+    "value": {
+     "first": 0.4470759630203247,
+     "last": 0.00020154986123088747,
+     "max": 0.4470759630203247,
+     "mean": 0.06580341112010502,
+     "min": 4.918327249470167e-05,
+     "shape": [
+      500
+     ],
+     "std": 0.12767564047700994
+    }
+   },
+   "entry_0000/13s-18s/1_average/q": {
+    "attrs": {
+     "long_name": "Scattering vector q (nm⁻¹)",
+     "units": "nm^-1"
+    },
+    "value": {
+     "first": 0.05000000074505806,
+     "last": 4.0,
+     "max": 4.0,
+     "mean": 2.0250000011324882,
+     "min": 0.05000000074505806,
+     "shape": [
+      500
+     ],
+     "std": 1.142549601036708
+    }
+   },
+   "entry_0000/13s-18s/1_average/sequence_index": {
+    "attrs": {},
+    "value": 7
+   },
+   "entry_0000/13s-18s/2_Guinier_analysis": {
+    "attrs": {
+     "NX_class": "NXprocess",
+     "default": "result"
+    }
+   },
+   "entry_0000/13s-18s/2_Guinier_analysis/autorg": {
+    "attrs": {
+     "NX_class": "NXcollection"
+    }
+   },
+   "entry_0000/13s-18s/2_Guinier_analysis/autorg/Failed": {
+    "attrs": {},
+    "value": ""
+   },
+   "entry_0000/13s-18s/2_Guinier_analysis/gpa": {
+    "attrs": {
+     "NX_class": "NXcollection"
+    }
+   },
+   "entry_0000/13s-18s/2_Guinier_analysis/gpa/Failed": {
+    "attrs": {},
+    "value": ""
+   },
+   "entry_0000/13s-18s/2_Guinier_analysis/guinier": {
+    "attrs": {
+     "NX_class": "NXcollection"
+    }
+   },
+   "entry_0000/13s-18s/2_Guinier_analysis/guinier/Failed": {
+    "attrs": {},
+    "value": ""
+   },
+   "entry_0000/13s-18s/2_Guinier_analysis/program": {
+    "attrs": {},
+    "value": "freesas.autorg"
+   },
+   "entry_0000/13s-18s/2_Guinier_analysis/result": {
+    "attrs": {
+     "NX_class": "NXdata",
+     "SILX_style": "{\n  \"signal_scale_type\":\t\"linear\"\n}",
+     "auxiliary_signals": "fit",
+     "axes": "q2",
+     "signal": "logI",
+     "title": "Guinier analysis"
+    }
+   },
+   "entry_0000/13s-18s/2_Guinier_analysis/result/errors": {
+    "attrs": {
+     "interpretation": "spectrum"
+    },
+    "value": []
+   },
+   "entry_0000/13s-18s/2_Guinier_analysis/result/logI": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "log(I)"
+    },
+    "value": []
+   },
+   "entry_0000/13s-18s/2_Guinier_analysis/result/q2": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "q² (nm⁻²)",
+     "unit": "nm⁻²"
+    },
+    "value": []
+   },
+   "entry_0000/13s-18s/2_Guinier_analysis/result/source": {
+    "attrs": {},
+    "value": "None"
+   },
+   "entry_0000/13s-18s/2_Guinier_analysis/sequence_index": {
+    "attrs": {},
+    "value": 8
+   },
+   "entry_0000/13s-18s/first_frame": {
+    "attrs": {},
+    "value": 13
+   },
+   "entry_0000/13s-18s/last_frame": {
+    "attrs": {},
+    "value": 18
+   },
+   "entry_0000/13s-18s/sequence_index": {
+    "attrs": {},
+    "value": 6
+   },
+   "entry_0000/program_name": {
+    "attrs": {},
+    "value": "test"
+   },
+   "entry_0000/title": {
+    "attrs": {},
+    "value": "description of experiment"
+   }
+  }
+ },
+ "subtract": {
+  "attrs": {
+   "Dmax": 6.166437930209519,
+   "I0": 100.12935181894996,
+   "Rg": 2.363124811209809,
+   "Vc": 4.203627275121983,
+   "mass": 60.74404234553558,
+   "to_pyarch": [
+    "bift",
+    "buffers",
+    "rti",
+    "volume"
+   ],
+   "volume": 143.3707453433545
+  },
+  "hdf5": {
+   "entry_0000": {
+    "attrs": {
+     "NX_class": "NXentry",
+     "default": "2_azimuthal_integration/result"
+    }
+   },
+   "entry_0000/0_measurement": {
+    "attrs": {
+     "NX_class": "NXcollection"
+    }
+   },
+   "entry_0000/0_measurement/sequence_index": {
+    "attrs": {},
+    "value": 0
+   },
+   "entry_0000/1_correlation_mapping": {
+    "attrs": {
+     "NX_class": "NXprocess",
+     "default": "result"
+    }
+   },
+   "entry_0000/1_correlation_mapping/configuration": {
+    "attrs": {
+     "NX_class": "NXcollection"
+    }
+   },
+   "entry_0000/1_correlation_mapping/configuration/fidelity_abs": {
+    "attrs": {},
+    "value": 0.0
+   },
+   "entry_0000/1_correlation_mapping/configuration/fidelity_rel": {
+    "attrs": {},
+    "value": 0.0
+   },
+   "entry_0000/1_correlation_mapping/program": {
+    "attrs": {},
+    "value": "freesas.cormap"
+   },
+   "entry_0000/1_correlation_mapping/result": {
+    "attrs": {
+     "NX_class": "NXdata",
+     "SILX_style": "{\n  \"signal_scale_type\":\t\"linear\"\n}",
+     "signal": "probability"
+    }
+   },
+   "entry_0000/1_correlation_mapping/result/count": {
+    "attrs": {
+     "interpretation": "image",
+     "long_name": "Longest sequence where curves do not cross each other"
+    },
+    "value": {
+     "first": 0.0,
+     "last": 0.0,
+     "max": 0.0,
+     "mean": 0.0,
+     "min": 0.0,
+     "shape": [
+      2,
+      2
+     ],
+     "std": 0.0
+    }
+   },
+   "entry_0000/1_correlation_mapping/result/probability": {
+    "attrs": {
+     "interpretation": "image",
+     "long_name": "Probability to be the same"
+    },
+    "value": {
+     "first": 1.0,
+     "last": 1.0,
+     "max": 1.0,
+     "mean": 1.0,
+     "min": 1.0,
+     "shape": [
+      2,
+      2
+     ],
+     "std": 0.0
+    }
+   },
+   "entry_0000/1_correlation_mapping/result/to_merge": {
+    "attrs": {
+     "long_name": "Index of equivalent frames"
+    },
+    "value": {
+     "first": 0.0,
+     "last": 1.0,
+     "max": 1.0,
+     "mean": 0.5,
+     "min": 0.0,
+     "shape": [
+      2
+     ],
+     "std": 0.5
+    }
+   },
+   "entry_0000/1_correlation_mapping/sequence_index": {
+    "attrs": {},
+    "value": 1
+   },
+   "entry_0000/2_azimuthal_integration": {
+    "attrs": {
+     "NX_class": "NXprocess",
+     "default": "result"
+    }
+   },
+   "entry_0000/2_azimuthal_integration/configuration": {
+    "attrs": {
+     "NX_class": "NXnote"
+    }
+   },
+   "entry_0000/2_azimuthal_integration/configuration/format": {
+    "attrs": {},
+    "value": "text/json"
+   },
+   "entry_0000/2_azimuthal_integration/configuration/polarization_factor": {
+    "attrs": {
+     "comment": "Between -1 and +1, 0 for circular"
+    },
+    "value": 0.9
+   },
+   "entry_0000/2_azimuthal_integration/program": {
+    "attrs": {},
+    "value": "pyFAI"
+   },
+   "entry_0000/2_azimuthal_integration/result": {
+    "attrs": {
+     "NX_class": "NXdata",
+     "SILX_style": "{\n  \"signal_scale_type\":\t\"log\"\n}",
+     "auxiliary_signals": "BIFT",
+     "axes": "q",
+     "signal": "I",
+     "title": "lysozyme, subtracted"
+    }
+   },
+   "entry_0000/2_azimuthal_integration/result/BIFT": {
+    "attrs": {
+     "interpretation": "spectrum"
+    },
+    "value": {
+     "first": 100.46981048583984,
+     "last": 0.01947540044784546,
+     "max": 100.46981048583984,
+     "mean": 40.84234944797742,
+     "min": 0.0030608358792960644,
+     "shape": [
+      300
+     ],
+     "std": 36.22431590262808
+    }
+   },
+   "entry_0000/2_azimuthal_integration/result/I": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "Intensity (absolute, normalized on water)",
+     "units": "arbitrary"
+    },
+    "value": {
+     "first": 100.98974609375,
+     "last": 0.011148710735142231,
+     "max": 100.98974609375,
+     "mean": 40.750031952430724,
+     "min": 0.0010503883240744472,
+     "shape": [
+      300
+     ],
+     "std": 36.07687435582105
+    }
+   },
+   "entry_0000/2_azimuthal_integration/result/errors": {
+    "attrs": {
+     "interpretation": "spectrum"
+    },
+    "value": {
+     "first": 0.5894606113433838,
+     "last": 0.009038046933710575,
+     "max": 0.7089082598686218,
+     "mean": 0.05760454588026429,
+     "min": 0.0023249653168022633,
+     "shape": [
+      300
+     ],
+     "std": 0.08969567789067204
+    }
+   },
+   "entry_0000/2_azimuthal_integration/result/q": {
+    "attrs": {
+     "long_name": "Scattering vector q (nm⁻¹)",
+     "units": "nm^-1"
+    },
+    "value": {
+     "first": 0.006354835350066423,
+     "last": 1.5216606855392456,
+     "max": 1.5216606855392456,
+     "mean": 0.7640077335340902,
+     "min": 0.006354835350066423,
+     "shape": [
+      300
+     ],
+     "std": 0.43889164669051506
+    }
+   },
+   "entry_0000/2_azimuthal_integration/sequence_index": {
+    "attrs": {},
+    "value": 2
+   },
+   "entry_0000/2_buffer_subtraction": {
+    "attrs": {
+     "NX_class": "NXprocess",
+     "default": "result"
+    }
+   },
+   "entry_0000/2_buffer_subtraction/program": {
+    "attrs": {},
+    "value": "dahu.plugins.bm29.subtracte.subtractbuffer"
+   },
+   "entry_0000/2_buffer_subtraction/result": {
+    "attrs": {
+     "NX_class": "NXdata",
+     "SILX_style": "{\n  \"signal_scale_type\":\t\"log\"\n}",
+     "signal": "intensity_normed"
+    }
+   },
+   "entry_0000/2_buffer_subtraction/result/intensity_normed": {
+    "attrs": {
+     "formula": "sample_signal - weighted_mean(buffer_signal_i)",
+     "interpretation": "image"
+    },
+    "value": {
+     "first": 100.34390258789062,
+     "last": 0.013384010642766953,
+     "max": 102.4922103881836,
+     "mean": 31.36749734943408,
+     "min": 0.0009326566359959543,
+     "shape": [
+      200,
+      200
+     ],
+     "std": 27.344042078520733
+    }
+   },
+   "entry_0000/2_buffer_subtraction/result/intensity_std": {
+    "attrs": {
+     "formula": "sqrt( sample_variance + weighted_mean(buffer_variance_i) )",
+     "interpretation": "image",
+     "method": "quadratic sum of sample error and buffer errors"
+    },
+    "value": {
+     "first": 1.0144991874694824,
+     "last": 0.01565198227763176,
+     "max": 1.0359810590744019,
+     "mean": 0.32524390899280553,
+     "min": 0.015563652850687504,
+     "shape": [
+      200,
+      200
+     ],
+     "std": 0.27298578291916786
+    }
+   },
+   "entry_0000/2_buffer_subtraction/sequence_index": {
+    "attrs": {},
+    "value": 2
+   },
+   "entry_0000/3_Guinier_analysis": {
+    "attrs": {
+     "NX_class": "NXprocess",
+     "default": "result"
+    }
+   },
+   "entry_0000/3_Guinier_analysis/autorg": {
+    "attrs": {
+     "NX_class": "NXcollection"
+    }
+   },
+   "entry_0000/3_Guinier_analysis/autorg/I0": {
+    "attrs": {},
+    "value": 100.48336309447852
+   },
+   "entry_0000/3_Guinier_analysis/autorg/I0_error": {
+    "attrs": {},
+    "value": 8.194308123039308
+   },
+   "entry_0000/3_Guinier_analysis/autorg/Rg": {
+    "attrs": {
+     "unit": "nm"
+    },
+    "value": 2.3760718884606877
+   },
+   "entry_0000/3_Guinier_analysis/autorg/Rg_error": {
+    "attrs": {
+     "unit": "nm"
+    },
+    "value": 0.21613597707161142
+   },
+   "entry_0000/3_Guinier_analysis/autorg/aggregated": {
+    "attrs": {},
+    "value": false
+   },
+   "entry_0000/3_Guinier_analysis/autorg/end_point": {
+    "attrs": {},
+    "value": 109
+   },
+   "entry_0000/3_Guinier_analysis/autorg/quality": {
+    "attrs": {},
+    "value": 0.9963399746169281
+   },
+   "entry_0000/3_Guinier_analysis/autorg/qₘᵢₙ·Rg": {
+    "attrs": {},
+    "value": 0.255934027824259
+   },
+   "entry_0000/3_Guinier_analysis/autorg/qₘₐₓ·Rg": {
+    "attrs": {},
+    "value": 1.3156057478910703
+   },
+   "entry_0000/3_Guinier_analysis/autorg/start_point": {
+    "attrs": {},
+    "value": 20
+   },
+   "entry_0000/3_Guinier_analysis/gpa": {
+    "attrs": {
+     "NX_class": "NXcollection"
+    }
+   },
+   "entry_0000/3_Guinier_analysis/gpa/I0": {
+    "attrs": {},
+    "value": 100.53585146112978
+   },
+   "entry_0000/3_Guinier_analysis/gpa/I0_error": {
+    "attrs": {},
+    "value": 0.05101108811948589
+   },
+   "entry_0000/3_Guinier_analysis/gpa/Rg": {
+    "attrs": {
+     "unit": "nm"
+    },
+    "value": 2.375612297569503
+   },
+   "entry_0000/3_Guinier_analysis/gpa/Rg_error": {
+    "attrs": {
+     "unit": "nm"
+    },
+    "value": 0.0017772051096679117
+   },
+   "entry_0000/3_Guinier_analysis/gpa/aggregated": {
+    "attrs": {},
+    "value": -0.0077692877487395605
+   },
+   "entry_0000/3_Guinier_analysis/gpa/end_point": {
+    "attrs": {},
+    "value": 107
+   },
+   "entry_0000/3_Guinier_analysis/gpa/quality": {
+    "attrs": {},
+    "value": 0.8392264685065239
+   },
+   "entry_0000/3_Guinier_analysis/gpa/start_point": {
+    "attrs": {},
+    "value": 41
+   },
+   "entry_0000/3_Guinier_analysis/guinier": {
+    "attrs": {
+     "NX_class": "NXcollection"
+    }
+   },
+   "entry_0000/3_Guinier_analysis/guinier/I0": {
+    "attrs": {},
+    "value": 100.12935181894996
+   },
+   "entry_0000/3_Guinier_analysis/guinier/I0_error": {
+    "attrs": {},
+    "value": 0.2095498185442573
+   },
+   "entry_0000/3_Guinier_analysis/guinier/Rg": {
+    "attrs": {
+     "unit": "nm"
+    },
+    "value": 2.363124811209809
+   },
+   "entry_0000/3_Guinier_analysis/guinier/Rg_error": {
+    "attrs": {
+     "unit": "nm"
+    },
+    "value": 0.013995930692746133
+   },
+   "entry_0000/3_Guinier_analysis/guinier/aggregated": {
+    "attrs": {},
+    "value": -0.00792795862357625
+   },
+   "entry_0000/3_Guinier_analysis/guinier/end_point": {
+    "attrs": {},
+    "value": 107
+   },
+   "entry_0000/3_Guinier_analysis/guinier/quality": {
+    "attrs": {},
+    "value": 0.8966868079729783
+   },
+   "entry_0000/3_Guinier_analysis/guinier/qₘᵢₙ·Rg": {
+    "attrs": {},
+    "value": 0.07489781663895491
+   },
+   "entry_0000/3_Guinier_analysis/guinier/qₘₐₓ·Rg": {
+    "attrs": {},
+    "value": 1.284484869962129
+   },
+   "entry_0000/3_Guinier_analysis/guinier/start_point": {
+    "attrs": {},
+    "value": 5
+   },
+   "entry_0000/3_Guinier_analysis/program": {
+    "attrs": {},
+    "value": "freesas.autorg"
+   },
+   "entry_0000/3_Guinier_analysis/result": {
+    "attrs": {
+     "NX_class": "NXdata",
+     "SILX_style": "{\n  \"signal_scale_type\":\t\"linear\"\n}",
+     "auxiliary_signals": "fit",
+     "axes": "q2",
+     "signal": "logI",
+     "title": "Guinier analysis"
+    }
+   },
+   "entry_0000/3_Guinier_analysis/result/errors": {
+    "attrs": {
+     "interpretation": "spectrum"
+    },
+    "value": {
+     "first": 0.005836836062371731,
+     "last": 0.0007874920847825706,
+     "max": 0.007149974349886179,
+     "mean": 0.0014341633251470124,
+     "min": 0.0007649458711966872,
+     "shape": [
+      124
+     ],
+     "std": 0.0009931486038982755
+    }
+   },
+   "entry_0000/3_Guinier_analysis/result/fit": {
+    "attrs": {
+     "intercept": 4.606462868303672,
+     "slope": -1.861452957785132
+    },
+    "value": {
+     "first": 4.606387695509813,
+     "last": 3.868336765658427,
+     "max": 4.606387695509813,
+     "mean": 4.356932704059178,
+     "min": 3.868336765658427,
+     "shape": [
+      124
+     ],
+     "std": 0.22165864878619168
+    }
+   },
+   "entry_0000/3_Guinier_analysis/result/logI": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "log(I)"
+    },
+    "value": {
+     "first": 4.615018844604492,
+     "last": 3.849559783935547,
+     "max": 4.615018844604492,
+     "mean": 4.355748528434384,
+     "min": 3.849559783935547,
+     "shape": [
+      124
+     ],
+     "std": 0.22470867261297062
+    }
+   },
+   "entry_0000/3_Guinier_analysis/result/q2": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "q² (nm⁻²)",
+     "unit": "nm⁻²"
+    },
+    "value": {
+     "first": 4.038393308292143e-05,
+     "last": 0.39653223752975464,
+     "max": 0.39653223752975464,
+     "mean": 0.13405128713915357,
+     "min": 4.038393308292143e-05,
+     "shape": [
+      124
+     ],
+     "std": 0.11907829798048503
+    }
+   },
+   "entry_0000/3_Guinier_analysis/result/source": {
+    "attrs": {},
+    "value": "auto_guinier"
+   },
+   "entry_0000/3_Guinier_analysis/sequence_index": {
+    "attrs": {},
+    "value": 3
+   },
+   "entry_0000/4_dimensionless_Kratky_plot": {
+    "attrs": {
+     "NX_class": "NXprocess",
+     "default": "result"
+    }
+   },
+   "entry_0000/4_dimensionless_Kratky_plot/program": {
+    "attrs": {},
+    "value": "freesas.autorg"
+   },
+   "entry_0000/4_dimensionless_Kratky_plot/result": {
+    "attrs": {
+     "NX_class": "NXdata",
+     "SILX_style": "{\n  \"signal_scale_type\":\t\"linear\"\n}",
+     "axes": "/entry_0000/4_dimensionless_Kratky_plot/result/qRg",
+     "signal": "/entry_0000/4_dimensionless_Kratky_plot/result/q2Rg2I÷I0",
+     "title": "Dimensionless Kratky plots"
+    }
+   },
+   "entry_0000/4_dimensionless_Kratky_plot/result/errors": {
+    "attrs": {
+     "interpretation": "spectrum"
+    },
+    "value": {
+     "first": 1.3276247727844748e-06,
+     "last": 0.0011671377578750253,
+     "max": 0.0011671377578750253,
+     "mean": 0.0004772342707955583,
+     "min": 1.3276247727844748e-06,
+     "shape": [
+      300
+     ],
+     "std": 0.00023802120910192866
+    }
+   },
+   "entry_0000/4_dimensionless_Kratky_plot/result/q2Rg2I÷I0": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "q²Rg²I(q)/I₀"
+    },
+    "value": {
+     "first": 0.00022745622845832258,
+     "last": 0.0014397006016224623,
+     "max": 1.06220281124115,
+     "mean": 0.5057013453644564,
+     "min": 0.00013116301852278411,
+     "shape": [
+      300
+     ],
+     "std": 0.37969225840045046
+    }
+   },
+   "entry_0000/4_dimensionless_Kratky_plot/result/qRg": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "q·Rg (unit-less)"
+    },
+    "value": {
+     "first": 0.015017269179224968,
+     "last": 3.595874071121216,
+     "max": 3.595874071121216,
+     "mean": 1.8054456305814286,
+     "min": 0.015017269179224968,
+     "shape": [
+      300
+     ],
+     "std": 1.0371557378634282
+    }
+   },
+   "entry_0000/4_dimensionless_Kratky_plot/sequence_index": {
+    "attrs": {},
+    "value": 4
+   },
+   "entry_0000/5_invariants": {
+    "attrs": {
+     "NX_class": "NXprocess"
+    }
+   },
+   "entry_0000/5_invariants/program": {
+    "attrs": {},
+    "value": "freesas.invariants"
+   },
+   "entry_0000/5_invariants/result": {
+    "attrs": {
+     "NX_class": "NXdata"
+    }
+   },
+   "entry_0000/5_invariants/result/Qr": {
+    "attrs": {
+     "formula": "Rambo-Tainer: Qr = Vc/Rg",
+     "unit": "nm"
+    },
+    "value": 7.477591612735431
+   },
+   "entry_0000/5_invariants/result/Qr_error": {
+    "attrs": {
+     "unit": "nm"
+    },
+    "value": 0.09025958466250963
+   },
+   "entry_0000/5_invariants/result/Vc": {
+    "attrs": {
+     "formula": "Rambo-Tainer: Vc = I₀/(sum_q qI(q) dq)",
+     "unit": "nm²"
+    },
+    "value": 4.203627275121983
+   },
+   "entry_0000/5_invariants/result/Vc_error": {
+    "attrs": {
+     "unit": "nm²"
+    },
+    "value": 0.012922031723401483
+   },
+   "entry_0000/5_invariants/result/mass": {
+    "attrs": {
+     "formula": "Rambo-Tainer: mass = (Qr/ec)^(1/k)",
+     "unit": "kDa"
+    },
+    "value": 60.74404234553558
+   },
+   "entry_0000/5_invariants/result/mass_error": {
+    "attrs": {
+     "unit": "kDa"
+    },
+    "value": 0.733221646324205
+   },
+   "entry_0000/5_invariants/result/volume": {
+    "attrs": {
+     "formula": "Porod: V = 2*π²I₀²/(sum_q I(q)q² dq)",
+     "unit": "nm³"
+    },
+    "value": 143.3707453433545
+   },
+   "entry_0000/5_invariants/sequence_index": {
+    "attrs": {},
+    "value": 5
+   },
+   "entry_0000/6_indirect_Fourier_transformation": {
+    "attrs": {
+     "NX_class": "NXprocess",
+     "default": "result"
+    }
+   },
+   "entry_0000/6_indirect_Fourier_transformation/Chi2r": {
+    "attrs": {},
+    "value": 6.978138606663934
+   },
+   "entry_0000/6_indirect_Fourier_transformation/Chi2r_error": {
+    "attrs": {},
+    "value": 0.01413032971352073
+   },
+   "entry_0000/6_indirect_Fourier_transformation/Dmax": {
+    "attrs": {},
+    "value": 6.166437930209519
+   },
+   "entry_0000/6_indirect_Fourier_transformation/Dmax_error": {
+    "attrs": {},
+    "value": 0.00039405062595763025
+   },
+   "entry_0000/6_indirect_Fourier_transformation/I0": {
+    "attrs": {},
+    "value": 100.47716871230155
+   },
+   "entry_0000/6_indirect_Fourier_transformation/I0_error": {
+    "attrs": {},
+    "value": 0.00048534615376822564
+   },
+   "entry_0000/6_indirect_Fourier_transformation/Rg": {
+    "attrs": {},
+    "value": 2.335446717072066
+   },
+   "entry_0000/6_indirect_Fourier_transformation/Rg_error": {
+    "attrs": {},
+    "value": 1.385687647409433e-05
+   },
+   "entry_0000/6_indirect_Fourier_transformation/S0": {
+    "attrs": {},
+    "value": 0.0006580743353801065
+   },
+   "entry_0000/6_indirect_Fourier_transformation/S0_error": {
+    "attrs": {},
+    "value": 4.603908330630732e-07
+   },
+   "entry_0000/6_indirect_Fourier_transformation/alpha": {
+    "attrs": {},
+    "value": 292934.18351629947
+   },
+   "entry_0000/6_indirect_Fourier_transformation/alpha_error": {
+    "attrs": {},
+    "value": 580.3650627713624
+   },
+   "entry_0000/6_indirect_Fourier_transformation/configuration": {
+    "attrs": {
+     "NX_class": "NXcollection"
+    }
+   },
+   "entry_0000/6_indirect_Fourier_transformation/configuration/Dmax_inf": {
+    "attrs": {},
+    "value": 4.726249622419618
+   },
+   "entry_0000/6_indirect_Fourier_transformation/configuration/Dmax_scan_steps": {
+    "attrs": {},
+    "value": 5
+   },
+   "entry_0000/6_indirect_Fourier_transformation/configuration/Dmax_sup": {
+    "attrs": {},
+    "value": 9.452499244839236
+   },
+   "entry_0000/6_indirect_Fourier_transformation/configuration/Dmax÷Rg": {
+    "attrs": {},
+    "value": 3
+   },
+   "entry_0000/6_indirect_Fourier_transformation/configuration/Monte-Carlo_steps": {
+    "attrs": {},
+    "value": 0
+   },
+   "entry_0000/6_indirect_Fourier_transformation/configuration/Powell_steps": {
+    "attrs": {},
+    "value": 122
+   },
+   "entry_0000/6_indirect_Fourier_transformation/configuration/Rg": {
+    "attrs": {},
+    "value": 2.363124811209809
+   },
+   "entry_0000/6_indirect_Fourier_transformation/configuration/alpha_inf": {
+    "attrs": {},
+    "value": 7.72086607218841e-10
+   },
+   "entry_0000/6_indirect_Fourier_transformation/configuration/alpha_scan_steps": {
+    "attrs": {},
+    "value": 11
+   },
+   "entry_0000/6_indirect_Fourier_transformation/configuration/alpha_sup": {
+    "attrs": {},
+    "value": 1295191485.8387887
+   },
+   "entry_0000/6_indirect_Fourier_transformation/configuration/npt": {
+    "attrs": {},
+    "value": 64
+   },
+   "entry_0000/6_indirect_Fourier_transformation/logP": {
+    "attrs": {},
+    "value": -1035.9525809498696
+   },
+   "entry_0000/6_indirect_Fourier_transformation/logP_error": {
+    "attrs": {},
+    "value": 2.020190749727024
+   },
+   "entry_0000/6_indirect_Fourier_transformation/program": {
+    "attrs": {},
+    "value": "freesas.bift"
+   },
+   "entry_0000/6_indirect_Fourier_transformation/result": {
+    "attrs": {
+     "NX_class": "NXdata",
+     "SILX_style": "{\n  \"signal_scale_type\":\t\"linear\"\n}",
+     "axes": "r",
+     "signal": "p(r)",
+     "title": "Pair distance distribution function p(r)"
+    }
+   },
+   "entry_0000/6_indirect_Fourier_transformation/result/errors": {
+    "attrs": {},
+    "value": {
+     "first": 0.0,
+     "last": 0.00018874230008823238,
+     "max": 0.00018874230008823238,
+     "mean": 3.853201222131795e-05,
+     "min": 0.0,
+     "shape": [
+      65
+     ],
+     "std": 3.138125759502748e-05
+    }
+   },
+   "entry_0000/6_indirect_Fourier_transformation/result/p(r)": {
+    "attrs": {
+     "interpretation": "spectrum"
+    },
+    "value": {
+     "first": 0.0,
+     "last": 3.519905294524506e-05,
+     "max": 2.6557421684265137,
+     "mean": 1.276718085756315,
+     "min": 0.0,
+     "shape": [
+      65
+     ],
+     "std": 0.8937102380740739
+    }
+   },
+   "entry_0000/6_indirect_Fourier_transformation/result/r": {
+    "attrs": {
+     "interpretation": "spectrum",
+     "long_name": "radius r(nm)",
+     "unit": "nm"
+    },
+    "value": {
+     "first": 0.0,
+     "last": 6.166365146636963,
+     "max": 6.166365146636963,
+     "mean": 3.0831824805874093,
+     "min": 0.0,
+     "shape": [
+      65
+     ],
+     "std": 1.807675962316465
+    }
+   },
+   "entry_0000/6_indirect_Fourier_transformation/sequence_index": {
+    "attrs": {},
+    "value": 6
+   },
+   "entry_0000/configuration": {
+    "attrs": {
+     "NX_class": "NXnote"
+    }
+   },
+   "entry_0000/configuration/format": {
+    "attrs": {},
+    "value": "text/json"
+   },
+   "entry_0000/lysozyme": {
+    "attrs": {
+     "NX_class": "NXsample"
+    }
+   },
+   "entry_0000/lysozyme/buffer": {
+    "attrs": {
+     "comment": "Buffer description"
+    },
+    "value": "tris"
+   },
+   "entry_0000/lysozyme/concentration": {
+    "attrs": {
+     "units": "mg/mL"
+    },
+    "value": 1.0
+   },
+   "entry_0000/program_name": {
+    "attrs": {},
+    "value": "test"
+   },
+   "entry_0000/title": {
+    "attrs": {},
+    "value": "BioSaxs buffer subtraction"
+   }
+  }
+ }
+}
