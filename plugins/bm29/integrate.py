@@ -554,9 +554,9 @@ class IntegrateMultiframe(Plugin):
         integration_grp.attrs["default"] = posixpath.relpath(integration_data.name, integration_grp.name)
 
 
-    # Process 1bis: renormalize curves based on smoothed beam-stop diode values (& updated variance)
-        renormalize_grp = nxs.new_class(entry_grp, "1bis_renormalize", "NXprocess")
-        renormalize_result = self.process1bis_renormalize(self.input_frames)
+    # Process 2: renormalize curves based on smoothed beam-stop diode values (& updated variance)
+        renormalize_grp = nxs.new_class(entry_grp, "2_renormalize", "NXprocess")
+        renormalize_result = self.process2_renormalize(self.input_frames)
 
         q = numpy.ascontiguousarray(renormalize_result.radial, numpy.float32)
         I = numpy.ascontiguousarray(renormalize_result.intensity, dtype=numpy.float32)
@@ -618,7 +618,7 @@ class IntegrateMultiframe(Plugin):
 
         renormalize_grp.attrs["default"] = posixpath.relpath(renormalize_data.name, renormalize_grp.name)
 
-    # Process 2: Freesas cormap
+    # Process 3: Freesas cormap
         cormap_grp = nxs.new_class(entry_grp, "2_correlation_mapping", "NXprocess")
         cormap_grp["sequence_index"] = self.seq()
         cormap_grp["program"] = "freesas.cormap"
@@ -633,8 +633,8 @@ class IntegrateMultiframe(Plugin):
         cfg_grp["fidelity_abs"] = fidelity_abs
         cfg_grp["fidelity_rel"] = fidelity_rel
 
-    # Stage 2 processing
-        cormap_result = self.process2_cormap(integrate1_result.intensity, fidelity_abs, fidelity_rel)
+    # Stage 3 processing
+        cormap_result = self.process3_cormap(integrate1_result.intensity, fidelity_abs, fidelity_rel)
         cormap_data.attrs["signal"] = "probability"
         cormap_ds = cormap_data.create_dataset("probability", data=cormap_result.probability)
         cormap_ds.attrs["interpretation"] = "image"
@@ -765,7 +765,7 @@ class IntegrateMultiframe(Plugin):
             radial = res.radial
         return IntegrationResult(radial, intensity, sigma, spottiness, accumulators, raw)
 
-    def process1bis_renormalize(self, result:IntegrationResult):
+    def process2_renormalize(self, result:IntegrationResult):
         """When in sample-changer mode:
         renormalize intensities and sem based on the the
         linear regression of the diode values.
