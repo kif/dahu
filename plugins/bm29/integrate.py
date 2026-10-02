@@ -544,6 +544,9 @@ class IntegrateMultiframe(Plugin):
             mad = numpy.median(abs(integrate1_result.spottiness-median))
             self.valid_frames = integrate1_result.spottiness < max(median + self.spot_thres * mad, 1.1 * median)
             hplc_data.create_dataset("isotropic", data=self.valid_frames)
+        if self.valid_frames is None:
+            # Without spottiness, all frames are considered as valid
+            self.valid_frames = numpy.ones(len(integrate1_result.intensity), dtype=bool)
 
         if self.input.get("hplc_mode"):
             entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
@@ -556,7 +559,7 @@ class IntegrateMultiframe(Plugin):
 
     # Process 2: renormalize curves based on smoothed beam-stop diode values (& updated variance)
         renormalize_grp = nxs.new_class(entry_grp, "2_renormalize", "NXprocess")
-        renormalize_result = self.process2_renormalize(self.input_frames)
+        renormalize_result = self.process2_renormalize(integrate1_result)
 
         q = numpy.ascontiguousarray(renormalize_result.radial, numpy.float32)
         I = numpy.ascontiguousarray(renormalize_result.intensity, dtype=numpy.float32)
@@ -593,8 +596,8 @@ class IntegrateMultiframe(Plugin):
         int_ds.attrs["scale"] = "log"
         std_ds.attrs["interpretation"] = "spectrum"
 
-        if renormalize_data.accumulators is not None:
-            acc = renormalize_data.accumulators
+        if renormalize_result.accumulators is not None:
+            acc = renormalize_result.accumulators
             acc_grp = nxs.new_class(renormalize_grp, "accumulators", "NXcollection")
             acc_grp.attrs["comment"] = ("Unreduced sums of the azimuthal integration, one line per frame. "
                                         "The intensity of a set of frames is obtained without re-integrating "
@@ -619,7 +622,7 @@ class IntegrateMultiframe(Plugin):
         renormalize_grp.attrs["default"] = posixpath.relpath(renormalize_data.name, renormalize_grp.name)
 
     # Process 3: Freesas cormap
-        cormap_grp = nxs.new_class(entry_grp, "2_correlation_mapping", "NXprocess")
+        cormap_grp = nxs.new_class(entry_grp, "3_correlation_mapping", "NXprocess")
         cormap_grp["sequence_index"] = self.seq()
         cormap_grp["program"] = "freesas.cormap"
         cormap_grp["version"] = freesas.version
@@ -665,7 +668,7 @@ class IntegrateMultiframe(Plugin):
 
         Iavg = numpy.ascontiguousarray(res3.intensity, dtype=numpy.float32)
         sigma_avg = numpy.ascontiguousarray(res3.sem, dtype=numpy.float32)
-        norm = numpy.ascontiguousarray(res3.sum_norm, dtype=numpy.float32)
+        norm = numpy.ascontiguousarray(res3.sum_normalization, dtype=numpy.float32)
 
         int_avg_ds = average_data.create_dataset("I", data=Iavg)
         int_avg_ds.attrs["interpretation"] = "spectrum"
@@ -673,38 +676,39 @@ class IntegrateMultiframe(Plugin):
         int_avg_ds.attrs["units"] = "arbitrary"
         int_avg_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
 
-        int_std_ds = average_data.create_dataset("errors", data=sigma)
+        int_std_ds = average_data.create_dataset("errors", data=sigma_avg)
         int_std_ds.attrs["interpretation"] = "spectrum"
         int_std_ds.attrs["formula"] = "sqrt(sum_i(sum_variance_i))/sum_i(sum_normalization_i)"
         int_std_ds.attrs["method"] = "Propagated error from weighted mean assuming poissonian behavour of every data-point"
-        int_nrm_ds = average_data.create_dataset("normalization", data=sigma_avg)
+        int_nrm_ds = average_data.create_dataset("normalization", data=norm)
         int_nrm_ds.attrs["formula"] = "sum_i(normalization_i))"
         average_grp.attrs["default"] = posixpath.relpath(average_data.name, average_grp.name)
 
-        intensity_std = res3.deviation
         if self.ispyb.url:
             self.to_pyarch["avg"] = res3
 
         _, self.to_memcached["I_avg"], self.to_memcached["sigma_avg"] = res3
         ai2_q_ds = average_data.create_dataset(radial_unit,
-                                           data=numpy.ascontiguousarray(res2.radial, dtype=numpy.float32))
+                                           data=numpy.ascontiguousarray(res3.radial, dtype=numpy.float32))
         ai2_q_ds.attrs["units"] = unit_name
         ai2_q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
 
         # Provide also accumulators:
-        accu2_grp = nxs.new_class(average_grp, "accumulators", "NXcollection")
-        accu2_grp.attrs["comment"] = ("Unreduced sums of the azimuthal integration, one line per frame. "
-                                    "The intensity of a set of frames is obtained without re-integrating "
-                                    "anything: sum_signal.sum(axis=0)/sum_normalization.sum(axis=0)")
-        accu2_grp[radial_unit] = ai2_q_ds
-        accu2_grp["merged"] = numpy.arange(self.nb_frames)[slice(*cormap_result.tomerge)]
-        datasets = [("sum_signal", acc.sum_signal, "Σᵢ signalᵢ"),
-                    ("sum_normalization", acc.sum_normalization, "Σᵢ normalizationᵢ"),
-                    ("sum_variance", acc.sum_variance_azimuthal, "Σᵢ varianceᵢ, Poissonnian error-model")]
-        for name, data, long_name in datasets:
-            acc_ds = accu2_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32))
-            acc_ds.attrs["interpretation"] = "spectrum"
-            acc_ds.attrs["long_name"] = long_name
+        if renormalize_result.accumulators is not None:
+            acc = renormalize_result.accumulators
+            accu2_grp = nxs.new_class(average_grp, "accumulators", "NXcollection")
+            accu2_grp.attrs["comment"] = ("Unreduced sums of the azimuthal integration, one line per frame. "
+                                          "The intensity of a set of frames is obtained without re-integrating "
+                                          "anything: sum_signal.sum(axis=0)/sum_normalization.sum(axis=0)")
+            accu2_grp[radial_unit] = ai2_q_ds
+            accu2_grp["merged"] = numpy.arange(self.nb_frames)[slice(*cormap_result.tomerge)]
+            datasets = [("sum_signal", acc.sum_signal, "Σᵢ signalᵢ"),
+                        ("sum_normalization", acc.sum_normalization, "Σᵢ normalizationᵢ"),
+                        ("sum_variance", acc.sum_variance_azimuthal, "Σᵢ varianceᵢ, Poissonnian error-model")]
+            for name, data, long_name in datasets:
+                acc_ds = accu2_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32))
+                acc_ds.attrs["interpretation"] = "spectrum"
+                acc_ds.attrs["long_name"] = long_name
 
         entry_grp.attrs["default"] = posixpath.relpath(average_data.name, entry_grp.name)
 
@@ -787,10 +791,11 @@ class IntegrateMultiframe(Plugin):
             # see: https://github.com/silx-kit/pyFAI/issues/2955
             azim.__recalculate_means__()
             accumulators = result.accumulators
-            accumulators.sum_normalization[idx] = azim.sum_normalization
-            # accumulators.sum_variance_azimuthal[idx] = azim.sum_variance
-            if accumulators.sum_variance_poisson is not None:
-                accumulators.sum_variance_poisson[idx] = azim.sum_variance
+            if accumulators is not None:
+                accumulators.sum_normalization[idx] = azim.sum_normalization
+                # accumulators.sum_variance_azimuthal[idx] = azim.sum_variance
+                if accumulators.sum_variance_poisson is not None:
+                    accumulators.sum_variance_poisson[idx] = azim.sum_variance
             result.intensity[idx] = azim.intensity
             result.sigma[idx] = azim.sem
         return result # Modified in place !
