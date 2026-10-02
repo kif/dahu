@@ -205,8 +205,8 @@ def kratky_plot(nxs, parent_grp, name, sequence_index, sasm, guinier):
     ke_ds = kratky_data.create_dataset("errors", data=dy.astype(numpy.float32))
     ke_ds.attrs["interpretation"] = "spectrum"
     kratky_data_attrs = kratky_data.attrs
-    kratky_data_attrs["signal"] = k_ds.name
-    kratky_data_attrs["axes"] = qRg_ds.name
+    kratky_data_attrs["signal"] = posixpath.basename(k_ds.name)
+    kratky_data_attrs["axes"] = posixpath.basename(qRg_ds.name)
 
 
 def invariants(nxs, parent_grp, name, sequence_index, sasm, guinier):
