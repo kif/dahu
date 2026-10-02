@@ -33,6 +33,11 @@ There is one directory per beamline and several plugins per beamline.
 Each beamline is independent so no interference are expected.
 
 Dahu can be tested on plugins in an alternative directory using the `$DAHU_PLUGINS` environment variable.
+It contains a list of directories, separated by `:` (`;` under Windows), which are searched before the
+`plugins` directory installed next to `dahu`.
+This is needed when `dahu` is installed in editable mode, since the `plugins` directory is then not found::
+
+    DAHU_PLUGINS=$PWD/plugins python -m dahu.test.test_all
 
 Different examples of plugins are provided in the plugins/example.py file, either based on a function or a class with the `@register` decorator.
 
