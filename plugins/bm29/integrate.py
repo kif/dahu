@@ -8,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/10/2026"
+__date__ = "05/10/2026"
 __status__ = "development"
 __version__ = "0.5.0"
 
@@ -855,6 +855,9 @@ class IntegrateMultiframe(Plugin):
                 self.log_warning(f"Not sending to ISPyB: no valid URL {self.ispyb.url}")
 
     def send_to_icat(self):
+        if not (self.ispyb.url and parse_url(self.ispyb.url).host):
+            self.log_warning(f"Not sending to iCat: ISPyB metadata not valid")
+
         #Some more metadata for iCat, as strings:
         to_icat = copy.copy(self.to_pyarch)
         to_icat["experiment_type"] = "hplc" if self.input.get("hplc_mode") else "sample-changer"
