@@ -33,7 +33,7 @@ def parse():
     parser.add_argument("-d", '--debug', dest='debug', action='store_true',
                         default=False, help='debug mode')
     parser.add_argument("-o", '--output', dest='output',
-                        default=None, help='Destination for output')
+                        default=None, help='Destination directory for output')
     parser.add_argument(dest='args', nargs='+', help='job inputs to be re-processed')
     args = parser.parse_args()
     if args.debug:
@@ -117,7 +117,7 @@ def process(args):
         if args.output:
             dest = os.path.join(args.output, fn.replace(".inp", ".out"))
             os.makedirs(os.path.dirname(dest), exist_ok=True)
-            with open(dest) as fp:
+            with open(dest, "w") as fp:
                 fp.write(result)
 
 
