@@ -857,6 +857,7 @@ class IntegrateMultiframe(Plugin):
     def send_to_icat(self):
         if not (self.ispyb.url and parse_url(self.ispyb.url).host):
             self.log_warning(f"Not sending to iCat: ISPyB metadata not valid")
+            return
 
         #Some more metadata for iCat, as strings:
         to_icat = copy.copy(self.to_pyarch)
