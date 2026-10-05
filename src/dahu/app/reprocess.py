@@ -29,7 +29,6 @@ def parse():
     """
     Parse the command line a return the parsed arguments
     """
-    # TODO
     parser = ArgumentParser(description='reProcess some data using the Dahu')
     parser.add_argument("-d", '--debug', dest='debug', action='store_true',
                         default=False, help='debug mode')
@@ -39,7 +38,7 @@ def parse():
     args = parser.parse_args()
     if args.debug:
         logging.root.setLevel(logging.DEBUG)
-    return args.args
+    return args
 
 
 def _run_(plugin, what):
@@ -78,10 +77,10 @@ def _run_(plugin, what):
 def process(args):
     """Process a set of arguments
 
-    :param args: list of files to process
+    :param args: Argparse parsed arguments
     """
     working_dir = get_workdir()
-    for idx, fn in enumerate(args):
+    for idx, fn in enumerate(args.args):
         print("Processing #%i: %s" % (idx, fn))
         if os.path.exists(fn):
             with open(fn, "r") as fp:
@@ -117,6 +116,7 @@ def process(args):
             json.dump(plugin.input, fp, indent=4, cls=NumpyEncoder)
         if args.output:
             dest = os.path.join(args.output, fn.replace(".inp", ".out"))
+            os.path.makedirs(os.path.dirname(dest), exist_ok=True)
             with open(dest) as fp:
                 fp.write(result)
 
