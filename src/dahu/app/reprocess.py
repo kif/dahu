@@ -33,6 +33,8 @@ def parse():
     parser = ArgumentParser(description='reProcess some data using the Dahu')
     parser.add_argument("-d", '--debug', dest='debug', action='store_true',
                         default=False, help='debug mode')
+    parser.add_argument("-o", '--output', dest='output',
+                        default=None, help='Destination for output')
     parser.add_argument(dest='args', nargs='+', help='job inputs to be re-processed')
     args = parser.parse_args()
     if args.debug:
@@ -113,6 +115,10 @@ def process(args):
             fp.write(result)
         with open(basename + ".inp", "w") as fp:
             json.dump(plugin.input, fp, indent=4, cls=NumpyEncoder)
+        if args.output:
+            dest = os.path.join(args.output, fn.replace(".inp", ".out"))
+            with open(dest) as fp:
+                fp.write(result)
 
 
 def main():
