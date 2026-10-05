@@ -8,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/09/2026"
+__date__ = "05/10/2026"
 __status__ = "development"
 __version__ = "0.4.0"
 
@@ -605,6 +605,11 @@ class SubtractBuffer(Plugin):
         metadata = {"scanType": "subtraction"}
         raw = [os.path.dirname(os.path.abspath(i)) for i in self.buffer_files]
         raw.append(os.path.dirname(os.path.abspath(self.sample_file)))
+
+        if not (self.ispyb.url and parse_url(self.ispyb.url).host):
+            self.log_warning(f"Not sending to iCat: ISPyB metadata not valid")
+            return
+
         return send_icat(sample=self.sample_juice.sample,
                          raw=raw,
                          path=os.path.dirname(os.path.abspath(self.output_file)),

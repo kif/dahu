@@ -8,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/09/2026"
+__date__ = "05/10/2026"
 __status__ = "development"
 __version__ = "0.4.1"
 
@@ -1059,6 +1059,11 @@ class HPLC(Plugin):
             to_icat.get("sum_I"),
             to_icat.get("Rg"),
         )
+
+        if not (self.ispyb.url and parse_url(self.ispyb.url).host):
+            self.log_warning(f"Not sending to iCat: ISPyB metadata not valid")
+            return
+
         return send_icat(
             sample=self.juices[0].sample,
             raw=os.path.dirname(os.path.abspath(self.input_files[0])),
