@@ -116,7 +116,7 @@ def process(args):
             json.dump(plugin.input, fp, indent=4, cls=NumpyEncoder)
         if args.output:
             dest = os.path.join(args.output, fn.replace(".inp", ".out"))
-            os.path.makedirs(os.path.dirname(dest), exist_ok=True)
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
             with open(dest) as fp:
                 fp.write(result)
 
