@@ -1061,7 +1061,7 @@ class HPLC(Plugin):
         )
 
         if not (self.ispyb.url and parse_url(self.ispyb.url).host):
-            self.log_warning(f"Not sending to iCat: ISPyB metadata not valid")
+            self.log_warning("Not sending to iCat: ISPyB metadata not valid")
             return
 
         return send_icat(
