@@ -530,7 +530,7 @@ class IntegrateMultiframe(Plugin):
             self.to_memcached["spottiness"] = spottiness
             aniso_data = nxs.new_class(integration_grp, "anisotropy", "NXdata")
             aniso_data.attrs["title"] = "Anisotropy"
-            aniso_data["frame_ids"] = frame_ids
+            aniso_data["frame_ids"] = frame_ds
             spot_ds = aniso_data.create_dataset("spottiness", data=spottiness)
             spot_ds.attrs["interpretation"] = "spectrum"
             spot_ds.attrs["long_name"] = "Spottiness (azimuthal heterogeneity)"
