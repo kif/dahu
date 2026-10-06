@@ -607,7 +607,7 @@ class SubtractBuffer(Plugin):
         raw.append(os.path.dirname(os.path.abspath(self.sample_file)))
 
         if not (self.ispyb.url and parse_url(self.ispyb.url).host):
-            self.log_warning(f"Not sending to iCat: ISPyB metadata not valid")
+            self.log_warning("Not sending to iCat: ISPyB metadata not valid")
             return
 
         return send_icat(sample=self.sample_juice.sample,

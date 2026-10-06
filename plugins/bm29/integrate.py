@@ -567,7 +567,7 @@ class IntegrateMultiframe(Plugin):
 
     # Process 2: renormalize curves based on smoothed beam-stop diode values (& updated variance)
         renormalize_grp = nxs.new_class(entry_grp, "2_renormalize", "NXprocess")
-        renormalize_result = self.process2_renormalize(integrate1_result)
+        renormalize_result = self.process2_renormalize(integrate1_result, nxs, renormalize_grp)
 
         q = numpy.ascontiguousarray(renormalize_result.radial, numpy.float32)
         I = numpy.ascontiguousarray(renormalize_result.intensity, dtype=numpy.float32)
@@ -780,7 +780,10 @@ class IntegrateMultiframe(Plugin):
             radial = res.radial
         return IntegrationResult(radial, intensity, sigma, spottiness, accumulators, raw)
 
-    def process2_renormalize(self, result:IntegrationResult):
+    def process2_renormalize(self,
+                             result:IntegrationResult,
+                             nxs: Nexus=None,
+                             group: h5py.Group=None):
         """When in sample-changer mode:
         renormalize intensities and sem based on the the
         linear regression of the diode values.
@@ -799,6 +802,14 @@ class IntegrateMultiframe(Plugin):
             var_diode = delta2.mean()
         else:
             var_diode = delta2.sum() / (nb_valid -2)
+        if nxs is not None and group is not None:
+            nrm_grp = nxs.new_class(group, "diode", "NXdata")
+            nrm_grp.create_dataset("raw", diode.astype("float32")).attrs["interpretation"] = "spectrum"
+            nrm_grp.create_dataset("smooth", smooth_diode.astype("float32")).attrs["interpretation"] = "spectrum"
+            nrm_grp.create_dataset("frame_idx", numpy.arange(len(diode)).astype("float32")).attrs["interpretation"] = "spectrum"
+            nrm_grp.attrs["aces"] = "frame_idx"
+            nrm_grp.attrs["signal"] = "raw"
+            nrm_grp.attrs["alternative_signals"] = ["smooth"]
 
         for idx, azim in enumerate(result.raw_results):
             azim.renormalize(smooth_diode[idx] * self.scale_factor,
