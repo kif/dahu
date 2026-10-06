@@ -530,7 +530,7 @@ class IntegrateMultiframe(Plugin):
             self.to_memcached["spottiness"] = spottiness
             aniso_data = nxs.new_class(integration_grp, "anisotropy", "NXdata")
             aniso_data.attrs["title"] = "Anisotropy"
-            aniso_data["frame_ids"] = hplc_data["frame_ids"]
+            aniso_data["frame_ids"] = frame_ids
             spot_ds = aniso_data.create_dataset("spottiness", data=spottiness)
             spot_ds.attrs["interpretation"] = "spectrum"
             spot_ds.attrs["long_name"] = "Spottiness (azimuthal heterogeneity)"
@@ -549,7 +549,7 @@ class IntegrateMultiframe(Plugin):
             aniso_data.create_dataset("isotropic", data=self.valid_frames).attrs["interpretation"] = "spectrum"
             aniso_data.create_dataset("median", data=numpy.zeros(self.nb_frames, "float32") + median).attrs["interpretation"] = "spectrum"
             aniso_data.create_dataset("threshold", data=numpy.zeros(self.nb_frames, "float32") + threshold).attrs["interpretation"] = "spectrum"
-            aniso_data.attrs["signal"] = "sum"
+            aniso_data.attrs["signal"] = "spottiness"
             aniso_data.attrs["axes"] = "frame_ids"
             aniso_data.attrs["auxiliary_signals"] = ["median", "threshold"]
         else:
@@ -804,10 +804,12 @@ class IntegrateMultiframe(Plugin):
             var_diode = delta2.sum() / (nb_valid -2)
         if nxs is not None and group is not None:
             nrm_grp = nxs.new_class(group, "diode", "NXdata")
-            nrm_grp.create_dataset("raw", diode.astype("float32")).attrs["interpretation"] = "spectrum"
-            nrm_grp.create_dataset("smooth", smooth_diode.astype("float32")).attrs["interpretation"] = "spectrum"
-            nrm_grp.create_dataset("frame_idx", numpy.arange(len(diode)).astype("float32")).attrs["interpretation"] = "spectrum"
-            nrm_grp.attrs["aces"] = "frame_idx"
+            nrm_grp.create_dataset("raw", data=diode.astype("float32")).attrs["interpretation"] = "spectrum"
+            smooth_ds = nrm_grp.create_dataset("smooth", data=smooth_diode.astype("float32"))
+            smooth_ds.attrs["interpretation"] = "spectrum"
+            smooth_ds.attrs["formula"] = "linear regression"
+            nrm_grp.create_dataset("frame_idx", data=numpy.arange(len(diode)).astype("float32")).attrs["interpretation"] = "spectrum"
+            nrm_grp.attrs["axes"] = "frame_idx"
             nrm_grp.attrs["signal"] = "raw"
             nrm_grp.attrs["alternative_signals"] = ["smooth"]
 
