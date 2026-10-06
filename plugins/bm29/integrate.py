@@ -8,8 +8,8 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "05/10/2026"
-__status__ = "development"
+__date__ = "06/10/2026"
+__status__ = "production"
 __version__ = "0.5.0"
 
 import copy
@@ -528,7 +528,10 @@ class IntegrateMultiframe(Plugin):
         if integrate1_result.spottiness is not None and integrate1_result.spottiness.size:
             spottiness = numpy.ascontiguousarray(integrate1_result.spottiness, dtype=numpy.float32)
             self.to_memcached["spottiness"] = spottiness
-            spot_ds = hplc_data.create_dataset("spottiness", data=spottiness)
+            aniso_data = nxs.new_class(integration_grp, "anisotropy", "NXdata")
+            aniso_data.attrs["title"] = "Anisotropy"
+            aniso_data["frame_ids"] = hplc_data["frame_ids"]
+            spot_ds = aniso_data.create_dataset("spottiness", data=spottiness)
             spot_ds.attrs["interpretation"] = "spectrum"
             spot_ds.attrs["long_name"] = "Spottiness (azimuthal heterogeneity)"
             spot_ds.attrs["formula"] = "sqrt(sum_q(I(q)*variance_azim(q)/signal(q)**2)/sum_q(I(q)))"
@@ -536,16 +539,22 @@ class IntegrateMultiframe(Plugin):
                                         "from the signal itself. Grows with any anisotropy of the scattering: "
                                         "meniscus in the capillary, parasitic scattering, crystallites... "
                                         "Frames departing from the baseline of this curve are to be masked out.")
-            hplc_data.attrs["auxiliary_signals"] = ["spottiness"]
+            aniso_data.attrs["auxiliary_signals"] = ["spottiness"]
             self.output["spottiness_median"] = float(numpy.median(spottiness))
             self.output["spottiness_max"] = float(spottiness.max())
             median = numpy.median(integrate1_result.spottiness)
             mad = numpy.median(abs(integrate1_result.spottiness-median))
+            threshold = max(median + self.spot_thres * mad, 1.1 * median)
             self.valid_frames = integrate1_result.spottiness < max(median + self.spot_thres * mad, 1.1 * median)
-            hplc_data.create_dataset("isotropic", data=self.valid_frames)
-        if self.valid_frames is None:
+            aniso_data.create_dataset("isotropic", data=self.valid_frames).attrs["interpretation"] = "spectrum"
+            aniso_data.create_dataset("median", data=numpy.zeros(self.nb_frames, "float32") + median).attrs["interpretation"] = "spectrum"
+            aniso_data.create_dataset("threshold", data=numpy.zeros(self.nb_frames, "float32") + threshold).attrs["interpretation"] = "spectrum"
+            aniso_data.attrs["signal"] = "sum"
+            aniso_data.attrs["axes"] = "frame_ids"
+            aniso_data.attrs["auxiliary_signals"] = ["median", "threshold"]
+        else:
             # Without spottiness, all frames are considered as valid
-            self.valid_frames = numpy.ones(len(integrate1_result.intensity), dtype=bool)
+            self.valid_frames = numpy.ones(self.nb_frames, dtype=bool)
 
         if self.input.get("hplc_mode"):
             entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
@@ -856,7 +865,7 @@ class IntegrateMultiframe(Plugin):
 
     def send_to_icat(self):
         if not (self.ispyb.url and parse_url(self.ispyb.url).host):
-            self.log_warning(f"Not sending to iCat: ISPyB metadata not valid")
+            self.log_warning("Not sending to iCat: ISPyB metadata not valid")
             return
 
         #Some more metadata for iCat, as strings:
