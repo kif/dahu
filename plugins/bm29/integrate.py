@@ -552,7 +552,7 @@ class IntegrateMultiframe(Plugin):
             aniso_data.create_dataset("threshold", data=numpy.zeros(self.nb_frames, "float32") + threshold).attrs["interpretation"] = "spectrum"
             aniso_data.attrs["signal"] = "spottiness"
             aniso_data.attrs["axes"] = "frame_ids"
-            aniso_data.attrs["auxiliary_signals"] = ["median", "threshold"]
+            aniso_data.attrs["auxiliary_signals"] = ["threshold", "median"]
         else:
             # Without spottiness, all frames are considered as valid
             self.valid_frames = numpy.ones(self.nb_frames, dtype=bool)
