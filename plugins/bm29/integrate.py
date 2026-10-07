@@ -8,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "06/10/2026"
+__date__ = "07/10/2026"
 __status__ = "production"
 __version__ = "0.5.0"
 
@@ -173,6 +173,7 @@ class IntegrateMultiframe(Plugin):
         self.seq = SequenceIndex(0)
         self.spot_thres = 3
         self.valid_frames = None  # Frames with flares
+        self.frame_ids = []
 
     def setup(self, kwargs=None):
         logger.debug("IntegrateMultiframe.setup")
@@ -223,8 +224,8 @@ class IntegrateMultiframe(Plugin):
         ispydict = self.input.get("ispyb", {})
         ispydict["gallery"] = gallery
         self.ispyb = Ispyb._fromdict(ispydict)
-
-        self.nb_frames = len(self.input.get("frame_ids", []))
+        self.frame_ids = numpy.ascontiguousarray(self.input.get("frame_ids", []), dtype=numpy.uint32)
+        self.nb_frames = len(self.frame_ids)
         self.npt = self.input.get("npt", self.npt)
         self.unit = pyFAI.units.to_unit(self.input.get("unit", self.unit))
         self.poni = self.input.get("poni_file")
@@ -410,8 +411,8 @@ class IntegrateMultiframe(Plugin):
                                               data=numpy.ascontiguousarray(timestamps, dtype=numpy.float64))
         time_ds.attrs["units"] = "s"
         time_ds.attrs["interpretation"] = "spectrum"
-        frame_ds = detector_grp.create_dataset("frame_ids",
-                                              data=numpy.ascontiguousarray(self.input.get("frame_ids", []), dtype=numpy.uint32))
+
+        frame_ds = detector_grp.create_dataset("frame_ids", data=self.frame_ids)
         frame_ds.attrs["long_name"] = "Frame number"
         frame_ds.attrs["interpretation"] = "spectrum"
         if self.COPY_IMAGES:
@@ -791,9 +792,8 @@ class IntegrateMultiframe(Plugin):
         """
         diode = self.monitor_values
         mask = self.valid_frames
-        x = numpy.arange(len(diode))
-        linreg = scipy.stats.linregress(x[mask], diode[mask])
-        smooth_diode = linreg.slope * x + linreg.intercept
+        linreg = scipy.stats.linregress(self.frame_ids[mask], diode[mask])
+        smooth_diode = linreg.slope * self.frame_ids + linreg.intercept
         delta2 = (diode-smooth_diode)**2
         delta2 = delta2[mask]
         nb_valid = sum(mask)
@@ -808,10 +808,14 @@ class IntegrateMultiframe(Plugin):
             smooth_ds = nrm_grp.create_dataset("smooth", data=smooth_diode.astype("float32"))
             smooth_ds.attrs["interpretation"] = "spectrum"
             smooth_ds.attrs["formula"] = "linear regression"
-            nrm_grp.create_dataset("frame_idx", data=numpy.arange(len(diode)).astype("float32")).attrs["interpretation"] = "spectrum"
+            smooth_err_ds = nrm_grp.create_dataset("smooth_errors", data=numpy.sqrt(var_diode)+numpy.zeros(self.nb_frames, "float32"))
+            smooth_err_ds.attrs["interpretation"] = "spectrum"
+            smooth_err_ds.attrs["formula"] = "Incertainty on the smoothed diode value"
+            framenrm_grp.create_dataset("frame_idx", data=self.frame_ids).attrs["interpretation"] = "spectrum"
             nrm_grp.attrs["axes"] = "frame_idx"
             nrm_grp.attrs["signal"] = "raw"
-            nrm_grp.attrs["alternative_signals"] = ["smooth"]
+            nrm_grp.attrs["auxiliary_signals"] = ["smooth"]
+            nrm_grp.attrs["title"] = "Renormalization"
 
         for idx, azim in enumerate(result.raw_results):
             azim.renormalize(smooth_diode[idx] * self.scale_factor,

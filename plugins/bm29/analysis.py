@@ -14,7 +14,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/10/2026"
+__date__ = "07/10/2026"
 __status__ = "development"
 __version__ = "0.1.0"
 
@@ -149,7 +149,7 @@ def guinier_analysis(nxs, parent_grp, name, sequence_index, sasm, radius_unit):
 
     q2 = q[mask] ** 2
     logI = numpy.log(I[mask])
-    dlogI = err[mask] / I[mask]
+    dlogI = abs(err[mask] / I[mask])
     q2_ds = guinier_data.create_dataset("q2", data=q2.astype(numpy.float32))
     q2_ds.attrs["unit"] = radius_unit + "⁻²"
     q2_ds.attrs["long_name"] = f"q² ({radius_unit}⁻²)"
