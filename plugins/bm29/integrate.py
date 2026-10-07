@@ -804,14 +804,18 @@ class IntegrateMultiframe(Plugin):
             var_diode = delta2.sum() / (nb_valid -2)
         if nxs is not None and group is not None:
             nrm_grp = nxs.new_class(group, "diode", "NXdata")
-            nrm_grp.create_dataset("raw", data=diode.astype("float32")).attrs["interpretation"] = "spectrum"
+            diode_ds = nrm_grp.create_dataset("raw", data=diode.astype("float32"))
+            diode_ds.attrs["interpretation"] = "spectrum"
+            diode_ds.attrs["long_name"] = "Beam-stop diode intensity"
             smooth_ds = nrm_grp.create_dataset("smooth", data=smooth_diode.astype("float32"))
             smooth_ds.attrs["interpretation"] = "spectrum"
             smooth_ds.attrs["formula"] = "linear regression"
             smooth_err_ds = nrm_grp.create_dataset("smooth_errors", data=numpy.sqrt(var_diode)+numpy.zeros(self.nb_frames, "float32"))
             smooth_err_ds.attrs["interpretation"] = "spectrum"
             smooth_err_ds.attrs["formula"] = "Incertainty on the smoothed diode value"
-            framenrm_grp.create_dataset("frame_idx", data=self.frame_ids).attrs["interpretation"] = "spectrum"
+            frame_ds = nrm_grp.create_dataset("frame_idx", data=self.frame_ids)
+            frame_ds.attrs["interpretation"] = "spectrum"
+            frame_ds.attrs["long_name"] = "Frame number"
             nrm_grp.attrs["axes"] = "frame_idx"
             nrm_grp.attrs["signal"] = "raw"
             nrm_grp.attrs["auxiliary_signals"] = ["smooth"]
