@@ -8,9 +8,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "05/10/2026"
+__date__ = "08/10/2026"
 __status__ = "development"
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 
 import copy
 import json
@@ -57,6 +57,7 @@ from .common import (
     str_,
 )
 from .icat import send_icat
+from .integrate import Accumulators
 from .ispyb import IspybConnector
 from .nexus import Nexus, get_isotime
 
@@ -84,6 +85,12 @@ class NexusJuice(NamedTuple):
     sample: Sample
     timestamps: numpy.ndarray
     diode: numpy.ndarray | None = None
+    ring_current: numpy.ndarray | None = None
+    spottiness: numpy.ndarray | None = None
+    isotropic: numpy.ndarray | None = None
+    accumulators: Accumulators | None = None
+    normalization_factor: float | None = None
+    count_time: float | None = None
 
     @classmethod
     def read(cls, filename:str):
@@ -119,9 +126,48 @@ class NexusJuice(NamedTuple):
             method = IntegrationMethod.select_method(
                 **json.loads(integration_grp["configuration/integration_method"][()])
             )[0]
+            # Unreduced sums of the azimuthal integration, one line per frame.
+            # They allow frames to be merged without re-integrating anything and
+            # carry both error models. Unavailable in former files.
+            if "accumulators" in integration_grp:
+                acc_grp = integration_grp["accumulators"]
+                accumulators = Accumulators(
+                    sum_signal=acc_grp["sum_signal"][()],
+                    sum_normalization=acc_grp["sum_normalization"][()],
+                    sum_variance_azimuthal=acc_grp["sum_variance_azimuthal"][()],
+                    sum_variance_poisson=acc_grp["sum_variance_poisson"][()]
+                    if "sum_variance_poisson" in acc_grp
+                    else None,
+                )
+            else:
+                accumulators = None
+            # Azimuthal heterogeneity, used to spot menisci and parasitic scattering
+            if "anisotropy" in integration_grp:
+                aniso_grp = integration_grp["anisotropy"]
+                spottiness = aniso_grp["spottiness"][()]
+                isotropic = aniso_grp["isotropic"][()]
+            else:
+                spottiness = isotropic = []
             instrument_grp = nxsr.get_class(entry_grp, class_type="NXinstrument")[0]
-            detector_grp = nxsr.get_class(instrument_grp, class_type="NXdetector")[0]
+            # The beam-stop diode is registered as an NXdetector as well:
+            # tell them apart by their content rather than by their position.
+            detectors = nxsr.get_class(instrument_grp, class_type="NXdetector")
+            detector_grp = next(grp for grp in detectors if "pixel_mask" in grp)
             mask = detector_grp["pixel_mask"].attrs["filename"]
+            count_time = (
+                detector_grp["count_time"][()] if "count_time" in detector_grp else None
+            )
+            diode_grp = next(
+                (grp for grp in detectors if "normalization_factor" in grp), None
+            )
+            normalization_factor = (
+                diode_grp["normalization_factor"][()] if diode_grp is not None else None
+            )
+            source_grp = nxsr.get_class(instrument_grp, class_type="NXsource")[0]
+            # Beware: the hard link in the measurement group is spelled "ring_curent"
+            ring_current = (
+                source_grp["current"][()] if "current" in source_grp else []
+            )
             mono_grp = nxsr.get_class(instrument_grp, class_type="NXmonochromator")[0]
             energy = mono_grp["energy"][()]
             #             img_grp = nxsr.get_class(entry_grp["3_time_average"], class_type="NXdata")[0]
@@ -184,6 +230,12 @@ class NexusJuice(NamedTuple):
                     sample=sample,
                     timestamps=timestamps,
                     diode=diode,
+                    ring_current=ring_current,
+                    spottiness=spottiness,
+                    isotropic=isotropic,
+                    accumulators=accumulators,
+                    normalization_factor=normalization_factor,
+                    count_time=count_time,
                     )
 
 
