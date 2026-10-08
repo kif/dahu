@@ -1,7 +1,7 @@
 {
  "hplc": {
   "attrs": {
-   "Dmax": 9.609008132925876,
+   "Dmax": 9.608781593419767,
    "Vc": 4.14581953292004,
    "mass": 58.923290496314195
   },
@@ -32,15 +32,15 @@
      "interpretation": "spectrum"
     },
     "value": {
-     "first": 124.03126525878906,
-     "last": 0.03731760010123253,
-     "max": 124.03126525878906,
-     "mean": 12.940991870786064,
-     "min": 0.0024387722369283438,
+     "first": 124.02737426757812,
+     "last": 0.03726790472865105,
+     "max": 124.02737426757812,
+     "mean": 12.940901805461385,
+     "min": 0.0022578982170671225,
      "shape": [
       500
      ],
-     "std": 29.63163492164046
+     "std": 29.63124076774923
     }
    },
    "entry_0000/02s-12s/1_average/I": {
@@ -478,51 +478,51 @@
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/Chi2r": {
     "attrs": {},
-    "value": 6278.074242603552
+    "value": 6278.086476861204
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/Chi2r_error": {
     "attrs": {},
-    "value": 7.791099346814083
+    "value": 7.087018764432879
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/Dmax": {
     "attrs": {},
-    "value": 9.609008132925876
+    "value": 9.608781593419767
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/Dmax_error": {
     "attrs": {},
-    "value": 0.019412490778802357
+    "value": 0.017869686875965136
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/I0": {
     "attrs": {},
-    "value": 125.32259942123727
+    "value": 125.3190360150882
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/I0_error": {
     "attrs": {},
-    "value": 0.2781684054235348
+    "value": 0.25530732596449707
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/Rg": {
     "attrs": {},
-    "value": 3.5305394733184445
+    "value": 3.5304271494636468
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/Rg_error": {
     "attrs": {},
-    "value": 0.008546224412759637
+    "value": 0.007875409299333806
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/S0": {
     "attrs": {},
-    "value": 0.003496751542803544
+    "value": 0.003496575834739481
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/S0_error": {
     "attrs": {},
-    "value": 1.345378874384318e-05
+    "value": 1.2405923505698284e-05
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/alpha": {
     "attrs": {},
-    "value": 102555847.57744315
+    "value": 102559212.08053535
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/alpha_error": {
     "attrs": {},
-    "value": 139622.54647863234
+    "value": 131854.5726207214
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration": {
     "attrs": {
@@ -551,7 +551,7 @@
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration/Powell_steps": {
     "attrs": {},
-    "value": 217
+    "value": 227
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/configuration/Rg": {
     "attrs": {},
@@ -575,11 +575,11 @@
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/logP": {
     "attrs": {},
-    "value": -1727267.7644055698
+    "value": -1727263.9302608995
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/logP_error": {
     "attrs": {},
-    "value": 244.61200791896792
+    "value": 251.4146125914955
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/program": {
     "attrs": {},
@@ -598,14 +598,14 @@
     "attrs": {},
     "value": {
      "first": 0.0,
-     "last": 0.00633562297635554,
-     "max": 0.010174103028746629,
-     "mean": 0.004172654951716186,
+     "last": 0.006171440028940482,
+     "max": 0.009365545753461968,
+     "mean": 0.003852981197978816,
      "min": 0.0,
      "shape": [
       65
      ],
-     "std": 0.0032802860041084765
+     "std": 0.003013568982255676
     }
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/result/p(r)": {
@@ -614,14 +614,14 @@
     },
     "value": {
      "first": 0.0,
-     "last": 0.004257191438227892,
-     "max": 1.8956276178359985,
-     "mean": 1.0227563469240872,
+     "last": 0.0037632787134498358,
+     "max": 1.8956793546676636,
+     "mean": 1.0227242168576385,
      "min": 0.0,
      "shape": [
       65
      ],
-     "std": 0.5997276009944755
+     "std": 0.5997747010849159
     }
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/result/r": {
@@ -632,14 +632,14 @@
     },
     "value": {
      "first": 0.0,
-     "last": 9.601251602172852,
-     "max": 9.601251602172852,
-     "mean": 4.800625988611809,
+     "last": 9.601244926452637,
+     "max": 9.601244926452637,
+     "mean": 4.800622480419966,
      "min": 0.0,
      "shape": [
       65
      ],
-     "std": 2.814616473077325
+     "std": 2.814614406295714
     }
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/sequence_index": {

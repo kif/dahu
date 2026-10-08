@@ -10,13 +10,17 @@ with the code prior to the extraction of the analysis into the `analysis` module
 To regenerate the reference (only when the output is expected to change!):
 
     python -m dahu.plugins.bm29.test.test_analysis --regenerate
+
+The BIFT of the `02s-12s` fraction fits badly on purpose (Chi2r ~ 6e3), so its Powell
+descent is sensitive to the version of freesas: expect that fraction, and it alone, to
+drift when freesas is upgraded. The reference was last produced with freesas 2026.10.0.
 """
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "02/10/2026"
+__date__ = "08/10/2026"
 __status__ = "development"
 
 import json
