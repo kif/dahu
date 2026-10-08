@@ -54,6 +54,7 @@ from .common import (
     Ispyb,
     Sample,
     SequenceIndex,
+    cmp_float,
     create_nexus_sample,
     str_,
 )
@@ -754,6 +755,65 @@ class HPLC(Plugin):
             Isum *= scale
             sigma *= numpy.atleast_2d(scale).T
             diode = diode_smooth
+
+            nrm_data = nxs.new_class(nrm_grp, "result", "NXdata")
+            nrm_data.attrs["title"] = "Curves renormalized on the smoothed diode"
+            nrm_int_ds = nrm_data.create_dataset(
+                "I", data=numpy.ascontiguousarray(I, dtype=numpy.float32), **cmp_float)
+            nrm_int_ds.attrs["interpretation"] = "spectrum"
+            nrm_int_ds.attrs["units"] = "arbitrary"
+            nrm_int_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
+            nrm_std_ds = nrm_data.create_dataset(
+                "errors", data=numpy.ascontiguousarray(sigma, dtype=numpy.float32), **cmp_float)
+            nrm_std_ds.attrs["interpretation"] = "spectrum"
+            nrm_q_ds = nrm_data.create_dataset("q", data=q)
+            nrm_q_ds.attrs["interpretation"] = "spectrum"
+            nrm_q_ds.attrs["unit"] = unit_name
+            nrm_q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
+            nrm_data.attrs["signal"] = "I"
+            nrm_data.attrs["axes"] = [".", "q"]
+            nrm_data.attrs["SILX_style"] = SAXS_STYLE
+            nrm_grp.attrs["default"] = posixpath.relpath(nrm_data.name, nrm_grp.name)
+
+            # Normalizing on the smoothed diode instead of the raw one amounts to
+            # scaling the normalization by the inverse factor, like pyFAI's
+            # `Integrate1dResult.renormalize` does. The signal, its variance and the
+            # pixel count are untouched.
+            accumulators = juice.accumulators
+            if accumulators is not None:
+                acc_grp = nxs.new_class(nrm_grp, "accumulators", "NXcollection")
+                acc_grp.attrs["comment"] = (
+                    "Unreduced sums of the azimuthal integration, one line per frame, "
+                    "corrected for the renormalization. The intensity of a set of frames "
+                    "is obtained without re-integrating anything: "
+                    "sum_signal.sum(axis=0)/sum_normalization.sum(axis=0), or by rebuilding "
+                    "Integrate1dResult objects and merging them with `union`. Mind that "
+                    "sum_normalization2 is only propagated to keep pyFAI's machinery happy: "
+                    "once renormalized it no longer carries its statistical meaning, so use "
+                    "`sem` and never `std`.")
+                acc_grp["q"] = nrm_q_ds
+                acc_grp["frame_idx"] = frame_ds
+                inverse = numpy.atleast_2d(numpy.reciprocal(scale)).T
+                corrected = {
+                    "sum_signal": (accumulators.sum_signal, "Σᵢ signalᵢ"),
+                    "sum_normalization": (accumulators.sum_normalization * inverse,
+                                          "Σᵢ normalizationᵢ, rescaled on the smoothed diode"),
+                    "sum_normalization2": (None if accumulators.sum_normalization2 is None else
+                                           accumulators.sum_normalization2 * inverse ** 2,
+                                           "Σᵢ normalizationᵢ², rescaled on the smoothed diode"),
+                    "sum_variance_azimuthal": (accumulators.sum_variance_azimuthal,
+                                               "Σᵢ varianceᵢ, azimuthal error model"),
+                    "sum_variance_poisson": (accumulators.sum_variance_poisson,
+                                             "Σᵢ varianceᵢ, poissonian error model"),
+                    "count": (accumulators.count, "Σᵢ pixel countᵢ"),
+                }
+                for name, (data, long_name) in corrected.items():
+                    if data is None:
+                        continue
+                    acc_ds = acc_grp.create_dataset(
+                        name, data=numpy.ascontiguousarray(data, dtype=numpy.float32), **cmp_float)
+                    acc_ds.attrs["interpretation"] = "spectrum"
+                    acc_ds.attrs["long_name"] = long_name
 
         # Process 2: Chromatogram
         chroma_grp = nxs.new_class(entry_grp, "2_chromatogram", "NXprocess")
