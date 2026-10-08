@@ -610,7 +610,8 @@
    },
    "entry_0000/02s-12s/5_indirect_Fourier_transformation/result/p(r)": {
     "attrs": {
-     "interpretation": "spectrum"
+     "interpretation": "spectrum",
+     "long_name": "Pair distance distribution p(r)"
     },
     "value": {
      "first": 0.0,
@@ -1606,7 +1607,8 @@
    },
    "entry_0000/6_indirect_Fourier_transformation/result/p(r)": {
     "attrs": {
-     "interpretation": "spectrum"
+     "interpretation": "spectrum",
+     "long_name": "Pair distance distribution p(r)"
     },
     "value": {
      "first": 0.0,

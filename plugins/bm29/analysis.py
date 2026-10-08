@@ -328,6 +328,7 @@ def bift_analysis(nxs, parent_grp, name, sequence_index, sasm, guinier, radius_u
     r_ds.attrs["unit"] = radius_unit
     r_ds.attrs["long_name"] = f"radius r({radius_unit})"
     p_ds = bift_data.create_dataset("p(r)", data=stats.density_avg.astype(numpy.float32))
+    p_ds.attrs["long_name"] = "Pair distance distribution p(r)"
     p_ds.attrs["interpretation"] = "spectrum"
     bift_data["errors"] = stats.density_std
     bift_data.attrs["signal"] = "p(r)"

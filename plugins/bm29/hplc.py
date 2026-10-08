@@ -563,53 +563,96 @@ def estimate_noise(signal, robust=True):
     return residuals.std()
 
 
-def search_peaks(signal, wmin=10, scale=0.9, wmax=None):
+PEAK_PROMINENCE = 10.0
+"How far a peak must stand out of the chromatogram, in units of its noise"
+
+PEAK_EDGE_MARGIN = 10
+"""Frames at either end of the run where a lone excess is taken for a start-up artefact.
+
+An elution still rising at the last frame is a different matter and is kept: measured
+over 174 runs, every spurious flag at an edge was confined to a handful of frames,
+while a truncated elution spanned hundreds."""
+
+
+def contiguous_blocks(indices, minlen=1):
+    """Split frame indices into the contiguous stretches they form
+
+    :param indices: sorted 1d array of frame indices
+    :param minlen: stretches shorter than this are dropped
+    :return: list of (start, stop) slices, stop excluded
     """
-    Label all peak regions of chromatogram.
+    indices = numpy.asarray(indices)
+    if indices.size == 0:
+        return []
+    cuts = numpy.where(numpy.diff(indices) > 1)[0] + 1
+    return [(int(block[0]), int(block[-1]) + 1)
+            for block in numpy.split(indices, cuts) if len(block) >= minlen]
 
-    The baseline is taken out first: `find_peaks_cwt` filters its ridges on a signal to
-    noise ratio read off the wavelet transform, which assumes a signal resting on zero.
-    Feed it a chromatogram sitting on a background and the answer depends on that
-    background, so the same elution would be cut differently before and after the
-    buffer is subtracted. Removing the minimum makes the result invariant by
-    construction, whatever offset the caller passes.
 
-    The widths explored are capped as well: a wavelet as wide as the record cannot see
-    anything but the middle of the array.
+def search_peaks(intensity, q, wmin=10, prominence=PEAK_PROMINENCE, nsigma=5.0):
+    """Label all peak regions of the chromatogram
 
-    :param signal=smooth signal
-    :param wmin: minimum width for a peak. smaller ones are discarded.
-    :param scale: shrink factor (i.e. <1 for the search zone)
-    :param wmax: widest peak looked for, a quarter of the record by default
+    Peaks are looked for on the sum over CHROMATOGRAM_QRANGE rather than over the whole
+    range: above 1 nm⁻¹ there is solvent and noise and nothing else, and dropping those
+    bins buys a factor 3 on the signal to noise. The prominence is given in units of the
+    noise of that chromatogram, measured on the data themselves, so the threshold does
+    not have to be retuned when the beam or the exposure change.
+
+    Regions are cut at the lowest point between two summits, which keeps them disjoint.
+    Taking the width at the base of each peak instead would nest a shoulder inside its
+    neighbour, and nested fractions are not fractions.
+
+    A peak still rising at the last frame has no summit, hence no prominence, and
+    `find_peaks` is blind to it. `solute_frames` is not, so whatever it flags that no
+    peak covers is added as a region of its own, with two exceptions: a flag confined to
+    the first or last PEAK_EDGE_MARGIN frames is a start-up artefact rather than an
+    elution, and a flag on frames which do not scatter like the solvent of the run is a
+    change of solvent. A bubble raises the low to high q ratio just as a solute does, so
+    `solute_frames` alone cannot tell them apart; `stationary_frames` can.
+
+    :param intensity: 2D array of shape (nframes, nbins)
+    :param q: scattering vector, same unit as CHROMATOGRAM_QRANGE
+    :param wmin: minimum width for a peak, smaller ones are discarded
+    :param prominence: how far a peak must stand out, in units of the noise
+    :param nsigma: width of the gate of `solute_frames`, in robust standard deviations
+    :return: (labels, count), as `scipy.ndimage.label` returns
     """
+    nframes = intensity.shape[0]
+    band = (q >= CHROMATOGRAM_QRANGE[0]) & (q <= CHROMATOGRAM_QRANGE[1])
+    chromatogram = intensity[:, band if band.sum() > 1 else slice(None)].sum(axis=-1)
+    smooth = smooth_chromatogram(chromatogram, max(wmin // 2, 1))
+    noise = estimate_noise(chromatogram)
+    regions = []
 
-    smth = smooth_chromatogram(signal, window=wmin)
-    smth -= smth.min()
-    res = numpy.zeros(signal.shape, dtype=numpy.uint8)
-    w = min(signal.size // 4 if wmax is None else wmax, signal.size)
-    while w > wmin:
-        peaks = scipy.signal.find_peaks_cwt(smth, [w])
-        if len(peaks):
-            widths = scipy.signal.peak_widths(smth, peaks)
-            m = widths[0] >= wmin
-            if m.max():
-                for p, q in zip(peaks[m], widths[0][m]):
-                    # print(w, p, q)
-                    q = int(numpy.ceil(q))
-                    if q > p:
-                        start = smth[:q]
-                    else:
-                        start = smth[p - q : p]
-                    if p + q >= signal.size:
-                        stop = smth[-q:]
-                    else:
-                        stop = smth[p : q + p]
-                    pos = numpy.argmin(abs(start - stop))
-                    # a negative start would wrap the slice around and label nothing
-                    res[max(0, p + pos - q) : p + pos] = 1
-        w *= scale
-    return scipy.ndimage.label(res)
+    peaks, _ = scipy.signal.find_peaks(smooth, prominence=prominence * noise, width=wmin)
+    if len(peaks):
+        # lowest point between two summits: the natural border between two fractions
+        cuts = [int(peak + numpy.argmin(smooth[peak:peaks[i + 1]]))
+                for i, peak in enumerate(peaks[:-1])]
+        feet = scipy.signal.peak_widths(smooth, peaks, rel_height=0.95)
+        for i, peak in enumerate(peaks):
+            start = max(int(feet[2][i]), cuts[i - 1] if i else 0)
+            stop = min(int(feet[3][i]) + 1, cuts[i] if i + 1 < len(peaks) else nframes)
+            if stop - start >= wmin:
+                regions.append((start, stop))
 
+    # Safety net: an elution `find_peaks` cannot see for lack of a summit
+    stationary = numpy.zeros(nframes, dtype=bool)
+    stationary[stationary_frames(intensity, q, nsigma)] = True
+    for start, stop in contiguous_blocks(solute_frames(intensity, q, nsigma), wmin):
+        if stop <= PEAK_EDGE_MARGIN or start >= nframes - PEAK_EDGE_MARGIN:
+            continue
+        if stationary[start:stop].mean() < 0.5:
+            continue
+        if not any(a < stop and start < b for a, b in regions):
+            regions.append((start, stop))
+
+    # Labelling by hand rather than through `scipy.ndimage.label`, which would weld
+    # two fractions sharing a border into one
+    labels = numpy.zeros(nframes, dtype=numpy.int32)
+    for index, (start, stop) in enumerate(sorted(regions), start=1):
+        labels[start:stop] = index
+    return labels, len(regions)
 
 def stationary_frames(intensity, q, nsigma=5.0):
     """Index of the frames whose solvent is the one of the run
@@ -641,11 +684,12 @@ def solute_frames(intensity, q, nsigma=5.0):
     """Index of the frames where something is eluting
 
     The solute scatters at low q while the solvent is alone at high q, so the ratio of
-    the two rises with the solute and does not care about the overall scale. Unlike the
-    regions `search_peaks` returns, which are cut at half prominence, this covers the
-    whole elution, shoulders included. That matters: leaving the shoulders of a peak in
-    a background is worse than leaving the whole peak, because they drag the SVD
-    fundamental along without being obvious enough for cormap to reject them.
+    the two rises with the solute and does not care about the overall scale. It needs no
+    summit either, which is why `search_peaks` falls back on it.
+
+    It covers the whole elution, shoulders included, and that is what a background needs:
+    leaving the shoulders of a peak in is worse than leaving the whole peak, because they
+    drag the SVD fundamental along without being obvious enough for cormap to reject them.
 
     :param intensity: 2D array of shape (nframes, nbins)
     :param q: scattering vector, same unit as SOLUTE_QRANGE and BACKGROUND_QRANGE
@@ -1008,7 +1052,13 @@ class HPLC(Plugin):
         frame_ds = diode_data.create_dataset("frame_idx", data=ids)
         frame_ds.attrs["interpretation"] = "spectrum"
         frame_ds.attrs["long_name"] = "Frame number"
-        diode_data.attrs["axes"] = "frame_idx"
+        # Time on the abscissa, frame_idx kept next to it so that one can switch over
+        nrm_time_ds = diode_data.create_dataset("timestamps", data=timestamps,
+                                                dtype=numpy.float64)
+        nrm_time_ds.attrs["interpretation"] = "spectrum"
+        nrm_time_ds.attrs["units"] = "s"
+        nrm_time_ds.attrs["long_name"] = "Time (s)"
+        diode_data.attrs["axes"] = "timestamps"
         diode_data.attrs["signal"] = "raw"
         diode_data.attrs["auxiliary_signals"] = ["smooth"]
         diode_data.attrs["title"] = "Renormalization"
@@ -1048,8 +1098,9 @@ class HPLC(Plugin):
         nrm_q_ds.attrs["interpretation"] = "spectrum"
         nrm_q_ds.attrs["unit"] = unit_name
         nrm_q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
+        nrm_data["timestamps"] = nrm_time_ds
         nrm_data.attrs["signal"] = "I"
-        nrm_data.attrs["axes"] = [".", "q"]
+        nrm_data.attrs["axes"] = ["timestamps", "q"]
         nrm_data.attrs["SILX_style"] = SAXS_STYLE
         nrm_grp.attrs["default"] = posixpath.relpath(nrm_data.name, nrm_grp.name)
 
@@ -1113,6 +1164,7 @@ class HPLC(Plugin):
                 "absorbance", data=self.uv_data.absorbance
             )
             absorbance.attrs["unit"] = "∅"
+            absorbance.attrs["long_name"] = "Absorbance (mAU)"
             absorbance.attrs["interpretation"] = "spectrum"
             absorbance.attrs["SILX_style"] = NORMAL_STYLE
             uv_data.create_dataset("timestamps", data=self.uv_data.timestamps).attrs[
@@ -1129,21 +1181,34 @@ class HPLC(Plugin):
         hplc_data.attrs["title"] = "SAXS - Chromatogram"
         hplc_data["sequence_index"] = self.sequence_index()
 
+        qmin, qmax = CHROMATOGRAM_QRANGE
+        band = (q >= qmin) & (q <= qmax)
+        band_ds = hplc_data.create_dataset(
+            "sum_q_range", data=I[:, band if band.sum() > 1 else slice(None)].sum(axis=-1),
+            dtype=numpy.float32)
+        band_ds.attrs["interpretation"] = "spectrum"
+        band_ds.attrs["long_name"] = f"Summed intensity in the q-range {qmin}-{qmax} nm⁻¹"
+        band_ds.attrs["SILX_style"] = NORMAL_STYLE
+        band_ds.attrs["comment"] = ("The bins above the range carry solvent and noise only: "
+                                    "leaving them out buys a factor 3 on the signal to noise, "
+                                    "and this is what the peak search works on")
+
         sum_ds = hplc_data.create_dataset("sum", data=Isum, dtype=numpy.float32)
         sum_ds.attrs["interpretation"] = "spectrum"
-        sum_ds.attrs["long_name"] = "Summed Intensity"
+        sum_ds.attrs["long_name"] = "Summed intensity over the whole q-range"
         sum_ds.attrs["SILX_style"] = NORMAL_STYLE
 
-        sum_ds = hplc_data.create_dataset("diode", data=diode, dtype=numpy.float32)
-        sum_ds.attrs["interpretation"] = "spectrum"
-        sum_ds.attrs["long_name"] = "Beam-stop diode signal"
-        sum_ds.attrs["SILX_style"] = NORMAL_STYLE
+        diode_ds = hplc_data.create_dataset("diode", data=diode, dtype=numpy.float32)
+        diode_ds.attrs["interpretation"] = "spectrum"
+        diode_ds.attrs["long_name"] = "Beam-stop diode signal"
+        diode_ds.attrs["SILX_style"] = NORMAL_STYLE
 
         frame_ds = hplc_data.create_dataset("frame_ids", data=ids, dtype=numpy.uint32)
         frame_ds.attrs["interpretation"] = "spectrum"
-        frame_ds.attrs["long_name"] = "frame index"
+        frame_ds.attrs["long_name"] = "Frame number"
 
-        hplc_data.attrs["signal"] = "sum"
+        hplc_data.attrs["signal"] = "sum_q_range"
+        hplc_data.attrs["auxiliary_signals"] = ["sum", "diode"]
         hplc_data.attrs["axes"] = "timestamps"  # "frame_ids"
         chroma_grp.attrs["default"] = posixpath.relpath(hplc_data.name, chroma_grp.name)
         entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
@@ -1227,7 +1292,10 @@ class HPLC(Plugin):
             "U", data=numpy.ascontiguousarray(U.T[:r], dtype=numpy.float32)
         )
         eigen_ds.attrs["interpretation"] = "spectrum"
+        eigen_ds.attrs["long_name"] = "Eigenvector of the scattering (arcsinh scale)"
+        eigen_data["q"] = nrm_q_ds
         eigen_data.attrs["signal"] = "U"
+        eigen_data.attrs["axes"] = [".", "q"]
         eigen_data.attrs["SILX_style"] = SAXS_STYLE
 
         chroma_data = nxs.new_class(svd_grp, "chromatogram", "NXdata")
@@ -1235,7 +1303,10 @@ class HPLC(Plugin):
             "V", data=numpy.ascontiguousarray(V[:r], dtype=numpy.float32)
         )
         chroma_ds.attrs["interpretation"] = "spectrum"
+        chroma_ds.attrs["long_name"] = "Weight of the eigenvector along the elution"
+        chroma_data["timestamps"] = time_ds
         chroma_data.attrs["signal"] = "V"
+        chroma_data.attrs["axes"] = [".", "timestamps"]
         chroma_data.attrs["SILX_style"] = NORMAL_STYLE
 
         svd_grp.create_dataset("eigenvalues", data=S[:r], dtype=numpy.float32)
@@ -1258,11 +1329,12 @@ class HPLC(Plugin):
                 "W", data=numpy.ascontiguousarray(W.T, dtype=numpy.float32)
             )
             eigen_ds.attrs["interpretation"] = "spectrum"
-            eigen_data.attrs["signal"] = "W"
-            eigen_data.attrs["SILX_style"] = SAXS_STYLE
-
             eigen_ds.attrs["units"] = "arbitrary"
-            eigen_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
+            eigen_ds.attrs["long_name"] = "Scattering of the component"
+            eigen_data["q"] = nrm_q_ds
+            eigen_data.attrs["signal"] = "W"
+            eigen_data.attrs["axes"] = [".", "q"]
+            eigen_data.attrs["SILX_style"] = SAXS_STYLE
 
             H = nmf.components_
             chroma_data = nxs.new_class(nmf_grp, "chromatogram", "NXdata")
@@ -1270,7 +1342,10 @@ class HPLC(Plugin):
                 "H", data=numpy.ascontiguousarray(H, dtype=numpy.float32)
             )
             chroma_ds.attrs["interpretation"] = "spectrum"
+            chroma_ds.attrs["long_name"] = "Concentration of the component along the elution"
+            chroma_data["timestamps"] = time_ds
             chroma_data.attrs["signal"] = "H"
+            chroma_data.attrs["axes"] = [".", "timestamps"]
             chroma_data.attrs["SILX_style"] = NORMAL_STYLE
             nmf_grp.attrs["default"] = posixpath.relpath(chroma_data.name, nmf_grp.name)
 
@@ -1317,6 +1392,8 @@ class HPLC(Plugin):
             "I", data=numpy.ascontiguousarray(bg_avg, dtype=numpy.float32)
         )
         bg_ds.attrs["interpretation"] = "spectrum"
+        bg_ds.attrs["units"] = "arbitrary"
+        bg_ds.attrs["long_name"] = "Intensity of the background (absolute, normalized on water)"
         bg_q_ds = bg_data.create_dataset(
             radial_unit, data=numpy.ascontiguousarray(q, dtype=numpy.float32)
         )
@@ -1342,7 +1419,7 @@ class HPLC(Plugin):
         fraction_grp["sequence_index"] = self.sequence_index()
         fraction_grp["minimum_size"] = window = 10
 
-        fractions, nfractions = search_peaks(Isum, window)
+        fractions, nfractions = search_peaks(I, q, window)
         self.to_pyarch["merge_frames"] = numpy.zeros((nfractions, 2), dtype=numpy.int32)
         self.to_pyarch["merge_I"] = numpy.zeros((nfractions, nbin), dtype=numpy.float32)
         self.to_pyarch["merge_Stdev"] = numpy.zeros(
