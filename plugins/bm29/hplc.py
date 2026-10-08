@@ -839,140 +839,138 @@ class HPLC(Plugin):
         # The group is created even when the filter leaves the data alone, so that the
         # sequence index of the following steps does not depend on the options.
         diode_raw = juice.diode
+        if len(diode_raw) == 0:
+            self.log_error("No beam-stop diode in the integrated files: there is "
+                           "nothing to normalize the curves with")
         filter_size = self.input.get("diode_medfilt", 0)
         algorithm = self.input.get("diode_filter", "median")
-        if filter_size < 2 or len(diode_raw) == 0:
+        if filter_size < 2:
             algorithm = "none"
         nrm_grp = nxs.new_class(entry_grp, "1_renormalize", "NXprocess")
         nrm_grp["sequence_index"] = self.sequence_index()
         nrm_grp["filter_used"] = algorithm
         nrm_grp["filter_size"] = filter_size
-        diode = diode_raw
-        if len(diode_raw) == 0:
-            nrm_grp["comment"] = ("No beam-stop diode in the integrated files: "
-                                  "the curves are left as the integration normalized them")
-        else:
-            diode_smooth = smooth_chromatogram(diode_raw, filter_size // 2, algorithm)
-            noise = estimate_noise(diode_raw)
-            residual = (diode_raw - diode_smooth).std()
-            # Uncertainty of the value the curves are divided by: the scatter around the
-            # smoothed curve when there is one, the noise of a single reading otherwise.
-            diode_error = noise if algorithm == "none" else residual
-            noise_ds = nrm_grp.create_dataset(
-                "noise", data=100.0 * noise / diode_raw.mean())
-            noise_ds.attrs["unit"] = r"%"
-            noise_ds.attrs["formula"] = "1.4826·MAD((dᵢ₋₁-2dᵢ+dᵢ₊₁)/√6) ÷ mean(d)"
-            noise_ds.attrs["comment"] = "Noise of a single diode reading, filter independent"
-            residual_ds = nrm_grp.create_dataset(
-                "residual", data=100.0 * residual / diode_raw.mean())
-            residual_ds.attrs["unit"] = r"%"
-            residual_ds.attrs["comment"] = ("Scatter of the raw diode around the smoothed one. "
-                                            "It exceeds `noise` by whatever the filter cannot "
-                                            "follow, and is the honest uncertainty on `smooth`")
+        diode_smooth = smooth_chromatogram(diode_raw, filter_size // 2, algorithm)
+        noise = estimate_noise(diode_raw)
+        residual = (diode_raw - diode_smooth).std()
+        # Uncertainty of the value the curves are divided by: the scatter around the
+        # smoothed curve when there is one, the noise of a single reading otherwise.
+        diode_error = noise if algorithm == "none" else residual
+        noise_ds = nrm_grp.create_dataset(
+            "noise", data=100.0 * noise / diode_raw.mean())
+        noise_ds.attrs["unit"] = r"%"
+        noise_ds.attrs["formula"] = "1.4826·MAD((dᵢ₋₁-2dᵢ+dᵢ₊₁)/√6) ÷ mean(d)"
+        noise_ds.attrs["comment"] = "Noise of a single diode reading, filter independent"
+        residual_ds = nrm_grp.create_dataset(
+            "residual", data=100.0 * residual / diode_raw.mean())
+        residual_ds.attrs["unit"] = r"%"
+        residual_ds.attrs["comment"] = ("Scatter of the raw diode around the smoothed one. "
+                                        "It exceeds `noise` by whatever the filter cannot "
+                                        "follow, and is the honest uncertainty on `smooth`")
 
-            diode_data = nxs.new_class(nrm_grp, "diode", "NXdata")
-            raw_ds = diode_data.create_dataset("raw", data=diode_raw.astype(numpy.float32))
-            raw_ds.attrs["interpretation"] = "spectrum"
-            raw_ds.attrs["long_name"] = "Beam-stop diode intensity"
-            smooth_ds = diode_data.create_dataset("smooth", data=diode_smooth.astype(numpy.float32))
-            smooth_ds.attrs["interpretation"] = "spectrum"
-            smooth_ds.attrs["formula"] = ("left untouched" if algorithm == "none" else
-                                          f"{algorithm} filter, {2 * (filter_size // 2) + 1} frames wide")
-            smooth_err_ds = diode_data.create_dataset(
-                "smooth_errors", data=numpy.full(nframes, diode_error, dtype=numpy.float32))
-            smooth_err_ds.attrs["interpretation"] = "spectrum"
-            smooth_err_ds.attrs["formula"] = "Incertainty on the smoothed diode value"
-            smooth_err_ds.attrs["comment"] = ("`noise` when nothing is smoothed, `residual` "
-                                              "otherwise, both in absolute units")
-            frame_ds = diode_data.create_dataset("frame_idx", data=ids)
-            frame_ds.attrs["interpretation"] = "spectrum"
-            frame_ds.attrs["long_name"] = "Frame number"
-            diode_data.attrs["axes"] = "frame_idx"
-            diode_data.attrs["signal"] = "raw"
-            diode_data.attrs["auxiliary_signals"] = ["smooth"]
-            diode_data.attrs["title"] = "Renormalization"
-            nrm_grp.attrs["default"] = posixpath.relpath(diode_data.name, nrm_grp.name)
+        diode_data = nxs.new_class(nrm_grp, "diode", "NXdata")
+        raw_ds = diode_data.create_dataset("raw", data=diode_raw.astype(numpy.float32))
+        raw_ds.attrs["interpretation"] = "spectrum"
+        raw_ds.attrs["long_name"] = "Beam-stop diode intensity"
+        smooth_ds = diode_data.create_dataset("smooth", data=diode_smooth.astype(numpy.float32))
+        smooth_ds.attrs["interpretation"] = "spectrum"
+        smooth_ds.attrs["formula"] = ("left untouched" if algorithm == "none" else
+                                      f"{algorithm} filter, {2 * (filter_size // 2) + 1} frames wide")
+        smooth_err_ds = diode_data.create_dataset(
+            "smooth_errors", data=numpy.full(nframes, diode_error, dtype=numpy.float32))
+        smooth_err_ds.attrs["interpretation"] = "spectrum"
+        smooth_err_ds.attrs["formula"] = "Incertainty on the smoothed diode value"
+        smooth_err_ds.attrs["comment"] = ("`noise` when nothing is smoothed, `residual` "
+                                          "otherwise, both in absolute units")
+        frame_ds = diode_data.create_dataset("frame_idx", data=ids)
+        frame_ds.attrs["interpretation"] = "spectrum"
+        frame_ds.attrs["long_name"] = "Frame number"
+        diode_data.attrs["axes"] = "frame_idx"
+        diode_data.attrs["signal"] = "raw"
+        diode_data.attrs["auxiliary_signals"] = ["smooth"]
+        diode_data.attrs["title"] = "Renormalization"
 
-            # Frames no file provided are left at zero by the concatenation
-            scale = numpy.divide(diode_raw, diode_smooth,
-                                 out=numpy.ones_like(diode_smooth),
-                                 where=diode_smooth != 0)
-            I *= numpy.atleast_2d(scale).T
-            Isum *= scale
-            sigma *= numpy.atleast_2d(scale).T
-            diode = diode_smooth
+        # Frames no file provided are left at zero by the concatenation
+        scale = numpy.divide(diode_raw, diode_smooth,
+                             out=numpy.ones_like(diode_smooth),
+                             where=diode_smooth != 0)
+        I *= numpy.atleast_2d(scale).T
+        Isum *= scale
+        sigma *= numpy.atleast_2d(scale).T
+        diode = diode_smooth
 
-            # The diode is the dominant source of frame to frame scatter: the detector
-            # pixels are many enough for their own variance to average out. Dividing by
-            # `d` turns its uncertainty into var(I) = I²·var_d/d², i.e. an extra
-            # sum_signal²·var_d/d² on the unreduced variances, as `integrate.py` does
-            # in the sample-changer pathway.
-            relative_error = numpy.atleast_2d(
-                numpy.divide(diode_error, diode_smooth,
-                             out=numpy.zeros_like(diode_smooth),
-                             where=diode_smooth != 0)).T
-            sigma[...] = numpy.hypot(sigma, I * relative_error)
+        # The diode is the dominant source of frame to frame scatter: the detector
+        # pixels are many enough for their own variance to average out. Dividing by
+        # `d` turns its uncertainty into var(I) = I²·var_d/d², i.e. an extra
+        # sum_signal²·var_d/d² on the unreduced variances, as `integrate.py` does
+        # in the sample-changer pathway.
+        relative_error = numpy.atleast_2d(
+            numpy.divide(diode_error, diode_smooth,
+                         out=numpy.zeros_like(diode_smooth),
+                         where=diode_smooth != 0)).T
+        sigma[...] = numpy.hypot(sigma, I * relative_error)
 
-            nrm_data = nxs.new_class(nrm_grp, "result", "NXdata")
-            nrm_data.attrs["title"] = "Curves renormalized on the smoothed diode"
-            nrm_int_ds = nrm_data.create_dataset(
-                "I", data=numpy.ascontiguousarray(I, dtype=numpy.float32), **cmp_float)
-            nrm_int_ds.attrs["interpretation"] = "spectrum"
-            nrm_int_ds.attrs["units"] = "arbitrary"
-            nrm_int_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
-            nrm_std_ds = nrm_data.create_dataset(
-                "errors", data=numpy.ascontiguousarray(sigma, dtype=numpy.float32), **cmp_float)
-            nrm_std_ds.attrs["interpretation"] = "spectrum"
-            nrm_q_ds = nrm_data.create_dataset("q", data=q)
-            nrm_q_ds.attrs["interpretation"] = "spectrum"
-            nrm_q_ds.attrs["unit"] = unit_name
-            nrm_q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
-            nrm_data.attrs["signal"] = "I"
-            nrm_data.attrs["axes"] = [".", "q"]
-            nrm_data.attrs["SILX_style"] = SAXS_STYLE
-            nrm_grp.attrs["default"] = posixpath.relpath(nrm_data.name, nrm_grp.name)
+        nrm_data = nxs.new_class(nrm_grp, "result", "NXdata")
+        nrm_data.attrs["title"] = ("Curves renormalized on the smoothed diode"
+                                   if algorithm != "none" else "Curves as integrated")
+        nrm_int_ds = nrm_data.create_dataset(
+            "I", data=numpy.ascontiguousarray(I, dtype=numpy.float32), **cmp_float)
+        nrm_int_ds.attrs["interpretation"] = "spectrum"
+        nrm_int_ds.attrs["units"] = "arbitrary"
+        nrm_int_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
+        nrm_std_ds = nrm_data.create_dataset(
+            "errors", data=numpy.ascontiguousarray(sigma, dtype=numpy.float32), **cmp_float)
+        nrm_std_ds.attrs["interpretation"] = "spectrum"
+        nrm_q_ds = nrm_data.create_dataset("q", data=q)
+        nrm_q_ds.attrs["interpretation"] = "spectrum"
+        nrm_q_ds.attrs["unit"] = unit_name
+        nrm_q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
+        nrm_data.attrs["signal"] = "I"
+        nrm_data.attrs["axes"] = [".", "q"]
+        nrm_data.attrs["SILX_style"] = SAXS_STYLE
+        nrm_grp.attrs["default"] = posixpath.relpath(nrm_data.name, nrm_grp.name)
 
-            # Normalizing on the smoothed diode instead of the raw one amounts to
-            # scaling the normalization by the inverse factor, like pyFAI's
-            # `Integrate1dResult.renormalize` does. The signal, its variance and the
-            # pixel count are untouched.
-            accumulators = juice.accumulators
-            if accumulators is not None:
-                acc_grp = nxs.new_class(nrm_grp, "accumulators", "NXcollection")
-                acc_grp.attrs["comment"] = (
-                    "Unreduced sums of the azimuthal integration, one line per frame, "
-                    "corrected for the renormalization. The intensity of a set of frames "
-                    "is obtained without re-integrating anything: "
-                    "sum_signal.sum(axis=0)/sum_normalization.sum(axis=0), or by rebuilding "
-                    "Integrate1dResult objects and merging them with `union`. Mind that "
-                    "sum_normalization2 is only propagated to keep pyFAI's machinery happy: "
-                    "once renormalized it no longer carries its statistical meaning, so use "
-                    "`sem` and never `std`.")
-                acc_grp["q"] = nrm_q_ds
-                acc_grp["frame_idx"] = frame_ds
-                inverse = numpy.atleast_2d(numpy.reciprocal(scale)).T
-                extra_variance = (accumulators.sum_signal * relative_error) ** 2
-                corrected = {
-                    "sum_signal": (accumulators.sum_signal, "Σᵢ signalᵢ"),
-                    "sum_normalization": (accumulators.sum_normalization * inverse,
-                                          "Σᵢ normalizationᵢ, rescaled on the smoothed diode"),
-                    "sum_normalization2": (None if accumulators.sum_normalization2 is None else
-                                           accumulators.sum_normalization2 * inverse ** 2,
-                                           "Σᵢ normalizationᵢ², rescaled on the smoothed diode"),
-                    "sum_variance_azimuthal": (accumulators.sum_variance_azimuthal + extra_variance,
-                                               "Σᵢ varianceᵢ, azimuthal error model + diode noise"),
-                    "sum_variance_poisson": (None if accumulators.sum_variance_poisson is None else
-                                             accumulators.sum_variance_poisson + extra_variance,
-                                             "Σᵢ varianceᵢ, poissonian error model + diode noise"),
-                    "count": (accumulators.count, "Σᵢ pixel countᵢ"),
-                }
-                for name, (data, long_name) in corrected.items():
-                    if data is None:
-                        continue
-                    acc_ds = acc_grp.create_dataset(
-                        name, data=numpy.ascontiguousarray(data, dtype=numpy.float32), **cmp_float)
-                    acc_ds.attrs["interpretation"] = "spectrum"
-                    acc_ds.attrs["long_name"] = long_name
+        # Normalizing on the smoothed diode instead of the raw one amounts to
+        # scaling the normalization by the inverse factor, like pyFAI's
+        # `Integrate1dResult.renormalize` does. The signal, its variance and the
+        # pixel count are untouched.
+        accumulators = juice.accumulators
+        if accumulators is not None:
+            acc_grp = nxs.new_class(nrm_grp, "accumulators", "NXcollection")
+            acc_grp.attrs["comment"] = (
+                "Unreduced sums of the azimuthal integration, one line per frame, "
+                "corrected for the renormalization. The intensity of a set of frames "
+                "is obtained without re-integrating anything: "
+                "sum_signal.sum(axis=0)/sum_normalization.sum(axis=0), or by rebuilding "
+                "Integrate1dResult objects and merging them with `union`. Mind that "
+                "sum_normalization2 is only propagated to keep pyFAI's machinery happy: "
+                "once renormalized it no longer carries its statistical meaning, so use "
+                "`sem` and never `std`.")
+            acc_grp["q"] = nrm_q_ds
+            acc_grp["frame_idx"] = frame_ds
+            inverse = numpy.atleast_2d(numpy.reciprocal(scale)).T
+            extra_variance = (accumulators.sum_signal * relative_error) ** 2
+            corrected = {
+                "sum_signal": (accumulators.sum_signal, "Σᵢ signalᵢ"),
+                "sum_normalization": (accumulators.sum_normalization * inverse,
+                                      "Σᵢ normalizationᵢ, rescaled on the smoothed diode"),
+                "sum_normalization2": (None if accumulators.sum_normalization2 is None else
+                                       accumulators.sum_normalization2 * inverse ** 2,
+                                       "Σᵢ normalizationᵢ², rescaled on the smoothed diode"),
+                "sum_variance_azimuthal": (accumulators.sum_variance_azimuthal + extra_variance,
+                                           "Σᵢ varianceᵢ, azimuthal error model + diode noise"),
+                "sum_variance_poisson": (None if accumulators.sum_variance_poisson is None else
+                                         accumulators.sum_variance_poisson + extra_variance,
+                                         "Σᵢ varianceᵢ, poissonian error model + diode noise"),
+                "count": (accumulators.count, "Σᵢ pixel countᵢ"),
+            }
+            for name, (data, long_name) in corrected.items():
+                if data is None:
+                    continue
+                acc_ds = acc_grp.create_dataset(
+                    name, data=numpy.ascontiguousarray(data, dtype=numpy.float32), **cmp_float)
+                acc_ds.attrs["interpretation"] = "spectrum"
+                acc_ds.attrs["long_name"] = long_name
 
         # Process 2: Chromatogram
         chroma_grp = nxs.new_class(entry_grp, "2_chromatogram", "NXprocess")
@@ -1027,8 +1025,8 @@ class HPLC(Plugin):
         time_ds.attrs["interpretation"] = "spectrum"
         time_ds.attrs["long_name"] = "Time stamps (s)"
 
-        # Merged chromatograms: SAXS and UV-Vis overlaid on the frame time base
-        merged_data = nxs.new_class(chroma_grp, "merged", "NXdata")
+        # SAXS and UV-Vis chromatograms overlaid on the frame time base
+        merged_data = nxs.new_class(chroma_grp, "result", "NXdata")
         merged_data.attrs["title"] = "Normalized chromatograms"
         merged_data["sequence_index"] = self.sequence_index()
         qmin, qmax = CHROMATOGRAM_QRANGE
@@ -1067,31 +1065,12 @@ class HPLC(Plugin):
             merged_data.attrs["auxiliary_signals"] = auxiliary_signals
         merged_data.attrs["axes"] = "timestamps"
         merged_data.attrs["SILX_style"] = NORMAL_STYLE
+        chroma_grp.attrs["default"] = posixpath.relpath(merged_data.name, chroma_grp.name)
 
-        integration_data = nxs.new_class(chroma_grp, "result", "NXdata")
+        # The I(q) themselves are not repeated here: 1_renormalize/result holds them
         chroma_grp.attrs["title"] = str_(self.juices[0].sample)
 
-        int_ds = integration_data.create_dataset(
-            "I", data=numpy.ascontiguousarray(I, dtype=numpy.float32)
-        )
-        std_ds = integration_data.create_dataset(
-            "errors", data=numpy.ascontiguousarray(sigma, dtype=numpy.float32)
-        )
-        q_ds = integration_data.create_dataset("q", data=self.juices[0].q)
-        q_ds.attrs["interpretation"] = "spectrum"
-        q_ds.attrs["unit"] = unit_name
-        q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
-        integration_data.attrs["signal"] = "I"
-        integration_data.attrs["axes"] = [".", "q"]
-        integration_data.attrs["SILX_style"] = SAXS_STYLE
-
-        int_ds.attrs["interpretation"] = "spectrum"
-        int_ds.attrs["units"] = "arbitrary"
-        int_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
-        # int_ds.attrs["uncertainties"] = "errors" This does not work
-        int_ds.attrs["scale"] = "log"
-        std_ds.attrs["interpretation"] = "spectrum"
-
+        # TODO: revisit what goes into the zip once the background step is reworked
         save_zip(
             os.path.splitext(self.output_file)[0] + ".zip", self.juices[0], I, sigma
         )
