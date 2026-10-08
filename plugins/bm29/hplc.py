@@ -380,6 +380,9 @@ SMOOTHING_ALGORITHMS = ("median", "savgol", "mean", "none")
 CHROMATOGRAM_QRANGE = (0.1, 1.0)
 "Range of q, in nm⁻¹, summed to build the SAXS chromatogram: best signal to noise"
 
+BACKGROUND_QRANGE = (1.5, 4.0)
+"Range of q, in nm⁻¹, where the solvent scatters alone: used to tell solvents apart"
+
 
 def normalize_chromatogram(signal):
     """Scale a chromatogram between 0 and 1
@@ -581,36 +584,72 @@ def search_peaks(signal, wmin=10, scale=0.9):
     return scipy.ndimage.label(res)
 
 
-def build_background(intensity, std=None, keep=0.3):
+def stationary_frames(intensity, q, nsigma=5.0):
+    """Index of the frames whose solvent is the one of the run
+
+    Beyond BACKGROUND_QRANGE the solute scatters almost nothing and the solvent is left
+    alone, so the level there identifies the liquid in the capillary. A frame departing
+    from the run saw another solvent, a bubble or a glitch, and has nothing to do in a
+    background. Being blind to the solute, this tells nothing about the elution.
+
+    :param intensity: 2D array of shape (nframes, nbins)
+    :param q: scattering vector, same unit as BACKGROUND_QRANGE
+    :param nsigma: width of the gate, in robust standard deviations
+    :return: 1d array of frame indices, all of them when the gate cannot be applied
+    """
+    frames = numpy.arange(intensity.shape[0])
+    band = (q >= BACKGROUND_QRANGE[0]) & (q <= BACKGROUND_QRANGE[1])
+    if band.sum() < 2:
+        logger.warning(f"No q in {BACKGROUND_QRANGE} nm⁻¹: skipping the stationarity gate")
+        return frames
+    plateau = intensity[:, band].mean(axis=-1)
+    median = numpy.median(plateau)
+    mad = 1.4826 * numpy.median(abs(plateau - median))
+    if mad <= 0:
+        return frames
+    return frames[abs(plateau - median) < nsigma * mad]
+
+
+def build_background(intensity, std=None, keep=0.3, q=None, nsigma=5.0):
     """
     Build a background from a SVD and search for the frames looking most like the background.
 
+    0. discard the frames whose solvent is not the one of the run (`stationary_frames`)
     1. build a coarse approximation based on the SVD.
     2. measure the distance (cormap) of every single frame to the fundamental of the SVD
     3. average frames that looks most like the coarse approximation (with deviation)
 
+    Steps 0 and 2 answer orthogonal questions, and both are needed: the first compares
+    levels at high q, where only the solvent speaks, and the second compares shapes at
+    low q, where the solute does. A curve offset by a change of solvent keeps the shape
+    of a background, and cormap lets it through.
+
     :param intensity: 2D array of shape (nframes, nbins)
     :param std: same as intensity but with the standard deviation.
-    :param keep: fraction of frames to consider for background (<1!), 30% looks like a good guess
+    :param keep: fraction of the stationary frames to average (<1!)
+    :param q: scattering vector; without it the stationarity gate is skipped
+    :param nsigma: width of the stationarity gate, in robust standard deviations
     :return: (bg_avg, bg_std, indexes), each 1d of size nbins. + the index of the frames to keep
     """
-    U, S, V = numpy.linalg.svd(intensity.T, full_matrices=False)
+    stationary = (numpy.arange(intensity.shape[0]) if q is None
+                  else stationary_frames(intensity, q, nsigma))
+    U, S, V = numpy.linalg.svd(intensity[stationary].T, full_matrices=False)
     bg1 = numpy.median(V[0]) * S[0] * U[:, 0]
     Pscore = [
         freesas.cormap.measure_longest(
             numpy.ascontiguousarray(bg1 - i, dtype=numpy.float64)
         )
-        for i in intensity
+        for i in intensity[stationary]
     ]
     orderd = numpy.argsort(Pscore)
-    nkeep = math.ceil(keep * intensity.shape[0])
-    to_keep = numpy.sort(orderd[:nkeep])
+    nkeep = math.ceil(keep * len(stationary))
+    to_keep = numpy.sort(stationary[orderd[:nkeep]])
     bg_avg = intensity[to_keep].mean(axis=0)
     if std is not None:
         bg_std = numpy.sqrt(((std[to_keep]) ** 2).sum(axis=0)) / len(to_keep)
     else:
         bg_std = None
-    return bg_avg, bg_std, to_keep
+    return bg_avg, bg_std, to_keep, stationary
 
 
 def save_zip(filename, config, intensity, sigma, dat_template=None):
@@ -1151,14 +1190,24 @@ class HPLC(Plugin):
         bg_grp["sequence_index"] = self.sequence_index()
         bg_grp["keep"] = keep = 0.3
         bg_grp["keep"].attrs["info"] = (
-            "Fraction of curves to be considered as background"
+            "Fraction of the stationary curves to be considered as background"
         )
-        bg_avg, bg_std, to_keep = build_background(I, sigma, keep=keep)
+        bg_avg, bg_std, to_keep, stationary = build_background(I, sigma, keep=keep, q=q)
         to_keep = numpy.ascontiguousarray(to_keep, dtype=numpy.int32)
         kept_ds = bg_grp.create_dataset("kept", data=to_keep)
         kept_ds.attrs["info"] = (
             "Index of curves used to calculate the background scattering"
         )
+        stationary_ds = bg_grp.create_dataset(
+            "stationary", data=numpy.ascontiguousarray(stationary, dtype=numpy.int32))
+        stationary_ds.attrs["info"] = (
+            f"Index of the curves whose scattering over q ∈ {BACKGROUND_QRANGE} nm⁻¹ "
+            "matches the solvent of the run; the others saw a bubble or another solvent"
+        )
+        rejected = len(I) - len(stationary)
+        if rejected:
+            self.log_warning(f"{rejected} frames out of {len(I)} did not scatter like the "
+                             "solvent of the run and were kept out of the background")
         self.to_pyarch["buffer_frames"] = to_keep
         self.to_pyarch["buffer_I"] = bg_avg
         self.to_pyarch["buffer_Stdev"] = bg_std
