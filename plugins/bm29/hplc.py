@@ -10,7 +10,7 @@ __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
 __date__ = "08/10/2026"
 __status__ = "development"
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 import copy
 import json
@@ -245,6 +245,75 @@ class NexusJuice(NamedTuple):
                     count_time=count_time,
                     )
 
+    @classmethod
+    def concatenate(cls, juices):
+        """Merge the juices of several integration files into a single one, with every
+        per-frame series put back in acquisition order, alternative constructor
+
+        Each file only covers a slice of the acquisition and nothing guarantees they are
+        read in order, so the frame index is the only trustworthy ordering. Series are
+        scattered into arrays of `max(frame_id) + 1` entries: a frame no file provides is
+        left at zero, and `idx` lists those actually filled.
+
+        :param juices: iterable of NexusJuice sharing the same radial axis
+        :return: a single NexusJuice
+        """
+        juices = [juice for juice in juices if juice is not None]
+        if not juices:
+            raise ValueError("No integration file to concatenate")
+        first = juices[0]
+        for juice in juices[1:]:
+            if juice.npt != first.npt or not numpy.allclose(juice.q, first.q):
+                raise ValueError(f"{juice.filename} and {first.filename} were integrated "
+                                 "on different radial axes, they cannot be concatenated")
+        idx = numpy.concatenate([juice.idx for juice in juices])
+        order = numpy.argsort(idx, kind="stable")
+        idx = numpy.ascontiguousarray(idx[order], dtype=numpy.int64)
+        nframes = int(idx[-1]) + 1 if idx.size else 0
+
+        def scatter(chunks, dtype=None):
+            "Put the per-frame values of every file back at their frame index"
+            if any(chunk is None or len(chunk) == 0 for chunk in chunks):
+                return None
+            values = numpy.concatenate(chunks)[order]
+            out = numpy.zeros((nframes,) + values.shape[1:], dtype=dtype or values.dtype)
+            out[idx] = values
+            return out
+
+        def series(name, dtype=None):
+            return scatter([getattr(juice, name) for juice in juices], dtype)
+
+        accumulators = None
+        if all(juice.accumulators is not None for juice in juices):
+            accumulators = Accumulators(
+                **{name: scatter([getattr(juice.accumulators, name) for juice in juices])
+                   for name in Accumulators._fields})
+
+        return cls(filename=", ".join(juice.filename for juice in juices),
+                   h5path=first.h5path,
+                   npt=first.npt,
+                   unit=first.unit,
+                   idx=idx,
+                   Isum=series("Isum", numpy.float64),
+                   q=first.q,
+                   I=series("I", numpy.float32),
+                   sigma=series("sigma", numpy.float32),
+                   poni=first.poni,
+                   mask=first.mask,
+                   energy=first.energy,
+                   polarization=first.polarization,
+                   method=first.method,
+                   sample=first.sample,
+                   timestamps=series("timestamps", numpy.float64),
+                   diode=series("diode", numpy.float64),
+                   ring_current=series("ring_current"),
+                   spottiness=series("spottiness"),
+                   isotropic=series("isotropic"),
+                   accumulators=accumulators,
+                   normalization_factor=first.normalization_factor,
+                   count_time=first.count_time,
+                   )
+
     def to_result(self, index, error_model="poisson"):
         """Rebuild a pyFAI Integrate1dResult for one frame, i.e. to merge
         several of them with `union`
@@ -292,25 +361,60 @@ class NexusJuice(NamedTuple):
         return result.__recalculate_means__()
 
 
-def smooth_chromatogram(signal, window):
-    """smooth-out the chromatogram
+SMOOTHING_ALGORITHMS = ("median", "savgol", "mean", "none")
 
-    :param signal: the chomatogram as 1d array
-    :param window: the size of the window
+
+def smooth_chromatogram(signal, window, algorithm="median", order=2):
+    """Smooth-out a per-frame series: the chromatogram, the diode, ...
+
+    The window is centred and the edges are extended with the closest value, so that
+    the first and the last frames are not dragged towards zero.
+
+    :param signal: the chromatogram as 1d array
+    :param window: half-width of the window: the filter spans 2*window+1 frames
+    :param algorithm: one of SMOOTHING_ALGORITHMS. "median" is insensitive to spikes
+                      but leaves steps behind, "savgol" follows the curvature of a
+                      drift without eating into it, "mean" is the crudest and "none"
+                      hands the signal back untouched
+    :param order: order of the polynomial, only used by "savgol"
+    :return: the smoothed signal, as a 1d array of float64
     """
-    # wodd = window+1 if window%2==0 else window
-    wodd = 2 * window + 1
-    smth = scipy.signal.medfilt(signal, wodd)
-    # sigma = wmin/2*numpy.sqrt(2*numpy.log(2))
-    # w2 = int(6*sigma)
-    # if w2%2 == 0: w2+=1
-    # print(wmin, sigma, w2)
-    #     g = scipy.signal.gaussian(wodd, wodd/4)
-    #     g /= g.sum()
+    signal = numpy.ascontiguousarray(signal, dtype=numpy.float64)
+    width = 2 * int(window) + 1
+    if width > signal.size:
+        # largest odd window which still fits in the signal
+        width = signal.size - 1 + signal.size % 2
+    if algorithm == "none" or width < 3:
+        return signal
+    if algorithm == "median":
+        return scipy.ndimage.median_filter(signal, width, mode="nearest")
+    if algorithm == "mean":
+        return scipy.ndimage.uniform_filter1d(signal, width, mode="nearest")
+    if algorithm == "savgol":
+        return scipy.signal.savgol_filter(signal, width, min(order, width - 1), mode="nearest")
+    raise ValueError(f"Unknown smoothing algorithm {algorithm!r}, expected one of {SMOOTHING_ALGORITHMS}")
 
-    # small kernel smoothing to remove steps induced by medfilt
-    # smth2 = scipy.signal.convolve(signal, g,"same")
-    return smth
+
+def estimate_noise(signal, robust=True):
+    """Estimate the standard deviation of the noise of a per-frame series
+
+    Second order differences cancel any linear trend, hence
+    E[((sᵢ₋₁ - 2sᵢ + sᵢ₊₁)/√6)²] = σ², whatever the drift of the signal. Unlike the
+    residuals to a smoothed curve, this does not depend on the filter which is applied
+    afterwards, and does not mix the noise with what that filter fails to follow.
+
+    :param signal: the series as a 1d array
+    :param robust: estimate from the median absolute deviation rather than from the
+                   root mean square, so that spikes and sharp features do not inflate it
+    :return: standard deviation of the noise
+    """
+    signal = numpy.ascontiguousarray(signal, dtype=numpy.float64)
+    if signal.size < 3:
+        return 0.0
+    residuals = numpy.convolve(signal, [1, -2, 1], "valid") / math.sqrt(6)
+    if robust:
+        return 1.4826 * numpy.median(abs(residuals - numpy.median(residuals)))
+    return residuals.std()
 
 
 def search_peaks(signal, wmin=10, scale=0.9):
@@ -433,6 +537,7 @@ class HPLC(Plugin):
        },
       "nmf_components": 5,
       "diode_medfilt": 0,
+      "diode_filter": "median",
       "uv_datafile": "path to UV .dat file in some gallery",
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.hplc"
@@ -448,6 +553,7 @@ class HPLC(Plugin):
         self.nxs = None
         self.output_file = None
         self.juices = []
+        self.juice = None
         self.uv_data = None
         self.nmf_components = self.NMF_COMP
         self.to_pyarch = {}
@@ -561,28 +667,25 @@ class HPLC(Plugin):
                 input_grp[f"LImA_{idx:04d}"] = h5py.ExternalLink(rel_path, juice.h5path)
                 self.juices.append(juice)
 
-        q = self.juices[0].q
-        unit = self.juices[0].unit
+        # Every file covers a slice of the acquisition: put the series back in order
+        self.juice = juice = NexusJuice.concatenate(self.juices)
+        q = juice.q
+        unit = juice.unit
         radial_unit, unit_name = str_(unit).split("_", 1)
 
         # Sample: outsourced !
-        create_nexus_sample(nxs, entry_grp, self.juices[0].sample)
+        create_nexus_sample(nxs, entry_grp, juice.sample)
 
-        nframes = max(i.idx.max() for i in self.juices) + 1
+        nframes = int(juice.idx[-1]) + 1
         nbin = q.size
 
-        I = numpy.zeros((nframes, nbin), dtype=numpy.float32)
-        sigma = numpy.zeros((nframes, nbin), dtype=numpy.float32)
-        Isum = numpy.zeros(nframes)
+        I = juice.I
+        sigma = juice.sigma
+        Isum = juice.Isum
 
         ids = numpy.arange(nframes)
-        idx = numpy.concatenate([i.idx for i in self.juices])
-        timestamps = self.to_pyarch["time"] = numpy.concatenate(
-            [i.timestamps for i in self.juices]
-        )
-        I[idx] = numpy.vstack([i.I for i in self.juices])
-        Isum[idx] = numpy.concatenate([i.Isum for i in self.juices])
-        sigma[idx] = numpy.vstack([i.sigma for i in self.juices])
+        idx = juice.idx
+        timestamps = self.to_pyarch["time"] = juice.timestamps
 
         if len(timestamps):
             self._time_digits = len(f"{timestamps[-1]:.0f}")
@@ -590,28 +693,37 @@ class HPLC(Plugin):
             self._time_digits = 1
 
         # Process 0.5: preprocessing
-        diode_raw = numpy.concatenate([i.diode for i in self.juices])
-        medfilt_order = self.input.get("diode_medfilt", 0)
-        if medfilt_order >= 2:
+        diode_raw = juice.diode
+        filter_size = self.input.get("diode_medfilt", 0)
+        algorithm = self.input.get("diode_filter", "median")
+        if filter_size >= 2 and diode_raw is not None:
             preproc_grp = nxs.new_class(entry_grp, "0_pre-process", "NXprocess")
             preproc_grp["sequence_index"] = self.sequence_index()
-            preproc_grp["filter_used"] = "scipy.ndimage.median_filter"
-            preproc_grp["filter_size"] = medfilt_order
+            preproc_grp["filter_used"] = algorithm
+            preproc_grp["filter_size"] = filter_size
 
-            # diode_smooth = scipy.signal.medfilt(diode_raw, medfilt_order)
-            diode_smooth = scipy.ndimage.median_filter(
-                                    diode_raw, medfilt_order,
-                                    mode="mirror")
-            noise = (100.0 * (((diode_raw - diode_smooth) ** 2).mean()) ** 0.5 /
-                                    diode_raw.mean())
-            preproc_grp.create_dataset("noise", data=noise).attrs["unit"] = r"%"
+            diode_smooth = smooth_chromatogram(diode_raw, filter_size // 2, algorithm)
+            noise_ds = preproc_grp.create_dataset(
+                "noise", data=100.0 * estimate_noise(diode_raw) / diode_raw.mean())
+            noise_ds.attrs["unit"] = r"%"
+            noise_ds.attrs["formula"] = "1.4826·MAD((dᵢ₋₁-2dᵢ+dᵢ₊₁)/√6) ÷ mean(d)"
+            noise_ds.attrs["comment"] = "Noise of a single diode reading, filter independent"
+            residual_ds = preproc_grp.create_dataset(
+                "residual", data=100.0 * (diode_raw - diode_smooth).std() / diode_raw.mean())
+            residual_ds.attrs["unit"] = r"%"
+            residual_ds.attrs["comment"] = ("Scatter of the raw diode around the smoothed one. "
+                                            "It exceeds `noise` by whatever the filter cannot "
+                                            "follow, and is the honest uncertainty on diode_smooth")
             preproc_grp.create_dataset("diode_raw", data=diode_raw).attrs[
                 "interpretation"
             ] = "spectrum"
             preproc_grp.create_dataset("diode_smooth", data=diode_smooth).attrs[
                 "interpretation"
             ] = "spectrum"
-            scale = diode_raw / diode_smooth
+            # Frames no file provided are left at zero by the concatenation
+            scale = numpy.divide(diode_raw, diode_smooth,
+                                 out=numpy.ones_like(diode_smooth),
+                                 where=diode_smooth != 0)
             I *= numpy.atleast_2d(scale).T
             Isum *= scale
             sigma *= numpy.atleast_2d(scale).T
