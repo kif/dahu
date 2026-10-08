@@ -13,6 +13,7 @@ __status__ = "development"
 __version__ = "0.6.0"
 
 import copy
+import glob
 import json
 
 # from dahu.utils import fully_qualified_name
@@ -20,6 +21,7 @@ import logging
 import math
 import os
 import posixpath
+import re
 import time
 import zipfile
 from typing import NamedTuple
@@ -93,6 +95,7 @@ class NexusJuice(NamedTuple):
     accumulators: Accumulators | None = None
     normalization_factor: float | None = None
     count_time: float | None = None
+    image_file: str | None = None
 
     @classmethod
     def read(cls, filename:str):
@@ -162,6 +165,12 @@ class NexusJuice(NamedTuple):
             detectors = nxsr.get_class(instrument_grp, class_type="NXdetector")
             detector_grp = next(grp for grp in detectors if "pixel_mask" in grp)
             mask = detector_grp["pixel_mask"].attrs["filename"]
+            # The 2D frames are an external link to the file written by LImA: it is
+            # the only trace of where the acquisition itself was recorded
+            link = detector_grp.get("frames", getlink=True)
+            image_file = (os.path.normpath(os.path.join(
+                              os.path.dirname(os.path.abspath(filename)), link.filename))
+                          if isinstance(link, h5py.ExternalLink) else None)
             count_time = (
                 detector_grp["count_time"][()] if "count_time" in detector_grp else None
             )
@@ -244,6 +253,7 @@ class NexusJuice(NamedTuple):
                     accumulators=accumulators,
                     normalization_factor=normalization_factor,
                     count_time=count_time,
+                    image_file=image_file,
                     )
 
     @classmethod
@@ -315,6 +325,7 @@ class NexusJuice(NamedTuple):
                    accumulators=accumulators,
                    normalization_factor=first.normalization_factor,
                    count_time=first.count_time,
+                   image_file=first.image_file,
                    )
 
     def to_result(self, index, error_model="poisson"):
@@ -365,6 +376,121 @@ class NexusJuice(NamedTuple):
 
 
 SMOOTHING_ALGORITHMS = ("median", "savgol", "mean", "none")
+
+CHROMATOGRAM_QRANGE = (0.1, 1.0)
+"Range of q, in nm⁻¹, summed to build the SAXS chromatogram: best signal to noise"
+
+
+def normalize_chromatogram(signal):
+    """Scale a chromatogram between 0 and 1
+
+    Signals of different natures, scattered photons and absorbance at several
+    wavelengths, only become comparable on a common plot once rescaled.
+
+    :param signal: the chromatogram as a 1d array
+    :return: the same curve, between 0 and 1
+    """
+    signal = numpy.ascontiguousarray(signal, dtype=numpy.float32)
+    low = signal.min()
+    span = signal.max() - low
+    return (signal - low) / span if span > 0 else numpy.zeros_like(signal)
+
+
+UV_COUNTER = re.compile(r"^w\d+_(\d+)_\d+$")
+"BLISS counter of the UV-Vis spectrometer, the captured group being the wavelength in nm"
+
+
+def find_bliss_master(image_file):
+    """Locate the BLISS master file of an acquisition, starting from one of its images
+
+    LImA writes in a `scan0001` directory sitting next to the master file, which is the
+    only HDF5 of its parent directory. The master is not written yet when
+    IntegrateMultiframe runs, but it is by the time the chromatogram is built.
+
+    :param image_file: name of one of the HDF5 files written by LImA
+    :return: name of the master file, or None when it cannot be pinned down
+    """
+    if not image_file:
+        return None
+    scan_dir = os.path.dirname(os.path.abspath(image_file))
+    if not os.path.basename(scan_dir).startswith("scan"):
+        return None
+    dataset_dir = os.path.dirname(scan_dir)
+    candidates = glob.glob(os.path.join(dataset_dir, "*.h5"))
+    if len(candidates) == 1:
+        return candidates[0]
+    # Several HDF5 side by side: the master is named after the directory holding it
+    expected = os.path.join(dataset_dir, os.path.basename(dataset_dir) + ".h5")
+    return expected if expected in candidates else None
+
+
+def _select_scan(h5file, image_file):
+    """Pick the scan of `h5file` which acquired `image_file`
+
+    The detector of a scan is a virtual dataset gathering the LImA files, which is the
+    one reliable link between the two.
+    """
+    scans = [h5file[key] for key in h5file
+             if isinstance(h5file[key], h5py.Group) and "measurement" in h5file[key]]
+    if image_file:
+        target = os.path.basename(image_file)
+        for scan in scans:
+            for name in scan["measurement"]:
+                dataset = scan["measurement"].get(name)
+                if isinstance(dataset, h5py.Dataset) and dataset.is_virtual:
+                    if any(target == os.path.basename(source.file_name)
+                           for source in dataset.virtual_sources()):
+                        return scan
+    return scans[0] if len(scans) == 1 else None
+
+
+def read_uv_from_bliss(image_file):
+    """Read the UV-Vis chromatograms from the BLISS master file of an acquisition
+
+    Unlike the `.dat` written by the spectrometer, which has a clock of its own, those
+    counters are sampled frame per frame on the clock of the scan and need no
+    re-alignment.
+
+    The master may still be open for writing by the acquisition, so it is opened
+    without locking and everything is guarded: failing to read it is not a reason to
+    bring the analysis down.
+
+    :param image_file: name of one of the HDF5 files written by LImA
+    :return: UVJuice instance, or None when there is nothing to read
+    """
+    master_file = find_bliss_master(image_file)
+    if master_file is None:
+        return None
+    try:
+        with h5py.File(master_file, "r", locking=False) as h5file:
+            scan = _select_scan(h5file, image_file)
+            if scan is None:
+                logger.info(f"No scan matching {image_file} in {master_file}")
+                return None
+            measurement = scan["measurement"]
+            wavelengths, absorbance = [], []
+            for name in sorted(measurement):
+                matched = UV_COUNTER.match(name)
+                if matched:
+                    wavelengths.append(float(matched.group(1)))
+                    absorbance.append(measurement[name][()])
+            if not wavelengths:
+                logger.info(f"No UV-Vis counter in {master_file}{scan.name}")
+                return None
+            if "elapsed_time" in measurement:
+                timestamps = measurement["elapsed_time"][()]
+            else:
+                epoch = measurement["epoch"][()]
+                timestamps = epoch - epoch[0]
+            # A scan interrupted half-way leaves counters of uneven length
+            size = min(len(timestamps), min(len(i) for i in absorbance))
+            return UVJuice(numpy.array(wavelengths),
+                           numpy.ascontiguousarray(timestamps[:size]),
+                           numpy.vstack([i[:size] for i in absorbance]))
+    except Exception as err:
+        logger.warning(f"Unable to read the UV-Vis data from {master_file}; "
+                       f"{err.__class__.__name__}: {err}")
+        return None
 
 
 def smooth_chromatogram(signal, window, algorithm="median", order=2):
@@ -542,6 +668,7 @@ class HPLC(Plugin):
       "diode_medfilt": 0,
       "diode_filter": "median",   # or savgol, mean, none
       "uv_datafile": "path to UV .dat file in some gallery",
+      "uv_offset": 0.0,           # seconds to add to the UV time-stamps of the .dat
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.hplc"
     }
@@ -557,6 +684,7 @@ class HPLC(Plugin):
         self.output_file = None
         self.juices = []
         self.juice = None
+        self.uv_source = ""
         self.uv_data = None
         self.nmf_components = self.NMF_COMP
         self.to_pyarch = {}
@@ -598,6 +726,7 @@ class HPLC(Plugin):
         if uv_datafile and os.path.exists(uv_datafile):
             try:
                 self.uv_data = UVJuice.from_file(uv_datafile)
+                self.uv_source = uv_datafile
             except Exception as err:
                 self.uv_data = None
                 self.log_warning(
@@ -672,6 +801,17 @@ class HPLC(Plugin):
 
         # Every file covers a slice of the acquisition: put the series back in order
         self.juice = juice = NexusJuice.concatenate(self.juices)
+
+        # The BLISS master file was not written yet when the frames were integrated,
+        # but it is by now, and its UV-Vis counters share the clock of the frames.
+        # Prefer them over the `.dat`, whose time base has to be realigned by hand.
+        from_bliss = read_uv_from_bliss(juice.image_file)
+        if from_bliss is not None:
+            if self.uv_data:
+                self.log_warning(f"Using the UV-Vis counters of the BLISS master file "
+                                 f"rather than {self.uv_source}: same time base as the frames")
+            self.uv_data = from_bliss
+            self.uv_source = find_bliss_master(juice.image_file)
         q = juice.q
         unit = juice.unit
         radial_unit, unit_name = str_(unit).split("_", 1)
@@ -886,6 +1026,47 @@ class HPLC(Plugin):
         )
         time_ds.attrs["interpretation"] = "spectrum"
         time_ds.attrs["long_name"] = "Time stamps (s)"
+
+        # Merged chromatograms: SAXS and UV-Vis overlaid on the frame time base
+        merged_data = nxs.new_class(chroma_grp, "merged", "NXdata")
+        merged_data.attrs["title"] = "Normalized chromatograms"
+        merged_data["sequence_index"] = self.sequence_index()
+        qmin, qmax = CHROMATOGRAM_QRANGE
+        band = (q >= qmin) & (q <= qmax)
+        if not band.any():
+            self.log_warning(f"No q in [{qmin}, {qmax}] nm⁻¹, summing the whole range instead")
+            band = slice(None)
+        saxs_ds = merged_data.create_dataset(
+            "SAXS", data=normalize_chromatogram(I[:, band].sum(axis=-1)))
+        saxs_ds.attrs["interpretation"] = "spectrum"
+        saxs_ds.attrs["long_name"] = f"SAXS, Σ I(q) over q ∈ [{qmin}, {qmax}] nm⁻¹"
+        auxiliary_signals = []
+        if self.uv_data:
+            # The spectrometer has its own clock and its own sampling rate: resample it
+            # on the frames, padding with zeros wherever it was not recording.
+            uv_offset = self.input.get("uv_offset", 0.0)
+            uv_timestamps = numpy.asarray(self.uv_data.timestamps, dtype=numpy.float64) + uv_offset
+            for wavelength, absorbance in zip(self.uv_data.wavelengths, self.uv_data.absorbance):
+                name = f"UV_{wavelength:.0f}nm"
+                # Normalize before resampling, so that the padding stays at 0 instead
+                # of landing mid-scale and reading as signal
+                resampled = numpy.interp(timestamps, uv_timestamps,
+                                         normalize_chromatogram(absorbance),
+                                         left=0.0, right=0.0)
+                uv_ds = merged_data.create_dataset(
+                    name, data=numpy.ascontiguousarray(resampled, dtype=numpy.float32))
+                uv_ds.attrs["interpretation"] = "spectrum"
+                uv_ds.attrs["long_name"] = f"Absorbance at {wavelength:.0f} nm"
+                auxiliary_signals.append(name)
+            merged_data["uv_offset"] = uv_offset
+            merged_data["uv_offset"].attrs["unit"] = "s"
+            merged_data["uv_source"] = str(self.uv_source)
+        merged_data["timestamps"] = time_ds
+        merged_data.attrs["signal"] = "SAXS"
+        if auxiliary_signals:
+            merged_data.attrs["auxiliary_signals"] = auxiliary_signals
+        merged_data.attrs["axes"] = "timestamps"
+        merged_data.attrs["SILX_style"] = NORMAL_STYLE
 
         integration_data = nxs.new_class(chroma_grp, "result", "NXdata")
         chroma_grp.attrs["title"] = str_(self.juices[0].sample)
