@@ -8,9 +8,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "07/10/2026"
+__date__ = "08/10/2026"
 __status__ = "production"
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 import copy
 import json
@@ -68,10 +68,18 @@ class Accumulators(NamedTuple):
     They are the unreduced quantities pyFAI sums up in every radial bin, kept so
     that frames can be merged afterwards without re-integrating anything:
     `I = sum_signal/sum_normalization`.
+
+    `sum_normalization2` and `count` are of no use for that simple average but are
+    required to rebuild an `Integrate1dResult`, hence to merge frames with `union`.
+    Beware that `sum_normalization2` only keeps its statistical meaning as long as
+    the curves are not renormalized: it is then propagated for the sake of pyFAI's
+    machinery alone. Downstream, use `sem` and never `std`.
     """
     sum_signal:numpy.ndarray
     sum_normalization:numpy.ndarray
+    sum_normalization2:numpy.ndarray
     sum_variance_azimuthal:numpy.ndarray
+    count:numpy.ndarray
     sum_variance_poisson:numpy.ndarray=None  # only needed when pixel splitting is enabled
 
 
@@ -499,12 +507,16 @@ class IntegrateMultiframe(Plugin):
             acc_grp = nxs.new_class(integration_grp, "accumulators", "NXcollection")
             acc_grp.attrs["comment"] = ("Unreduced sums of the azimuthal integration, one line per frame. "
                                         "The intensity of a set of frames is obtained without re-integrating "
-                                        "anything: sum_signal.sum(axis=0)/sum_normalization.sum(axis=0)")
+                                        "anything: sum_signal.sum(axis=0)/sum_normalization.sum(axis=0), or by "
+                                        "rebuilding Integrate1dResult objects and merging them with `union`.")
             acc_grp[radial_unit] = q_ds
             acc_grp["frame_ids"] = frame_ds
+            # sum_normalization2 and count are needed to rebuild an Integrate1dResult (i.e. for `union`)
             datasets = [("sum_signal", acc.sum_signal, "Σᵢ signalᵢ"),
                         ("sum_normalization", acc.sum_normalization, "Σᵢ normalizationᵢ"),
-                        ("sum_variance_azimuthal", acc.sum_variance_azimuthal, "Σᵢ varianceᵢ, azimuthal error model")]
+                        ("sum_normalization2", acc.sum_normalization2, "Σᵢ normalizationᵢ²"),
+                        ("sum_variance_azimuthal", acc.sum_variance_azimuthal, "Σᵢ varianceᵢ, azimuthal error model"),
+                        ("count", acc.count, "Σᵢ pixel countᵢ")]
             if acc.sum_variance_poisson is not None:
                 datasets.append(("sum_variance_poisson", acc.sum_variance_poisson,
                                  "Σᵢ varianceᵢ, poissonian error model"))
@@ -610,12 +622,16 @@ class IntegrateMultiframe(Plugin):
             acc_grp = nxs.new_class(renormalize_grp, "accumulators", "NXcollection")
             acc_grp.attrs["comment"] = ("Unreduced sums of the azimuthal integration, one line per frame. "
                                         "The intensity of a set of frames is obtained without re-integrating "
-                                        "anything: sum_signal.sum(axis=0)/sum_normalization.sum(axis=0)")
+                                        "anything: sum_signal.sum(axis=0)/sum_normalization.sum(axis=0), or by "
+                                        "rebuilding Integrate1dResult objects and merging them with `union`.")
             acc_grp[radial_unit] = q_ds
             acc_grp["frame_ids"] = frame_ds
+            # sum_normalization2 and count are needed to rebuild an Integrate1dResult (i.e. for `union`)
             datasets = [("sum_signal", acc.sum_signal, "Σᵢ signalᵢ"),
                         ("sum_normalization", acc.sum_normalization, "Σᵢ normalizationᵢ"),
-                        ("sum_variance_azimuthal", acc.sum_variance_azimuthal, "Σᵢ varianceᵢ, azimuthal error model")]
+                        ("sum_normalization2", acc.sum_normalization2, "Σᵢ normalizationᵢ²"),
+                        ("sum_variance_azimuthal", acc.sum_variance_azimuthal, "Σᵢ varianceᵢ, azimuthal error model"),
+                        ("count", acc.count, "Σᵢ pixel countᵢ")]
             if acc.sum_variance_poisson is not None:
                 datasets.append(("sum_variance_poisson", acc.sum_variance_poisson,
                                  "Σᵢ varianceᵢ, poissonian error model"))
@@ -734,11 +750,13 @@ class IntegrateMultiframe(Plugin):
         if self.compute_spottiness:
             shape = (self.nb_frames, self.npt)
             spottiness = numpy.zeros(self.nb_frames, dtype=numpy.float32)
-            accumulators = Accumulators(numpy.zeros(shape, dtype=numpy.float32),
-                                        numpy.zeros(shape, dtype=numpy.float32),
-                                        numpy.zeros(shape, dtype=numpy.float32),
+            accumulators = Accumulators(sum_signal=numpy.zeros(shape, dtype=numpy.float32),
+                                        sum_normalization=numpy.zeros(shape, dtype=numpy.float32),
+                                        sum_normalization2=numpy.zeros(shape, dtype=numpy.float32),
+                                        sum_variance_azimuthal=numpy.zeros(shape, dtype=numpy.float32),
+                                        count=numpy.zeros(shape, dtype=numpy.float32),
                                         # redundant with sum_signal unless pixels are split
-                                        None if method.split == "no" else numpy.zeros(shape, dtype=numpy.float32))
+                                        sum_variance_poisson=None if method.split == "no" else numpy.zeros(shape, dtype=numpy.float32))
         else:
             accumulators = spottiness = None
         for idx, (i1, frame) in enumerate(zip(self.monitor_values, data)):
@@ -766,7 +784,9 @@ class IntegrateMultiframe(Plugin):
                     spottiness[idx] = calc_spottiness(azim)
                     accumulators.sum_signal[idx] = azim.sum_signal
                     accumulators.sum_normalization[idx] = azim.sum_normalization
+                    accumulators.sum_normalization2[idx] = azim.sum_normalization2
                     accumulators.sum_variance_azimuthal[idx] = azim.sum_variance
+                    accumulators.count[idx] = azim.count
                     if accumulators.sum_variance_poisson is not None:
                         accumulators.sum_variance_poisson[idx] = res.sum_variance
                 except Exception as err:
@@ -830,7 +850,10 @@ class IntegrateMultiframe(Plugin):
             azim.__recalculate_means__()
             accumulators = result.accumulators
             if accumulators is not None:
+                # `renormalize` scales sum_normalization by the ratio and
+                # sum_normalization2 by its square; count is left untouched.
                 accumulators.sum_normalization[idx] = azim.sum_normalization
+                accumulators.sum_normalization2[idx] = azim.sum_normalization2
                 # accumulators.sum_variance_azimuthal[idx] = azim.sum_variance
                 if accumulators.sum_variance_poisson is not None:
                     accumulators.sum_variance_poisson[idx] = azim.sum_variance

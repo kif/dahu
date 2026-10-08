@@ -40,6 +40,7 @@ import sklearn
 from freesas.app.extract_ascii import write_ascii
 from freesas.containers import UVJuice
 from freesas.plot import hplc_plot
+from pyFAI.containers import ErrorModel, Integrate1dResult
 from pyFAI.method_registry import IntegrationMethod
 from sklearn.decomposition import NMF
 from urllib3.util import parse_url
@@ -134,7 +135,13 @@ class NexusJuice(NamedTuple):
                 accumulators = Accumulators(
                     sum_signal=acc_grp["sum_signal"][()],
                     sum_normalization=acc_grp["sum_normalization"][()],
+                    # sum_normalization2 and count are missing in former files,
+                    # where frames can only be merged by summing the accumulators
+                    sum_normalization2=acc_grp["sum_normalization2"][()]
+                    if "sum_normalization2" in acc_grp
+                    else None,
                     sum_variance_azimuthal=acc_grp["sum_variance_azimuthal"][()],
+                    count=acc_grp["count"][()] if "count" in acc_grp else None,
                     sum_variance_poisson=acc_grp["sum_variance_poisson"][()]
                     if "sum_variance_poisson" in acc_grp
                     else None,
@@ -237,6 +244,52 @@ class NexusJuice(NamedTuple):
                     normalization_factor=normalization_factor,
                     count_time=count_time,
                     )
+
+    def to_result(self, index, error_model="poisson"):
+        """Rebuild a pyFAI Integrate1dResult for one frame, i.e. to merge
+        several of them with `union`
+
+        Only `sem` is meaningful on the merged result, never `std`: as soon as the
+        curves have been renormalized, `sum_normalization2` is propagated for the
+        sake of pyFAI's machinery and no longer carries its statistical meaning.
+        For the same reason the azimuthal model, whose crossed term in `union`
+        weighs the frames with `sum_normalization2`, is not the default.
+
+        :param index: index of the frame within this file
+        :param error_model: "poisson" or "azimuthal", picks which of the two
+                            variances accumulated by the integration to use
+        :return: Integrate1dResult instance
+        """
+        acc = self.accumulators
+        if acc is None:
+            raise ValueError(f"No accumulator stored in {self.filename}")
+        model = ErrorModel.parse(error_model)
+        sum_variance = (acc.sum_variance_azimuthal if model == ErrorModel.AZIMUTHAL
+                        else acc.sum_variance_poisson)
+        missing = [name for name, value in (("sum_signal", acc.sum_signal),
+                                            ("sum_normalization", acc.sum_normalization),
+                                            ("sum_normalization2", acc.sum_normalization2),
+                                            (f"sum_variance_{model.name.lower()}", sum_variance),
+                                            ("count", acc.count))
+                   if value is None]
+        if missing:
+            raise ValueError(f"Unable to rebuild an Integrate1dResult from {self.filename}: "
+                             f"missing {', '.join(missing)}")
+        result = Integrate1dResult(numpy.asarray(self.q, dtype=numpy.float64),
+                                   numpy.zeros(self.npt, dtype=numpy.float64),
+                                   numpy.zeros(self.npt, dtype=numpy.float64))
+        result._set_sum_signal(numpy.asarray(acc.sum_signal[index], dtype=numpy.float64))
+        result._set_sum_variance(numpy.asarray(sum_variance[index], dtype=numpy.float64))
+        result._set_sum_normalization(numpy.asarray(acc.sum_normalization[index], dtype=numpy.float64))
+        result._set_sum_normalization2(numpy.asarray(acc.sum_normalization2[index], dtype=numpy.float64))
+        result._set_count(numpy.asarray(acc.count[index], dtype=numpy.float64))
+        result._set_sem(numpy.zeros(self.npt, dtype=numpy.float64))
+        result._set_std(numpy.zeros(self.npt, dtype=numpy.float64))
+        result._set_unit(self.unit)
+        result._set_polarization_factor(self.polarization)
+        result._set_method(self.method)
+        result._set_error_model(model)
+        return result.__recalculate_means__()
 
 
 def smooth_chromatogram(signal, window):
