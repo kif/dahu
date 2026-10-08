@@ -36,6 +36,15 @@ from .nexus import get_isotime
 
 logger = logging.getLogger("bm29.analysis")
 
+GUINIER_QRG_LIMIT = 1.0
+"""Largest q·Rg at which a Guinier fit may start.
+
+Past it the fitted range sits outside the domain where the approximation holds and the
+Rg is not to be trusted. Measured over the 869 fractions of a season: when the fit
+starts beyond 1, Guinier and BIFT disagree by 52 % on Rg, against 7 % when it starts
+below 0.6. Such a fraction is declared invalid and the analysis stops there, BIFT
+included: it is the most expensive step and would only refine a meaningless number."""
+
 
 class AnalysisResult(NamedTuple):
     """Results of the SAXS analysis sequence. Fields are None when the step failed or was not reached"""
@@ -82,7 +91,8 @@ def guinier_analysis(nxs, parent_grp, name, sequence_index, sasm, radius_unit):
     :param sequence_index: index of the process
     :param sasm: 2D array with q, I, sigma as columns
     :param radius_unit: "nm" or "Å"
-    :return: the selected Guinier fit (RG_RESULT) or None if all algorithms failed
+    :return: the selected Guinier fit (RG_RESULT), or None when every algorithm failed
+             or when the retained fit starts past GUINIER_QRG_LIMIT
     """
     guinier_grp = _new_process(nxs, parent_grp, name, sequence_index, "freesas.autorg")
     guinier_autorg = nxs.new_class(guinier_grp, "autorg", "NXcollection")
@@ -99,7 +109,7 @@ def guinier_analysis(nxs, parent_grp, name, sequence_index, sasm, radius_unit):
         guinier_gpa["Failed"] = f"{error.__class__.__name__}: {error}"
         gpa = None
     else:
-        _store_rg(guinier_gpa, gpa, radius_unit)
+        _store_rg(guinier_gpa, gpa, radius_unit, q)
 
     try:
         guinier = auto_guinier(sasm)
@@ -123,16 +133,28 @@ def guinier_analysis(nxs, parent_grp, name, sequence_index, sasm, radius_unit):
 
     #  take one of the fits
     if guinier:
-        guinier_data["source"] = "auto_guinier"
+        source = "auto_guinier"
     elif autorg:
         guinier = autorg
-        guinier_data["source"] = "autorg"
+        source = "autorg"
     elif gpa:
         guinier = gpa
-        guinier_data["source"] = "gpa"
+        source = "gpa"
     else:
         guinier = None
-        guinier_data["source"] = "None"
+        source = "None"
+
+    #  and make sure it sits where the approximation holds
+    if guinier is not None and guinier.start_point < q.size:
+        qrg_min = guinier.Rg * q[guinier.start_point]
+        if not qrg_min < GUINIER_QRG_LIMIT:
+            guinier_grp["invalid"] = (
+                f"The Guinier region starts at q·Rg = {qrg_min:.2f}, past the "
+                f"{GUINIER_QRG_LIMIT} where the approximation stops holding: "
+                "the fit is not usable and the fraction is declared invalid")
+            guinier = None
+            source = "None"
+    guinier_data["source"] = source
 
     # Guinier plot generation:
     mask = (I > 0) & numpy.isfinite(I) & (q > 0) & numpy.isfinite(q)
@@ -168,7 +190,8 @@ def guinier_analysis(nxs, parent_grp, name, sequence_index, sasm, radius_unit):
     guinier_data_attrs = guinier_data.attrs
     guinier_data_attrs["signal"] = "logI"
     guinier_data_attrs["axes"] = "q2"
-    guinier_data_attrs["auxiliary_signals"] = "fit"
+    if guinier:
+        guinier_data_attrs["auxiliary_signals"] = "fit"
     guinier_grp.attrs["default"] = posixpath.relpath(guinier_data.name, guinier_grp.name)
     return guinier
 

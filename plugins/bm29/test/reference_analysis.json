@@ -190,6 +190,14 @@
     "attrs": {},
     "value": 0.8370652446839757
    },
+   "entry_0000/02s-12s/2_Guinier_analysis/gpa/qₘᵢₙ·Rg": {
+    "attrs": {},
+    "value": 0.5161099625212127
+   },
+   "entry_0000/02s-12s/2_Guinier_analysis/gpa/qₘₐₓ·Rg": {
+    "attrs": {},
+    "value": 1.2907532287891497
+   },
    "entry_0000/02s-12s/2_Guinier_analysis/gpa/start_point": {
     "attrs": {},
     "value": 21
@@ -770,7 +778,6 @@
     "attrs": {
      "NX_class": "NXdata",
      "SILX_style": "{\n  \"signal_scale_type\":\t\"linear\"\n}",
-     "auxiliary_signals": "fit",
      "axes": "q2",
      "signal": "logI",
      "title": "Guinier analysis"
@@ -1186,6 +1193,14 @@
    "entry_0000/3_Guinier_analysis/gpa/quality": {
     "attrs": {},
     "value": 0.8393018203985669
+   },
+   "entry_0000/3_Guinier_analysis/gpa/qₘᵢₙ·Rg": {
+    "attrs": {},
+    "value": 0.5118712627175576
+   },
+   "entry_0000/3_Guinier_analysis/gpa/qₘₐₓ·Rg": {
+    "attrs": {},
+    "value": 1.2825283002483339
    },
    "entry_0000/3_Guinier_analysis/gpa/start_point": {
     "attrs": {},

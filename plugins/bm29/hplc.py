@@ -846,6 +846,7 @@ class HPLC(Plugin):
         self.output_file = None
         self.juices = []
         self.juice = None
+        self.accumulators = None
         self.uv_source = ""
         self.uv_data = None
         self.nmf_components = self.NMF_COMP
@@ -1113,7 +1114,7 @@ class HPLC(Plugin):
             raw = juice.accumulators
             inverse = numpy.atleast_2d(numpy.reciprocal(scale)).T
             extra_variance = (raw.sum_signal * relative_error) ** 2
-            accumulators = Accumulators(
+            self.accumulators = accumulators = Accumulators(
                 sum_signal=raw.sum_signal,
                 sum_normalization=raw.sum_normalization * inverse,
                 sum_normalization2=(None if raw.sum_normalization2 is None
@@ -1488,9 +1489,26 @@ class HPLC(Plugin):
         avg_q_ds.attrs["units"] = unit_name
         radius_unit = "nm" if "nm" in unit_name else "Å"
         avg_q_ds.attrs["long_name"] = f"Scattering vector q ({radius_unit}⁻¹)"
-        I_frc = I_sub[fraction].mean(axis=0)
-        fsig2 = sigma[fraction] ** 2
-        sigma_frc = numpy.sqrt(fsig2.sum(axis=0)) / fsig2.shape[0]
+        if self.accumulators is None:
+            I_frc = I_sub[fraction].mean(axis=0)
+            fsig2 = sigma[fraction] ** 2
+            sigma_frc = numpy.sqrt(fsig2.sum(axis=0)) / fsig2.shape[0]
+        else:
+            # Merge the frames of the peak on the unreduced sums, exactly as the
+            # background is merged, and take the background out once at the end rather
+            # than frame by frame: averaging ratios would weigh frames which did not
+            # receive the same flux as if they had, and subtracting first would add the
+            # uncertainty of the background as many times as there are frames.
+            acc = self.accumulators
+            variance = (acc.sum_variance_azimuthal
+                        if acc.sum_variance_poisson is None
+                        else acc.sum_variance_poisson)
+            normalization = acc.sum_normalization[fraction].sum(axis=0, dtype=numpy.float64)
+            I_frc = (acc.sum_signal[fraction].sum(axis=0, dtype=numpy.float64)
+                     / normalization - self.to_pyarch["buffer_I"])
+            sigma_frc = numpy.sqrt(
+                variance[fraction].sum(axis=0, dtype=numpy.float64) / normalization ** 2
+                + self.to_pyarch["buffer_Stdev"] ** 2)
         ai2_int_ds = avg_data.create_dataset(
             "I", data=numpy.ascontiguousarray(I_frc, dtype=numpy.float32)
         )
