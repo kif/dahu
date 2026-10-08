@@ -40,6 +40,7 @@ from .common import (
     Sample,
     SequenceIndex,
     calc_spottiness,
+    cmp_float,
     cmp_int,
     create_nexus_sample,
     get_equivalent_frames,
@@ -521,7 +522,7 @@ class IntegrateMultiframe(Plugin):
                 datasets.append(("sum_variance_poisson", acc.sum_variance_poisson,
                                  "Σᵢ varianceᵢ, poissonian error model"))
             for name, data, long_name in datasets:
-                acc_ds = acc_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32))
+                acc_ds = acc_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32), **cmp_float)
                 acc_ds.attrs["interpretation"] = "spectrum"
                 acc_ds.attrs["long_name"] = long_name
             if acc.sum_variance_poisson is None:
@@ -636,7 +637,7 @@ class IntegrateMultiframe(Plugin):
                 datasets.append(("sum_variance_poisson", acc.sum_variance_poisson,
                                  "Σᵢ varianceᵢ, poissonian error model"))
             for name, data, long_name in datasets:
-                acc_ds = acc_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32))
+                acc_ds = acc_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32), **cmp_float)
                 acc_ds.attrs["interpretation"] = "spectrum"
                 acc_ds.attrs["long_name"] = long_name
             if acc.sum_variance_poisson is None:
@@ -734,7 +735,7 @@ class IntegrateMultiframe(Plugin):
                     ("sum_variance", res3.sum_variance, "Σᵢ varianceᵢ, Poissonnian error-model + diode noise"),
                     ("count", res3.count, "Σᵢ pixel countᵢ")]
         for name, data, long_name in datasets:
-            acc_ds = accu2_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32))
+            acc_ds = accu2_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32), **cmp_float)
             acc_ds.attrs["interpretation"] = "spectrum"
             acc_ds.attrs["long_name"] = long_name
 
