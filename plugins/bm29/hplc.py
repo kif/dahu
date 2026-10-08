@@ -383,6 +383,9 @@ CHROMATOGRAM_QRANGE = (0.1, 1.0)
 BACKGROUND_QRANGE = (1.5, 4.0)
 "Range of q, in nm⁻¹, where the solvent scatters alone: used to tell solvents apart"
 
+SOLUTE_QRANGE = (0.1, 0.5)
+"Range of q, in nm⁻¹, where the solute shows up: used to tell whether anything elutes"
+
 
 def normalize_chromatogram(signal):
     """Scale a chromatogram between 0 and 1
@@ -610,19 +613,51 @@ def stationary_frames(intensity, q, nsigma=5.0):
     return frames[abs(plateau - median) < nsigma * mad]
 
 
+def solute_frames(intensity, q, nsigma=5.0):
+    """Index of the frames where something is eluting
+
+    The solute scatters at low q while the solvent is alone at high q, so the ratio of
+    the two rises with the solute and does not care about the overall scale. Unlike the
+    regions `search_peaks` returns, which are cut at half prominence, this covers the
+    whole elution, shoulders included. That matters: leaving the shoulders of a peak in
+    a background is worse than leaving the whole peak, because they drag the SVD
+    fundamental along without being obvious enough for cormap to reject them.
+
+    :param intensity: 2D array of shape (nframes, nbins)
+    :param q: scattering vector, same unit as SOLUTE_QRANGE and BACKGROUND_QRANGE
+    :param nsigma: how far above the baseline, in robust standard deviations
+    :return: 1d array of frame indices, empty when the test cannot be applied
+    """
+    low = (q >= SOLUTE_QRANGE[0]) & (q <= SOLUTE_QRANGE[1])
+    high = (q >= BACKGROUND_QRANGE[0]) & (q <= BACKGROUND_QRANGE[1])
+    if low.sum() < 2 or high.sum() < 2:
+        logger.warning(f"No q in {SOLUTE_QRANGE} or {BACKGROUND_QRANGE} nm⁻¹: "
+                       "skipping the solute detection")
+        return numpy.empty(0, dtype=numpy.int64)
+    ratio = intensity[:, low].mean(axis=-1) / intensity[:, high].mean(axis=-1)
+    median = numpy.median(ratio)
+    mad = 1.4826 * numpy.median(abs(ratio - median))
+    if mad <= 0:
+        return numpy.empty(0, dtype=numpy.int64)
+    return numpy.where(ratio > median + nsigma * mad)[0]
+
+
 def build_background(intensity, std=None, keep=0.8, q=None, nsigma=5.0):
     """
     Build a background from a SVD and search for the frames looking most like the background.
 
     0. discard the frames whose solvent is not the one of the run (`stationary_frames`)
+       and those where something elutes (`solute_frames`)
     1. build a coarse approximation based on the SVD.
     2. measure the distance (cormap) of every single frame to the fundamental of the SVD
     3. average frames that looks most like the coarse approximation (with deviation)
 
-    Steps 0 and 2 answer orthogonal questions, and both are needed: the first compares
-    levels at high q, where only the solvent speaks, and the second compares shapes at
-    low q, where the solute does. A curve offset by a change of solvent keeps the shape
-    of a background, and cormap lets it through.
+    The two gates of step 0 answer orthogonal questions, and neither replaces cormap:
+    one compares levels at high q, where only the solvent speaks, the other the low to
+    high q ratio, which the solute raises. A curve offset by a change of solvent keeps
+    the shape of a background and cormap lets it through; conversely the shoulders of a
+    peak keep the level of a background. Cormap is left to catch what neither sees,
+    crystallites or parasitic scattering.
 
     :param intensity: 2D array of shape (nframes, nbins)
     :param std: same as intensity but with the standard deviation.
@@ -632,8 +667,11 @@ def build_background(intensity, std=None, keep=0.8, q=None, nsigma=5.0):
     :param nsigma: width of the stationarity gate, in robust standard deviations
     :return: (bg_avg, bg_std, indexes), each 1d of size nbins. + the index of the frames to keep
     """
-    stationary = (numpy.arange(intensity.shape[0]) if q is None
-                  else stationary_frames(intensity, q, nsigma))
+    if q is None:
+        stationary = numpy.arange(intensity.shape[0])
+    else:
+        stationary = numpy.setdiff1d(stationary_frames(intensity, q, nsigma),
+                                     solute_frames(intensity, q, nsigma))
     U, S, V = numpy.linalg.svd(intensity[stationary].T, full_matrices=False)
     bg1 = numpy.median(V[0]) * S[0] * U[:, 0]
     Pscore = [
@@ -1203,13 +1241,21 @@ class HPLC(Plugin):
         stationary_ds = bg_grp.create_dataset(
             "stationary", data=numpy.ascontiguousarray(stationary, dtype=numpy.int32))
         stationary_ds.attrs["info"] = (
-            f"Index of the curves whose scattering over q ∈ {BACKGROUND_QRANGE} nm⁻¹ "
-            "matches the solvent of the run; the others saw a bubble or another solvent"
+            f"Index of the curves kept as background candidates: those scattering over "
+            f"q ∈ {BACKGROUND_QRANGE} nm⁻¹ like the solvent of the run, and free of any "
+            f"solute, i.e. without an excess over q ∈ {SOLUTE_QRANGE} nm⁻¹"
         )
-        rejected = len(I) - len(stationary)
-        if rejected:
-            self.log_warning(f"{rejected} frames out of {len(I)} did not scatter like the "
-                             "solvent of the run and were kept out of the background")
+        eluting = solute_frames(I, q)
+        eluting_ds = bg_grp.create_dataset(
+            "eluting", data=numpy.ascontiguousarray(eluting, dtype=numpy.int32))
+        eluting_ds.attrs["info"] = (
+            "Index of the curves where something elutes, shoulders included. They are "
+            "excluded from the background, whatever the fractions finally retained"
+        )
+        self.log_warning(f"Background candidates: {len(stationary)} frames out of {len(I)}; "
+                         f"{len(eluting)} carry a solute and "
+                         f"{len(I) - len(eluting) - len(stationary)} did not scatter like "
+                         "the solvent of the run")
         self.to_pyarch["buffer_frames"] = to_keep
         self.to_pyarch["buffer_I"] = bg_avg
         self.to_pyarch["buffer_Stdev"] = bg_std
