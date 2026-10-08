@@ -386,6 +386,17 @@ BACKGROUND_QRANGE = (1.5, 4.0)
 SOLUTE_QRANGE = (0.1, 0.5)
 "Range of q, in nm⁻¹, where the solute shows up: used to tell whether anything elutes"
 
+DIODE_FILTER_SIZE = 11
+"""Width, in frames, of the filter smoothing the beam-stop diode.
+
+Measured over 177 HPLC runs: the noise of the diode goes into the curves one for one,
+and smoothing it away takes some 75 % of the scatter of the chromatogram out. Wider is
+not better, as the diode also drifts and steps: beyond ~15 frames the filter starts
+cutting into those, and at 31 it biases one run out of six by more than 3σ."""
+
+DIODE_NOISE_LIMIT = 1.0
+"Relative noise of the diode, in %, above which normalizing on it makes little sense"
+
 
 def normalize_chromatogram(signal):
     """Scale a chromatogram between 0 and 1
@@ -552,18 +563,30 @@ def estimate_noise(signal, robust=True):
     return residuals.std()
 
 
-def search_peaks(signal, wmin=10, scale=0.9):
+def search_peaks(signal, wmin=10, scale=0.9, wmax=None):
     """
     Label all peak regions of chromatogram.
+
+    The baseline is taken out first: `find_peaks_cwt` filters its ridges on a signal to
+    noise ratio read off the wavelet transform, which assumes a signal resting on zero.
+    Feed it a chromatogram sitting on a background and the answer depends on that
+    background, so the same elution would be cut differently before and after the
+    buffer is subtracted. Removing the minimum makes the result invariant by
+    construction, whatever offset the caller passes.
+
+    The widths explored are capped as well: a wavelet as wide as the record cannot see
+    anything but the middle of the array.
 
     :param signal=smooth signal
     :param wmin: minimum width for a peak. smaller ones are discarded.
     :param scale: shrink factor (i.e. <1 for the search zone)
+    :param wmax: widest peak looked for, a quarter of the record by default
     """
 
     smth = smooth_chromatogram(signal, window=wmin)
+    smth -= smth.min()
     res = numpy.zeros(signal.shape, dtype=numpy.uint8)
-    w = signal.size
+    w = min(signal.size // 4 if wmax is None else wmax, signal.size)
     while w > wmin:
         peaks = scipy.signal.find_peaks_cwt(smth, [w])
         if len(peaks):
@@ -582,7 +605,8 @@ def search_peaks(signal, wmin=10, scale=0.9):
                     else:
                         stop = smth[p : q + p]
                     pos = numpy.argmin(abs(start - stop))
-                    res[p + pos - q : p + pos] = 1
+                    # a negative start would wrap the slice around and label nothing
+                    res[max(0, p + pos - q) : p + pos] = 1
         w *= scale
     return scipy.ndimage.label(res)
 
@@ -642,7 +666,7 @@ def solute_frames(intensity, q, nsigma=5.0):
     return numpy.where(ratio > median + nsigma * mad)[0]
 
 
-def build_background(intensity, std=None, keep=0.8, q=None, nsigma=5.0):
+def build_background(intensity, std=None, keep=0.8, q=None, nsigma=5.0, accumulators=None):
     """
     Build a background from a SVD and search for the frames looking most like the background.
 
@@ -665,6 +689,9 @@ def build_background(intensity, std=None, keep=0.8, q=None, nsigma=5.0):
                  already weeded out the odd ones, there is little left to reject here
     :param q: scattering vector; without it the stationarity gate is skipped
     :param nsigma: width of the stationarity gate, in robust standard deviations
+    :param accumulators: unreduced sums of the integration, one line per frame. Given
+                         those, frames are merged the way pyFAI does rather than with a
+                         plain mean of the ratios.
     :return: (bg_avg, bg_std, indexes), each 1d of size nbins. + the index of the frames to keep
     """
     if q is None:
@@ -683,11 +710,23 @@ def build_background(intensity, std=None, keep=0.8, q=None, nsigma=5.0):
     orderd = numpy.argsort(Pscore)
     nkeep = math.ceil(keep * len(stationary))
     to_keep = numpy.sort(stationary[orderd[:nkeep]])
-    bg_avg = intensity[to_keep].mean(axis=0)
-    if std is not None:
-        bg_std = numpy.sqrt(((std[to_keep]) ** 2).sum(axis=0)) / len(to_keep)
+    if accumulators is None:
+        bg_avg = intensity[to_keep].mean(axis=0)
+        if std is not None:
+            bg_std = numpy.sqrt(((std[to_keep]) ** 2).sum(axis=0)) / len(to_keep)
+        else:
+            bg_std = None
     else:
-        bg_std = None
+        # Summing the unreduced sums is exactly what `Integrate1dResult.union` does for
+        # this error model, without the copies: every frame is weighted by its own
+        # normalization, which a mean of the ratios silently takes as equal, and the
+        # uncertainty comes out as the sem of that weighted mean, diode noise included.
+        variance = (accumulators.sum_variance_azimuthal
+                    if accumulators.sum_variance_poisson is None
+                    else accumulators.sum_variance_poisson)
+        normalization = accumulators.sum_normalization[to_keep].sum(axis=0, dtype=numpy.float64)
+        bg_avg = accumulators.sum_signal[to_keep].sum(axis=0, dtype=numpy.float64) / normalization
+        bg_std = numpy.sqrt(variance[to_keep].sum(axis=0, dtype=numpy.float64)) / normalization
     return bg_avg, bg_std, to_keep, stationary
 
 
@@ -743,7 +782,7 @@ class HPLC(Plugin):
         "collection_id": -1
        },
       "nmf_components": 5,
-      "diode_medfilt": 0,
+      "diode_medfilt": 11,        # width of the filter, in frames; 0 or 1 to disable
       "diode_filter": "median",   # or savgol, mean, none
       "uv_datafile": "path to UV .dat file in some gallery",
       "uv_offset": 0.0,           # seconds to add to the UV time-stamps of the .dat
@@ -921,7 +960,7 @@ class HPLC(Plugin):
         if len(diode_raw) == 0:
             self.log_error("No beam-stop diode in the integrated files: there is "
                            "nothing to normalize the curves with")
-        filter_size = self.input.get("diode_medfilt", 0)
+        filter_size = self.input.get("diode_medfilt", DIODE_FILTER_SIZE)
         algorithm = self.input.get("diode_filter", "median")
         if filter_size < 2:
             algorithm = "none"
@@ -932,11 +971,16 @@ class HPLC(Plugin):
         diode_smooth = smooth_chromatogram(diode_raw, filter_size // 2, algorithm)
         noise = estimate_noise(diode_raw)
         residual = (diode_raw - diode_smooth).std()
+        relative_noise = 100.0 * noise / diode_raw.mean()
+        if relative_noise > DIODE_NOISE_LIMIT:
+            self.log_warning(f"The beam-stop diode reads {relative_noise:.1f} % of noise, "
+                             f"well over the {DIODE_NOISE_LIMIT} % above which normalizing "
+                             "on it is meaningless: check the beam and the diode")
         # Uncertainty of the value the curves are divided by: the scatter around the
         # smoothed curve when there is one, the noise of a single reading otherwise.
         diode_error = noise if algorithm == "none" else residual
         noise_ds = nrm_grp.create_dataset(
-            "noise", data=100.0 * noise / diode_raw.mean())
+            "noise", data=relative_noise)
         noise_ds.attrs["unit"] = r"%"
         noise_ds.attrs["formula"] = "1.4826·MAD((dᵢ₋₁-2dᵢ+dᵢ₊₁)/√6) ÷ mean(d)"
         noise_ds.attrs["comment"] = "Noise of a single diode reading, filter independent"
@@ -1013,8 +1057,20 @@ class HPLC(Plugin):
         # scaling the normalization by the inverse factor, like pyFAI's
         # `Integrate1dResult.renormalize` does. The signal, its variance and the
         # pixel count are untouched.
-        accumulators = juice.accumulators
-        if accumulators is not None:
+        accumulators = None
+        if juice.accumulators is not None:
+            raw = juice.accumulators
+            inverse = numpy.atleast_2d(numpy.reciprocal(scale)).T
+            extra_variance = (raw.sum_signal * relative_error) ** 2
+            accumulators = Accumulators(
+                sum_signal=raw.sum_signal,
+                sum_normalization=raw.sum_normalization * inverse,
+                sum_normalization2=(None if raw.sum_normalization2 is None
+                                    else raw.sum_normalization2 * inverse ** 2),
+                sum_variance_azimuthal=raw.sum_variance_azimuthal + extra_variance,
+                count=raw.count,
+                sum_variance_poisson=(None if raw.sum_variance_poisson is None
+                                      else raw.sum_variance_poisson + extra_variance))
             acc_grp = nxs.new_class(nrm_grp, "accumulators", "NXcollection")
             acc_grp.attrs["comment"] = (
                 "Unreduced sums of the azimuthal integration, one line per frame, "
@@ -1027,23 +1083,16 @@ class HPLC(Plugin):
                 "`sem` and never `std`.")
             acc_grp["q"] = nrm_q_ds
             acc_grp["frame_idx"] = frame_ds
-            inverse = numpy.atleast_2d(numpy.reciprocal(scale)).T
-            extra_variance = (accumulators.sum_signal * relative_error) ** 2
-            corrected = {
-                "sum_signal": (accumulators.sum_signal, "Σᵢ signalᵢ"),
-                "sum_normalization": (accumulators.sum_normalization * inverse,
-                                      "Σᵢ normalizationᵢ, rescaled on the smoothed diode"),
-                "sum_normalization2": (None if accumulators.sum_normalization2 is None else
-                                       accumulators.sum_normalization2 * inverse ** 2,
-                                       "Σᵢ normalizationᵢ², rescaled on the smoothed diode"),
-                "sum_variance_azimuthal": (accumulators.sum_variance_azimuthal + extra_variance,
-                                           "Σᵢ varianceᵢ, azimuthal error model + diode noise"),
-                "sum_variance_poisson": (None if accumulators.sum_variance_poisson is None else
-                                         accumulators.sum_variance_poisson + extra_variance,
-                                         "Σᵢ varianceᵢ, poissonian error model + diode noise"),
-                "count": (accumulators.count, "Σᵢ pixel countᵢ"),
+            long_names = {
+                "sum_signal": "Σᵢ signalᵢ",
+                "sum_normalization": "Σᵢ normalizationᵢ, rescaled on the smoothed diode",
+                "sum_normalization2": "Σᵢ normalizationᵢ², rescaled on the smoothed diode",
+                "sum_variance_azimuthal": "Σᵢ varianceᵢ, azimuthal error model + diode noise",
+                "sum_variance_poisson": "Σᵢ varianceᵢ, poissonian error model + diode noise",
+                "count": "Σᵢ pixel countᵢ",
             }
-            for name, (data, long_name) in corrected.items():
+            for name, long_name in long_names.items():
+                data = getattr(accumulators, name)
                 if data is None:
                     continue
                 acc_ds = acc_grp.create_dataset(
@@ -1232,7 +1281,8 @@ class HPLC(Plugin):
         bg_grp["keep"].attrs["info"] = (
             "Fraction of the stationary curves to be considered as background"
         )
-        bg_avg, bg_std, to_keep, stationary = build_background(I, sigma, keep=keep, q=q)
+        bg_avg, bg_std, to_keep, stationary = build_background(
+            I, sigma, keep=keep, q=q, accumulators=accumulators)
         to_keep = numpy.ascontiguousarray(to_keep, dtype=numpy.int32)
         kept_ds = bg_grp.create_dataset("kept", data=to_keep)
         kept_ds.attrs["info"] = (
