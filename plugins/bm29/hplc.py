@@ -281,7 +281,9 @@ class NexusJuice(NamedTuple):
             return out
 
         def series(name, dtype=None):
-            return scatter([getattr(juice, name) for juice in juices], dtype)
+            "Absent series are handed back empty, as `read` does"
+            values = scatter([getattr(juice, name) for juice in juices], dtype)
+            return [] if values is None else values
 
         accumulators = None
         if all(juice.accumulators is not None for juice in juices):
@@ -537,7 +539,7 @@ class HPLC(Plugin):
        },
       "nmf_components": 5,
       "diode_medfilt": 0,
-      "diode_filter": "median",
+      "diode_filter": "median",   # or savgol, mean, none
       "uv_datafile": "path to UV .dat file in some gallery",
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.hplc"
@@ -692,34 +694,58 @@ class HPLC(Plugin):
         else:
             self._time_digits = 1
 
-        # Process 0.5: preprocessing
+        # Process 1: renormalization of the curves on the smoothed diode.
+        # The group is created even when the filter leaves the data alone, so that the
+        # sequence index of the following steps does not depend on the options.
         diode_raw = juice.diode
         filter_size = self.input.get("diode_medfilt", 0)
         algorithm = self.input.get("diode_filter", "median")
-        if filter_size >= 2 and diode_raw is not None:
-            preproc_grp = nxs.new_class(entry_grp, "0_pre-process", "NXprocess")
-            preproc_grp["sequence_index"] = self.sequence_index()
-            preproc_grp["filter_used"] = algorithm
-            preproc_grp["filter_size"] = filter_size
-
+        if filter_size < 2 or len(diode_raw) == 0:
+            algorithm = "none"
+        nrm_grp = nxs.new_class(entry_grp, "1_renormalize", "NXprocess")
+        nrm_grp["sequence_index"] = self.sequence_index()
+        nrm_grp["filter_used"] = algorithm
+        nrm_grp["filter_size"] = filter_size
+        diode = diode_raw
+        if len(diode_raw) == 0:
+            nrm_grp["comment"] = ("No beam-stop diode in the integrated files: "
+                                  "the curves are left as the integration normalized them")
+        else:
             diode_smooth = smooth_chromatogram(diode_raw, filter_size // 2, algorithm)
-            noise_ds = preproc_grp.create_dataset(
+            residual = (diode_raw - diode_smooth).std()
+            noise_ds = nrm_grp.create_dataset(
                 "noise", data=100.0 * estimate_noise(diode_raw) / diode_raw.mean())
             noise_ds.attrs["unit"] = r"%"
             noise_ds.attrs["formula"] = "1.4826·MAD((dᵢ₋₁-2dᵢ+dᵢ₊₁)/√6) ÷ mean(d)"
             noise_ds.attrs["comment"] = "Noise of a single diode reading, filter independent"
-            residual_ds = preproc_grp.create_dataset(
-                "residual", data=100.0 * (diode_raw - diode_smooth).std() / diode_raw.mean())
+            residual_ds = nrm_grp.create_dataset(
+                "residual", data=100.0 * residual / diode_raw.mean())
             residual_ds.attrs["unit"] = r"%"
             residual_ds.attrs["comment"] = ("Scatter of the raw diode around the smoothed one. "
                                             "It exceeds `noise` by whatever the filter cannot "
-                                            "follow, and is the honest uncertainty on diode_smooth")
-            preproc_grp.create_dataset("diode_raw", data=diode_raw).attrs[
-                "interpretation"
-            ] = "spectrum"
-            preproc_grp.create_dataset("diode_smooth", data=diode_smooth).attrs[
-                "interpretation"
-            ] = "spectrum"
+                                            "follow, and is the honest uncertainty on `smooth`")
+
+            diode_data = nxs.new_class(nrm_grp, "diode", "NXdata")
+            raw_ds = diode_data.create_dataset("raw", data=diode_raw.astype(numpy.float32))
+            raw_ds.attrs["interpretation"] = "spectrum"
+            raw_ds.attrs["long_name"] = "Beam-stop diode intensity"
+            smooth_ds = diode_data.create_dataset("smooth", data=diode_smooth.astype(numpy.float32))
+            smooth_ds.attrs["interpretation"] = "spectrum"
+            smooth_ds.attrs["formula"] = ("left untouched" if algorithm == "none" else
+                                          f"{algorithm} filter, {2 * (filter_size // 2) + 1} frames wide")
+            smooth_err_ds = diode_data.create_dataset(
+                "smooth_errors", data=numpy.full(nframes, residual, dtype=numpy.float32))
+            smooth_err_ds.attrs["interpretation"] = "spectrum"
+            smooth_err_ds.attrs["formula"] = "Incertainty on the smoothed diode value"
+            frame_ds = diode_data.create_dataset("frame_idx", data=ids)
+            frame_ds.attrs["interpretation"] = "spectrum"
+            frame_ds.attrs["long_name"] = "Frame number"
+            diode_data.attrs["axes"] = "frame_idx"
+            diode_data.attrs["signal"] = "raw"
+            diode_data.attrs["auxiliary_signals"] = ["smooth"]
+            diode_data.attrs["title"] = "Renormalization"
+            nrm_grp.attrs["default"] = posixpath.relpath(diode_data.name, nrm_grp.name)
+
             # Frames no file provided are left at zero by the concatenation
             scale = numpy.divide(diode_raw, diode_smooth,
                                  out=numpy.ones_like(diode_smooth),
@@ -728,11 +754,9 @@ class HPLC(Plugin):
             Isum *= scale
             sigma *= numpy.atleast_2d(scale).T
             diode = diode_smooth
-        else:
-            diode = diode_raw
 
-        # Process 1: Chromatogram
-        chroma_grp = nxs.new_class(entry_grp, "1_chromatogram", "NXprocess")
+        # Process 2: Chromatogram
+        chroma_grp = nxs.new_class(entry_grp, "2_chromatogram", "NXprocess")
         chroma_grp["sequence_index"] = self.sequence_index()
 
         # UV-chromatogram
@@ -812,8 +836,8 @@ class HPLC(Plugin):
             os.path.splitext(self.output_file)[0] + ".zip", self.juices[0], I, sigma
         )
 
-        # Process 2: SVD decomposition
-        svd_grp = nxs.new_class(entry_grp, "2_SVD", "NXprocess")
+        # Process 3: SVD decomposition
+        svd_grp = nxs.new_class(entry_grp, "3_SVD", "NXprocess")
         svd_grp["sequence_index"] = self.sequence_index()
         logi = numpy.arcsinh(I.T)
         U, S, V = numpy.linalg.svd(logi, full_matrices=False)
@@ -850,8 +874,8 @@ class HPLC(Plugin):
         svd_grp.create_dataset("eigenvalues", data=S[:r], dtype=numpy.float32)
         svd_grp.attrs["default"] = posixpath.relpath(chroma_data.name, svd_grp.name)
 
-        # Process 3: NMF matrix decomposition
-        nmf_grp = nxs.new_class(entry_grp, "3_NMF", "NXprocess")
+        # Process 4: NMF matrix decomposition
+        nmf_grp = nxs.new_class(entry_grp, "4_NMF", "NXprocess")
         nmf_grp["sequence_index"] = self.sequence_index()
         nmf_grp["program"] = "sklearn.decomposition.NMF"
         nmf_grp["version"] = sklearn.__version__
@@ -884,7 +908,7 @@ class HPLC(Plugin):
             nmf_grp.attrs["default"] = posixpath.relpath(chroma_data.name, nmf_grp.name)
 
         # Process 5: Background estimation
-        bg_grp = nxs.new_class(entry_grp, "4_background", "NXprocess")
+        bg_grp = nxs.new_class(entry_grp, "5_background", "NXprocess")
         bg_grp["sequence_index"] = self.sequence_index()
         bg_grp["keep"] = keep = 0.3
         bg_grp["keep"].attrs["info"] = (
@@ -927,8 +951,8 @@ class HPLC(Plugin):
         self.to_pyarch["subtracted_Stdev"] = Istd_sub
         self.to_pyarch["sum_I"] = Isum
 
-        # Process 5: fraction of chromatogram analysis
-        fraction_grp = nxs.new_class(entry_grp, "5_SEC_fractions", "NXprocess")
+        # Process 6: fraction of chromatogram analysis
+        fraction_grp = nxs.new_class(entry_grp, "6_SEC_fractions", "NXprocess")
         fraction_grp["sequence_index"] = self.sequence_index()
         fraction_grp["minimum_size"] = window = 10
 
@@ -945,7 +969,7 @@ class HPLC(Plugin):
             ):
                 self.one_fraction(fraction[0], i, nxs, fraction_grp)
 
-        # Process 6: All other calculation for ISPyB:
+        # Process 7: All other calculation for ISPyB:
         t = self.build_ispyb_group(nxs, entry_grp)
         self.log_warning(f"Ispyb structure creation took {t:.3f}s")
 
@@ -1105,7 +1129,7 @@ class HPLC(Plugin):
             "time": "Timestamps",
         }
         start_time = time.perf_counter()
-        ispyb_grp = nxs.new_class(top_grp, "6_ISPyB ", "NXcollection")
+        ispyb_grp = nxs.new_class(top_grp, "7_ISPyB", "NXcollection")
         ispyb_grp["sequence_index"] = self.sequence_index()
         ispyb_grp["start_time"] = get_isotime()
 
