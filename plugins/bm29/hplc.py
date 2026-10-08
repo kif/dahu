@@ -713,9 +713,13 @@ class HPLC(Plugin):
                                   "the curves are left as the integration normalized them")
         else:
             diode_smooth = smooth_chromatogram(diode_raw, filter_size // 2, algorithm)
+            noise = estimate_noise(diode_raw)
             residual = (diode_raw - diode_smooth).std()
+            # Uncertainty of the value the curves are divided by: the scatter around the
+            # smoothed curve when there is one, the noise of a single reading otherwise.
+            diode_error = noise if algorithm == "none" else residual
             noise_ds = nrm_grp.create_dataset(
-                "noise", data=100.0 * estimate_noise(diode_raw) / diode_raw.mean())
+                "noise", data=100.0 * noise / diode_raw.mean())
             noise_ds.attrs["unit"] = r"%"
             noise_ds.attrs["formula"] = "1.4826·MAD((dᵢ₋₁-2dᵢ+dᵢ₊₁)/√6) ÷ mean(d)"
             noise_ds.attrs["comment"] = "Noise of a single diode reading, filter independent"
@@ -735,9 +739,11 @@ class HPLC(Plugin):
             smooth_ds.attrs["formula"] = ("left untouched" if algorithm == "none" else
                                           f"{algorithm} filter, {2 * (filter_size // 2) + 1} frames wide")
             smooth_err_ds = diode_data.create_dataset(
-                "smooth_errors", data=numpy.full(nframes, residual, dtype=numpy.float32))
+                "smooth_errors", data=numpy.full(nframes, diode_error, dtype=numpy.float32))
             smooth_err_ds.attrs["interpretation"] = "spectrum"
             smooth_err_ds.attrs["formula"] = "Incertainty on the smoothed diode value"
+            smooth_err_ds.attrs["comment"] = ("`noise` when nothing is smoothed, `residual` "
+                                              "otherwise, both in absolute units")
             frame_ds = diode_data.create_dataset("frame_idx", data=ids)
             frame_ds.attrs["interpretation"] = "spectrum"
             frame_ds.attrs["long_name"] = "Frame number"
@@ -755,6 +761,17 @@ class HPLC(Plugin):
             Isum *= scale
             sigma *= numpy.atleast_2d(scale).T
             diode = diode_smooth
+
+            # The diode is the dominant source of frame to frame scatter: the detector
+            # pixels are many enough for their own variance to average out. Dividing by
+            # `d` turns its uncertainty into var(I) = I²·var_d/d², i.e. an extra
+            # sum_signal²·var_d/d² on the unreduced variances, as `integrate.py` does
+            # in the sample-changer pathway.
+            relative_error = numpy.atleast_2d(
+                numpy.divide(diode_error, diode_smooth,
+                             out=numpy.zeros_like(diode_smooth),
+                             where=diode_smooth != 0)).T
+            sigma[...] = numpy.hypot(sigma, I * relative_error)
 
             nrm_data = nxs.new_class(nrm_grp, "result", "NXdata")
             nrm_data.attrs["title"] = "Curves renormalized on the smoothed diode"
@@ -794,6 +811,7 @@ class HPLC(Plugin):
                 acc_grp["q"] = nrm_q_ds
                 acc_grp["frame_idx"] = frame_ds
                 inverse = numpy.atleast_2d(numpy.reciprocal(scale)).T
+                extra_variance = (accumulators.sum_signal * relative_error) ** 2
                 corrected = {
                     "sum_signal": (accumulators.sum_signal, "Σᵢ signalᵢ"),
                     "sum_normalization": (accumulators.sum_normalization * inverse,
@@ -801,10 +819,11 @@ class HPLC(Plugin):
                     "sum_normalization2": (None if accumulators.sum_normalization2 is None else
                                            accumulators.sum_normalization2 * inverse ** 2,
                                            "Σᵢ normalizationᵢ², rescaled on the smoothed diode"),
-                    "sum_variance_azimuthal": (accumulators.sum_variance_azimuthal,
-                                               "Σᵢ varianceᵢ, azimuthal error model"),
-                    "sum_variance_poisson": (accumulators.sum_variance_poisson,
-                                             "Σᵢ varianceᵢ, poissonian error model"),
+                    "sum_variance_azimuthal": (accumulators.sum_variance_azimuthal + extra_variance,
+                                               "Σᵢ varianceᵢ, azimuthal error model + diode noise"),
+                    "sum_variance_poisson": (None if accumulators.sum_variance_poisson is None else
+                                             accumulators.sum_variance_poisson + extra_variance,
+                                             "Σᵢ varianceᵢ, poissonian error model + diode noise"),
                     "count": (accumulators.count, "Σᵢ pixel countᵢ"),
                 }
                 for name, (data, long_name) in corrected.items():
