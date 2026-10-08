@@ -610,7 +610,7 @@ def stationary_frames(intensity, q, nsigma=5.0):
     return frames[abs(plateau - median) < nsigma * mad]
 
 
-def build_background(intensity, std=None, keep=0.3, q=None, nsigma=5.0):
+def build_background(intensity, std=None, keep=0.8, q=None, nsigma=5.0):
     """
     Build a background from a SVD and search for the frames looking most like the background.
 
@@ -626,7 +626,8 @@ def build_background(intensity, std=None, keep=0.3, q=None, nsigma=5.0):
 
     :param intensity: 2D array of shape (nframes, nbins)
     :param std: same as intensity but with the standard deviation.
-    :param keep: fraction of the stationary frames to average (<1!)
+    :param keep: fraction of the stationary frames to average (<1!). The gate having
+                 already weeded out the odd ones, there is little left to reject here
     :param q: scattering vector; without it the stationarity gate is skipped
     :param nsigma: width of the stationarity gate, in robust standard deviations
     :return: (bg_avg, bg_std, indexes), each 1d of size nbins. + the index of the frames to keep
@@ -708,6 +709,7 @@ class HPLC(Plugin):
       "diode_filter": "median",   # or savgol, mean, none
       "uv_datafile": "path to UV .dat file in some gallery",
       "uv_offset": 0.0,           # seconds to add to the UV time-stamps of the .dat
+      "background_keep": 0.8,     # fraction of the stationary frames averaged as background
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.hplc"
     }
@@ -1188,7 +1190,7 @@ class HPLC(Plugin):
         # Process 5: Background estimation
         bg_grp = nxs.new_class(entry_grp, "5_background", "NXprocess")
         bg_grp["sequence_index"] = self.sequence_index()
-        bg_grp["keep"] = keep = 0.3
+        bg_grp["keep"] = keep = self.input.get("background_keep", 0.8)
         bg_grp["keep"].attrs["info"] = (
             "Fraction of the stationary curves to be considered as background"
         )
