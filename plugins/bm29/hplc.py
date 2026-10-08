@@ -774,13 +774,32 @@ def build_background(intensity, std=None, keep=0.8, q=None, nsigma=5.0, accumula
     return bg_avg, bg_std, to_keep, stationary
 
 
-def save_zip(filename, config, intensity, sigma, dat_template=None):
-    """Save a stack of intensity into a zipfile with each frames in a dat-file.
+ZIP_COMPRESSION = zipfile.ZIP_DEFLATED
+"""Compression of the archive of curves.
+
+The archive used to be stored uncompressed, which costs some 24 MB for a run of 500
+frames; deflate brings it down to 7. bzip2 and lzma do better still, 5.9 and 4.4 MB,
+but neither is read by the archive manager shipped with Windows, and these files are
+handed to users."""
+
+ZIP_COMPRESSLEVEL = 9
+"Deflate level: the slowest, 2 s for a run of 500 frames, which is lost in the noise here"
+
+
+def save_zip(filename, config, intensity, sigma, background=None, fractions=None,
+             dat_template=None):
+    """Save the curves of a run into a zip archive
+
+    The archive holds, at its root, the background and one file per fraction, and in a
+    `frames` directory the curve of every single frame as it was integrated. Only the
+    fractions are background subtracted, the frames are not.
 
     :param filename: name of the zip-file
     :param config: this is some NexusJuice namedtuple. we use only q and the sample description.
     :param intensity: 2D array with the intensity of the stack of curves
     :param sigma: 2D array with the uncertainties of the stack of frames
+    :param background: (intensity, sigma) of the averaged background, or None
+    :param fractions: iterable of (first_frame, last_frame, intensity, sigma), subtracted
     :param dat_template: template for the zipped filenames: by default "{basename(filename)}_%04i.dat"
     :return: nothing
     """
@@ -801,16 +820,21 @@ def save_zip(filename, config, intensity, sigma, dat_template=None):
             common["exposure temperature"] = sample.temperature
         if sample.concentration:
             common["concentration"] = sample.concentration
-    res = []
-    for i, s in zip(intensity, sigma):
-        r = copy.copy(common)
-        r["I"] = i
-        r["std"] = s
-        res.append(r)
-    with zipfile.ZipFile(filename, "w") as z:
-        for idx, frame in enumerate(res):
-            z.writestr(dat_template % idx, write_ascii(frame))
-        # TODO: save buffer, averaged-subtracted
+
+    def curve(I, std):
+        "A single curve, with the description of the sample attached"
+        return dict(common, I=I, std=std)
+
+    with zipfile.ZipFile(filename, "w", compression=ZIP_COMPRESSION,
+                         compresslevel=ZIP_COMPRESSLEVEL) as z:
+        if background is not None:
+            z.writestr("buffer.dat", write_ascii(curve(*background)))
+        for first, last, I, std in fractions or ():
+            z.writestr(f"fraction_{first}-{last}.dat", write_ascii(curve(I, std)))
+        for idx, (i, s) in enumerate(zip(intensity, sigma)):
+            z.writestr(posixpath.join("frames", dat_template % idx),
+                       write_ascii(curve(i, s)))
+
 
 class HPLC(Plugin):
     """Rebuild the complete chromatogram and perform basic analysis on it.
@@ -1264,11 +1288,6 @@ class HPLC(Plugin):
         # The I(q) themselves are not repeated here: 1_renormalize/result holds them
         chroma_grp.attrs["title"] = str_(self.juices[0].sample)
 
-        # TODO: revisit what goes into the zip once the background step is reworked
-        save_zip(
-            os.path.splitext(self.output_file)[0] + ".zip", self.juices[0], I, sigma
-        )
-
         # Process 3: SVD decomposition
         svd_grp = nxs.new_class(entry_grp, "3_SVD", "NXprocess")
         svd_grp["sequence_index"] = self.sequence_index()
@@ -1432,6 +1451,15 @@ class HPLC(Plugin):
                 scipy.ndimage.find_objects(fractions, nfractions)
             ):
                 self.one_fraction(fraction[0], i, nxs, fraction_grp)
+
+        # Now that the background and the fractions are known, the archive can hold them
+        save_zip(os.path.splitext(self.output_file)[0] + ".zip", self.juices[0], I, sigma,
+                 background=(bg_avg, bg_std),
+                 fractions=[(int(first), int(last), merged, deviation)
+                            for (first, last), merged, deviation
+                            in zip(self.to_pyarch["merge_frames"],
+                                   self.to_pyarch["merge_I"],
+                                   self.to_pyarch["merge_Stdev"])])
 
         # Process 7: All other calculation for ISPyB:
         t = self.build_ispyb_group(nxs, entry_grp)
