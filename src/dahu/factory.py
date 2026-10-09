@@ -53,7 +53,7 @@ class Factory:
     def __init__(self, workdir=None, plugin_path=None):
         """
         @param workdir: place were we are allowed to write
-        @param plugin_path: places where plugins are ... in addition to the content of DAHU_PATH"
+        @param plugin_path: places where plugins are ... in addition to the content of DAHU_PLUGINS
         """
         self._sem = Semaphore()
         self.workdir = workdir or "."
