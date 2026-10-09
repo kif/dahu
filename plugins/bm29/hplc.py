@@ -710,12 +710,45 @@ def solute_frames(intensity, q, nsigma=5.0):
     return numpy.where(ratio > median + nsigma * mad)[0]
 
 
-def build_background(intensity, std=None, keep=0.8, q=None, nsigma=5.0, accumulators=None):
+def solute_free_frames(intensity, q, nsigma=5.0):
+    """Index of the frames where no solute can be detected at all
+
+    `solute_frames` asks whether something is *clearly* eluting and scales its threshold
+    on the spread of the indicator over the whole run. That spread is inflated by the
+    elution itself — by a factor 6 in the median over 153 runs, and by several hundred
+    when the peak covers much of the acquisition — so "5 deviations" really means some
+    30 times the noise. That is the right question for the peak search, which must not
+    fire on noise, and the wrong one for a background, which has to be free of any trace
+    of solute rather than merely outside the obvious peaks.
+
+    Here the scale is the point to point noise of the indicator, which a smooth elution
+    does not inflate, so `nsigma` means what it says.
+
+    :param intensity: 2D array of shape (nframes, nbins)
+    :param q: scattering vector, same unit as SOLUTE_QRANGE and BACKGROUND_QRANGE
+    :param nsigma: how far above the baseline a frame may sit and still be called clean
+    :return: 1d array of frame indices, all of them when the test cannot be applied
+    """
+    frames = numpy.arange(intensity.shape[0])
+    low = (q >= SOLUTE_QRANGE[0]) & (q <= SOLUTE_QRANGE[1])
+    high = (q >= BACKGROUND_QRANGE[0]) & (q <= BACKGROUND_QRANGE[1])
+    if low.sum() < 2 or high.sum() < 2:
+        logger.warning(f"No q in {SOLUTE_QRANGE} or {BACKGROUND_QRANGE} nm⁻¹: "
+                       "keeping every frame as a background candidate")
+        return frames
+    ratio = intensity[:, low].mean(axis=-1) / intensity[:, high].mean(axis=-1)
+    noise = estimate_noise(ratio)
+    if noise <= 0:
+        return frames
+    return frames[ratio < numpy.median(ratio) + nsigma * noise]
+
+
+def build_background(intensity, std=None, keep=0.3, q=None, nsigma=5.0, accumulators=None):
     """
     Build a background from a SVD and search for the frames looking most like the background.
 
     0. discard the frames whose solvent is not the one of the run (`stationary_frames`)
-       and those where something elutes (`solute_frames`)
+       and those carrying any trace of solute (`solute_free_frames`)
     1. build a coarse approximation based on the SVD.
     2. measure the distance (cormap) of every single frame to the fundamental of the SVD
     3. average frames that looks most like the coarse approximation (with deviation)
@@ -741,8 +774,8 @@ def build_background(intensity, std=None, keep=0.8, q=None, nsigma=5.0, accumula
     if q is None:
         stationary = numpy.arange(intensity.shape[0])
     else:
-        stationary = numpy.setdiff1d(stationary_frames(intensity, q, nsigma),
-                                     solute_frames(intensity, q, nsigma))
+        stationary = numpy.intersect1d(stationary_frames(intensity, q, nsigma),
+                                       solute_free_frames(intensity, q, nsigma))
     U, S, V = numpy.linalg.svd(intensity[stationary].T, full_matrices=False)
     bg1 = numpy.median(V[0]) * S[0] * U[:, 0]
     Pscore = [
@@ -854,7 +887,7 @@ class HPLC(Plugin):
       "diode_filter": "median",   # or savgol, mean, none
       "uv_datafile": "path to UV .dat file in some gallery",
       "uv_offset": 0.0,           # seconds to add to the UV time-stamps of the .dat
-      "background_keep": 0.8,     # fraction of the stationary frames averaged as background
+      "background_keep": 0.3,     # fraction of the clean frames averaged as background
       "wait_for": [jobid_img001, jobid_img002],
       "plugin_name": "bm29.hplc"
     }
@@ -1232,11 +1265,12 @@ class HPLC(Plugin):
         frame_ds.attrs["interpretation"] = "spectrum"
         frame_ds.attrs["long_name"] = "Frame number"
 
+        # `sum` and `diode` stay in the group but out of `auxiliary_signals`: they are
+        # three orders of magnitude apart, and overlaying them on a single axis leaves
+        # the diode flat on zero and squashes the chromatogram. Whoever wants them
+        # together has them, rescaled, in the `result` group next door.
         hplc_data.attrs["signal"] = "sum_q_range"
-        hplc_data.attrs["auxiliary_signals"] = ["sum", "diode"]
         hplc_data.attrs["axes"] = "timestamps"  # "frame_ids"
-        chroma_grp.attrs["default"] = posixpath.relpath(hplc_data.name, chroma_grp.name)
-        entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
         time_ds = hplc_data.create_dataset(
             "timestamps", data=timestamps, dtype=numpy.float64
         )
@@ -1284,6 +1318,7 @@ class HPLC(Plugin):
         merged_data.attrs["axes"] = "timestamps"
         merged_data.attrs["SILX_style"] = NORMAL_STYLE
         chroma_grp.attrs["default"] = posixpath.relpath(merged_data.name, chroma_grp.name)
+        entry_grp.attrs["default"] = posixpath.relpath(merged_data.name, entry_grp.name)
 
         # The I(q) themselves are not repeated here: 1_renormalize/result holds them
         chroma_grp.attrs["title"] = str_(self.juices[0].sample)
@@ -1372,7 +1407,7 @@ class HPLC(Plugin):
         # Process 5: Background estimation
         bg_grp = nxs.new_class(entry_grp, "5_background", "NXprocess")
         bg_grp["sequence_index"] = self.sequence_index()
-        bg_grp["keep"] = keep = self.input.get("background_keep", 0.8)
+        bg_grp["keep"] = keep = self.input.get("background_keep", 0.3)
         bg_grp["keep"].attrs["info"] = (
             "Fraction of the stationary curves to be considered as background"
         )
@@ -1390,7 +1425,7 @@ class HPLC(Plugin):
             f"q ∈ {BACKGROUND_QRANGE} nm⁻¹ like the solvent of the run, and free of any "
             f"solute, i.e. without an excess over q ∈ {SOLUTE_QRANGE} nm⁻¹"
         )
-        eluting = solute_frames(I, q)
+        eluting = numpy.setdiff1d(numpy.arange(len(I)), solute_free_frames(I, q))
         eluting_ds = bg_grp.create_dataset(
             "eluting", data=numpy.ascontiguousarray(eluting, dtype=numpy.int32))
         eluting_ds.attrs["info"] = (
