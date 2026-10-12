@@ -346,10 +346,176 @@ class TestAnalysis(unittest.TestCase):
         self.assertEqual(res1.guinier.Rg, res2.guinier.Rg)
 
 
+class TestBackgroundSelection(unittest.TestCase):
+    """The scoring and the thresholding of the background candidates in `hplc`.
+
+    Neither is covered by the non-regression reference, which only replays
+    `HPLC.one_fraction`, so they are checked here on their own.
+    """
+
+    def test_knee_keeps_everything_without_a_shape(self):
+        "Degenerate inputs must not throw frames away"
+        for score, why in ((numpy.arange(5.0), "fewer values than the floor"),
+                           (numpy.ones(50), "no spread at all"),
+                           (numpy.r_[numpy.arange(49.0), numpy.nan], "a non finite value")):
+            self.assertTrue(hplc.knee_threshold(score).all(), msg=why)
+
+    def test_knee_respects_its_floor(self):
+        "A knee falling below BACKGROUND_MIN_FRAMES is overridden by the floor"
+        # three good curves and a cliff: the knee alone would keep the three
+        score = numpy.r_[0.0, 1.0, 2.0, 1000.0 + numpy.arange(47.0)]
+        self.assertEqual(hplc.knee_threshold(score, minimum=1).sum(), 3, "where the knee falls")
+        kept = hplc.knee_threshold(score, minimum=8)
+        self.assertEqual(kept.sum(), 8, "the floor overrides the knee")
+        self.assertTrue(kept[:8].all(), "the floor keeps the lowest scores")
+
+    def test_knee_cuts_at_a_jump(self):
+        "A flat population followed by a clearly worse one is split between the two"
+        score = numpy.r_[numpy.linspace(1.0, 1.1, 40), numpy.linspace(8.0, 9.0, 10)]
+        kept = hplc.knee_threshold(score)
+        self.assertEqual(kept.sum(), 40, "the ten outliers are dropped")
+        self.assertTrue(kept[:40].all(), "and only those")
+
+    def test_knee_keeps_ties_together(self):
+        "Tied scores share a fate: this is what cormap could not do"
+        score = numpy.r_[numpy.zeros(30), numpy.full(10, 5.0), numpy.full(10, 50.0)]
+        kept = hplc.knee_threshold(score)
+        for value in numpy.unique(score):
+            self.assertIn(len(set(kept[score == value].tolist())), (1,),
+                          msg=f"frames scoring {value} are not treated alike")
+
+    def test_knee_is_order_independent(self):
+        "The mask follows the frames, whatever order they come in"
+        rng = numpy.random.default_rng(3)
+        score = numpy.r_[rng.normal(1.0, 0.05, 60), rng.normal(9.0, 0.5, 15)]
+        shuffle = rng.permutation(score.size)
+        self.assertTrue(numpy.array_equal(hplc.knee_threshold(score)[shuffle],
+                                          hplc.knee_threshold(score[shuffle])))
+
+    def test_zscore_is_null_on_the_reference_itself(self):
+        "A curve equal to the reference deviates from it by nothing"
+        q = numpy.linspace(0.05, 4.0, 300)
+        reference = sphere(q)
+        intensity = numpy.vstack([reference, reference])
+        std = 0.01 * intensity
+        numpy.testing.assert_allclose(hplc.background_zscore(intensity, reference, std), 0.0,
+                                      atol=1e-12)
+
+    def test_zscore_counts_sigmas(self):
+        "An offset of k sigma scores k, whatever the shape of the curve"
+        q = numpy.linspace(0.05, 4.0, 300)
+        reference = sphere(q)
+        std = 0.01 * reference
+        intensity = numpy.vstack([reference + k * std for k in (0.5, 2.0, -3.0)])
+        numpy.testing.assert_allclose(
+            hplc.background_zscore(intensity, reference, numpy.vstack([std] * 3)),
+            [0.5, 2.0, 3.0], rtol=1e-9)
+
+    def test_zscore_sees_a_deviation_that_cancels(self):
+        "A tilt of zero net offset must score as high as a uniform one of the same size"
+        q = numpy.linspace(0.05, 4.0, 300)
+        reference = sphere(q)
+        std = 0.01 * reference
+        tilt = numpy.ones(q.size); tilt[:q.size // 2] = -1.0     # sums to zero
+        intensity = numpy.vstack([reference + 2.0 * std * tilt, reference + 2.0 * std])
+        score = hplc.background_zscore(intensity, reference, numpy.vstack([std] * 2))
+        self.assertAlmostEqual(score[0], score[1], places=9,
+                               msg="the score cancels signs instead of accumulating them")
+        self.assertAlmostEqual(score[0], 2.0, places=9)
+
+    def test_zscore_floor_on_pure_noise(self):
+        "Scattering alone puts the score at sqrt(2/pi), not at zero"
+        rng = numpy.random.default_rng(8)
+        reference = numpy.ones(4000)
+        std = numpy.full((1, 4000), 0.01)
+        intensity = reference + std * rng.standard_normal((1, 4000))
+        self.assertAlmostEqual(float(hplc.background_zscore(intensity, reference, std)[0]),
+                               numpy.sqrt(2 / numpy.pi), delta=0.03)
+
+    def test_zscore_leans_on_the_reliable_bins(self):
+        "The same absolute excess weighs less where the uncertainty is larger"
+        reference = numpy.ones(100)
+        std = numpy.ones(100)
+        std[:50] = 10.0                      # half the range is ten times noisier
+        excess = numpy.full((1, 100), 0.1)
+        noisy = hplc.background_zscore(reference + excess, reference, std[None, :])
+        flat = hplc.background_zscore(reference + excess, reference, numpy.ones((1, 100)))
+        self.assertLess(noisy[0], flat[0], "the noisy half must not weigh as much")
+
+    def test_background_rejects_an_obvious_intruder(self):
+        "An curve carrying a solute is kept out of the background it would spoil"
+        rng = numpy.random.default_rng(4)
+        q = numpy.linspace(0.05, 4.0, 300)
+        solvent = 100.0 + numpy.zeros_like(q)
+        intensity = solvent * (1 + 0.002 * rng.standard_normal((40, q.size)))
+        intensity[17] += 20.0 * sphere(q) / sphere(q).max()      # one frame with a solute
+        std = 0.002 * intensity
+        bg_avg, bg_std, to_keep, candidates = hplc.build_background(intensity, std)
+        self.assertNotIn(17, to_keep, "the contaminated frame made it into the background")
+        self.assertGreater(len(to_keep), len(intensity) // 2,
+                           "a clean pool must not be decimated")
+        self.assertEqual(bg_avg.size, q.size)
+        self.assertEqual(bg_std.size, q.size)
+
+    def test_background_keep_is_a_ceiling(self):
+        "`keep` caps the pool, and only ever downwards"
+        rng = numpy.random.default_rng(5)
+        intensity = 100.0 * (1 + 0.002 * rng.standard_normal((60, 200)))
+        std = 0.002 * intensity
+        wide = hplc.build_background(intensity, std)[2]
+        capped = hplc.build_background(intensity, std, keep=0.25)[2]
+        self.assertEqual(len(capped), 15, "60 candidates capped at a quarter")
+        self.assertLess(len(capped), len(wide), "the ceiling must bite")
+        self.assertTrue(set(capped) <= set(wide), "capping only removes the worst scores")
+        # a ceiling of 100 % is no ceiling at all: the knee still has the last word
+        numpy.testing.assert_array_equal(hplc.build_background(intensity, std, keep=1.0)[2], wide)
+
+
+class TestFractionWidth(unittest.TestCase):
+    """Where `search_peaks` cuts the flanks of a peak, which PEAK_REL_HEIGHT sets."""
+
+    @staticmethod
+    def chromatogram(centre=100.0, width=10.0, nframes=200, npt=200, amplitude=50.0, seed=6):
+        "A single gaussian elution on a flat solvent, quiet enough to be unambiguous"
+        rng = numpy.random.default_rng(seed)
+        q = numpy.linspace(0.05, 4.0, npt)
+        frames = numpy.arange(nframes, dtype=numpy.float64)
+        elution = numpy.exp(-0.5 * ((frames - centre) / width) ** 2)
+        solute = numpy.exp(-(q / 0.3) ** 2)          # scatters at low q only
+        intensity = numpy.ones((nframes, npt)) + amplitude * elution[:, None] * solute
+        return q, intensity * (1 + 1e-4 * rng.standard_normal((nframes, npt)))
+
+    def test_cuts_at_half_maximum(self):
+        "The default width is the FWHM of the elution, 2.355 sigma"
+        q, intensity = self.chromatogram(width=10.0)
+        labels, count = hplc.search_peaks(intensity, q)
+        self.assertEqual(count, 1, "one elution, one fraction")
+        found = numpy.flatnonzero(labels == 1)
+        self.assertAlmostEqual(found.size, 2.355 * 10.0, delta=3.0,
+                               msg="the fraction is not the width at half maximum")
+
+    def test_rel_height_widens_the_fraction(self):
+        "Cutting lower on the flank takes more frames in, monotonically"
+        q, intensity = self.chromatogram(width=10.0)
+        sizes = [(hplc.search_peaks(intensity, q, rel_height=r)[0] == 1).sum()
+                 for r in (0.5, 0.7, 0.9)]
+        self.assertEqual(sizes, sorted(sizes), f"not monotonic: {sizes}")
+        self.assertLess(sizes[0], sizes[-1], "rel_height has no effect")
+
+    def test_default_is_the_constant(self):
+        "The signature follows PEAK_REL_HEIGHT rather than a value of its own"
+        q, intensity = self.chromatogram(width=10.0)
+        numpy.testing.assert_array_equal(
+            hplc.search_peaks(intensity, q)[0],
+            hplc.search_peaks(intensity, q, rel_height=hplc.PEAK_REL_HEIGHT)[0])
+
+
 def suite():
     loader = unittest.defaultTestLoader.loadTestsFromTestCase
     testsuite = unittest.TestSuite()
     testsuite.addTest(loader(TestAnalysis))
+    testsuite.addTest(loader(TestBackgroundSelection))
+    testsuite.addTest(loader(TestFractionWidth))
     return testsuite
 
 

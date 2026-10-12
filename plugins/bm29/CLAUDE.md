@@ -85,14 +85,48 @@ different questions, and none replaces another:
   `BACKGROUND_QRANGE` rises with the solute and does not care about the overall scale. It
   covers the whole elution, shoulders included, which matters: leaving the shoulders of a
   peak in a background is worse than leaving the whole peak, because they drag the SVD
-  fundamental along without being obvious enough for cormap to reject them.
-- CorMap against the fundamental of the SVD, on what the two gates left — the historical
-  criterion, kept for what they do not see: crystallites, parasitic scattering.
+  fundamental along without standing out enough to be scored away afterwards.
+- `background_zscore()` against the fundamental of the SVD, on what the two gates left —
+  kept for what they do not see: crystallites, parasitic scattering. Each curve is
+  compared to the fundamental in units of **its own** uncertainty, averaged in absolute
+  value — an L1 norm — over the whole q-range. Averaging the *signed* deviations instead
+  would score the net offset of a curve, which cancels on any defect whose deviations
+  change sign over the range: tilting 1 % of a candidate's bins up at low q and down at
+  high q, for a net offset of zero, a signed average rejected 16–18 % of them, chance,
+  against 37–100 % for the L1 norm. A signed average does win on a uniform change of
+  scale (79 % against 70 % rejected at a 5 % dose), but that defect belongs to
+  `stationary_frames`, which compares levels and is exactly a detector of scale; what is
+  left to this score — crystallites, parasitic scattering — are defects of shape. The SVD output has no uncertainty and the curves do, so this is the
+  only side where one is available; and σ growing at both ends of the range — behind the
+  beamstop, in the corners of the detector — makes the score lean by itself on the middle
+  of the range, so no q-range has to be chosen. The whole range beats `BACKGROUND_QRANGE`
+  alone, which is deaf to the solute: injecting elution frames into the pool of 94 runs,
+  the restricted score rejected 31 % of them against 69 % for the full one, and at 20 %
+  contamination the background came out +0.90 % too high at 0.1–0.5 nm⁻¹ against +0.12 %.
 
-`build_background()` then averages `background_keep` of the survivors **through the
-accumulators**, not as a mean of ratios: frames are weighted by their own normalization,
-which matters as soon as the flux varies or the detector marks part of an image invalid
-mid-run.
+  This replaced a CorMap distance in October 2026. CorMap returns the length of the
+  longest run of residuals of one sign: a small integer, which over 872 to 1377
+  candidates took only 30 to 55 distinct values, so at the cut 94 to 191 curves were
+  strictly tied for 16 to 70 places and the sort settled them arbitrarily. The swap moves
+  no result — the two backgrounds agree to 0.03 % — it removes a coin toss.
+
+`build_background()` then averages the curves below the **knee of the sorted scores**
+(`knee_threshold()`), **through the accumulators**, not as a mean of ratios: frames are
+weighted by their own normalization, which matters as soon as the flux varies or the
+detector marks part of an image invalid mid-run.
+
+The knee replaced a fixed fraction, also in October 2026, and `background_keep` became an
+optional *ceiling* instead of the rule. Read `knee_threshold()` before trusting it: the
+knee is **not** a detector. Sorted scores of a pure-noise pool are the order statistics of
+a half normal, which are convex too, so a knee is always found — over 97 runs it lands at
+84 % of the pool on real data and 83 % on gaussian draws. What it buys is the absence of a
+selection bias: averaging a tight subset drags the result towards whichever side of the
+reference that subset sits on. Over those 97 runs, keeping 30 % shifted the background by
+−0.13 % at 1–2 nm⁻¹ against the pool it came from, where the knee shifted it by −0.005 %,
+and 0.13 % matters because the subtracted signal there is only 0.33 % of the background.
+Cutting tighter is worse on both counts: averaging 5 % of the candidates instead of 85 %
+doubled the negative points in the subtracted fractions, by making the background noisier
+without moving its level.
 
 On the dataset the gates were built from, they took the bias of the background from
 −0.76 % to +0.03 %, the high-q residual of the subtracted peak from +1.07 % to +0.37 %,
@@ -140,6 +174,8 @@ the detector or the elution conditions change.
 | `DIODE_NOISE_LIMIT` | `1.0` % | Above it, a `log_warning` fires: normalizing on such a diode is meaningless. Four runs out of 177 hit it, all beam-off test scans. |
 | `PEAK_PROMINENCE` | `10.0` × noise | How far a peak must stand out. Insensitive between 5 and 25: precision moves from 0.81 to 0.85, recall from 0.97 to 0.94. |
 | `PEAK_EDGE_MARGIN` | `10` frames | A lone excess confined to either end is a start-up artefact. A truncated elution spans hundreds of frames and is kept. |
+| `PEAK_REL_HEIGHT` | `0.5` | Width at half maximum: where a fraction is cut on the flank of its peak. Averaging frames of concentration cᵢ gives the mean a S/N of Σcᵢ/(σ√N), so the optimum sits near half maximum — measured, the significance at 0.1–0.5 nm⁻¹ peaks at 0.65 and the usable Guinier rate goes from 42 % at 0.95 to 45 % at 0.5. Half maximum rather than the free optimum 0.65 because the flanks carry oligomers, which leave the column first. It does **not** reduce the negative points. |
+| `BACKGROUND_MIN_FRAMES` | `8` curves | Floor under `knee_threshold()`. The knee is a shape, not a significance test: on a handful of curves, or against one wild score, it can fall almost anywhere. |
 | `ZIP_COMPRESSION` | `ZIP_DEFLATED` | bzip2 and lzma give 5.9 and 4.4 MB against 7.0, but Windows does not read them and these files go to users. |
 | `GUINIER_QRG_LIMIT` | `1.0` (`analysis.py`) | Largest q·Rg at which a fit may start. Past it Guinier and BIFT disagree by 52 % on Rg, against 7 % below 0.6. |
 
@@ -149,7 +185,8 @@ inputs the day they need tuning: `nsigma = 5.0`, the width of both gates, and
 
 Inputs of `bm29.hplc`, beyond the files: `nmf_components`, `diode_medfilt`,
 `diode_filter` (one of `SMOOTHING_ALGORITHMS`), `uv_datafile`, `uv_offset`,
-`background_keep`.
+`background_keep` — the last one now a ceiling on the fraction of candidates averaged,
+unset by default, the cut being left to the knee.
 
 ## NeXus conventions
 
