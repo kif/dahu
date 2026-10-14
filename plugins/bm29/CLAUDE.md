@@ -182,7 +182,12 @@ sit beside the background: `scores`, the candidates against their time stamp, an
 `sorted_scores`, the same sorted by increasing z-score — the curve `knee_threshold`
 actually cuts. Each carries three columns, the z-score, its L2 counterpart and the
 longest run of residuals of one sign that CorMap is built on, plus the frame index and a
-`kept` flag. Over 97 runs, ranking by L2 instead picks 99.1 % of the same curves
+`kept` flag. Each metric also gets a constant `*_threshold` column, which plots as the
+horizontal line where its curve is cut: the one on the z-score is the cut that was
+applied, ceiling included, the two others the level retaining the same number of curves
+(`threshold_at()`), which is what makes the three comparable. The two continuous scores
+separate exactly on every run of the corpus; the streak's line leaves up to 4 % more
+curves sitting on it than it retains, because they are strictly tied there. Over 97 runs, ranking by L2 instead picks 99.1 % of the same curves
 (p10 97.0 %) and ranking by the streak 94.7 % (p10 87.8 %), so the selection survives the
 choice of metric. The streak's staircase is visible in the same plot: its rank
 correlation with the z-score is only 0.655 against 0.978 for L2, which is the degeneracy

@@ -816,6 +816,25 @@ def knee_threshold(score, minimum=BACKGROUND_MIN_FRAMES):
     return score <= ordered[nkeep - 1]
 
 
+def threshold_at(values, nkeep):
+    """Level below which `nkeep` of `values` sit: the cut drawn as a horizontal line.
+
+    Used to put every metric of a background selection on the same footing — each one
+    cut where it would retain the same number of curves — so that a plot shows whether
+    they single out the same ones. On a metric taking few distinct values the level is
+    still right but no longer separating: more curves than `nkeep` may sit exactly on
+    it, which is what a staircase of ties looks like and is worth seeing.
+
+    :param values: 1d array of scores
+    :param nkeep: how many curves must sit at or below the level
+    :return: the level, or nan when `nkeep` is not a count this array can honour
+    """
+    values = numpy.asarray(values)
+    if nkeep <= 0 or nkeep > values.size:
+        return numpy.nan
+    return numpy.partition(values, nkeep - 1)[nkeep - 1]
+
+
 def background_zscore(intensity, reference, std):
     """Distance of every curve to a reference, in units of its own uncertainty.
 
@@ -1677,14 +1696,27 @@ class HPLC(Plugin):
 
         The point of writing the two unused metrics is to make the selection auditable:
         if the three order the candidates alike and bend at the same place, the frames
-        retained owe nothing to the metric that happened to be chosen. Mind the scales,
-        the streak is a count of bins and the other two are dimensionless.
+        retained owe nothing to the metric that happened to be chosen.
+
+        Each metric comes with a constant column holding the level its curve is cut at,
+        so the threshold shows up as a horizontal line in both plots. The one on the
+        z-score is the cut that was actually applied, ceiling included; the two others
+        are the levels that would retain the same number of curves, which is what makes
+        the three comparable — whether the same points fall below is then read off the
+        plot. Mind the scales, the streak is a count of bins and the other two are
+        dimensionless.
         """
         order = numpy.argsort(scores.zscore, kind="stable")
         mask = numpy.isin(candidates, kept).astype(numpy.int8)
         timed = len(timestamps) > candidates.max(initial=-1)
         time = (numpy.asarray(timestamps, dtype=numpy.float64)[candidates] if timed
                 else candidates.astype(numpy.float64))
+        nkept = int(mask.sum())
+
+        def flat(values):
+            "the threshold of a metric, spread over the axis so it plots as a line"
+            return numpy.full(len(candidates), threshold_at(values, nkept), numpy.float32)
+
         columns = (
             ("zscore", scores.zscore, numpy.float32,
              "Mean |I - reference| / σ over the whole q-range"),
@@ -1692,6 +1724,12 @@ class HPLC(Plugin):
              "Root mean square of the same deviation (L2 norm)"),
             ("longest_streak", scores.longest_streak, numpy.int32,
              "Longest run of residuals of one sign, in bins (CorMap statistic)"),
+            ("zscore_threshold", flat(scores.zscore), numpy.float32,
+             "Level the z-score was cut at: the curves below it make the background"),
+            ("zscore_rms_threshold", flat(scores.zscore_rms),
+             numpy.float32, "Level the L2 norm would have to be cut at to retain as many"),
+            ("longest_streak_threshold", flat(scores.longest_streak),
+             numpy.float32, "Level the streak would have to be cut at to retain as many"),
             ("frames", candidates, numpy.int32, "Index of the curve in the run"),
             ("kept", mask, numpy.int8, "1 if the curve was averaged into the background"),
         )
@@ -1720,7 +1758,9 @@ class HPLC(Plugin):
             if ax_name != "frames":
                 data.attrs["frames_indices"] = 0
             data.attrs["signal"] = "zscore"
-            data.attrs["auxiliary_signals"] = ["zscore_rms", "longest_streak"]
+            data.attrs["auxiliary_signals"] = [
+                "zscore_threshold", "zscore_rms", "zscore_rms_threshold",
+                "longest_streak", "longest_streak_threshold"]
             data.attrs["axes"] = ax_name
             data.attrs["SILX_style"] = NORMAL_STYLE
             data.attrs["title"] = title

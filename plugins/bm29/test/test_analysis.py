@@ -507,6 +507,32 @@ class TestBackgroundSelection(unittest.TestCase):
         U, S, V = numpy.linalg.svd(intensity.T, full_matrices=False)
         return numpy.median(V[0]) * S[0] * U[:, 0], std
 
+    def test_threshold_at_draws_the_cut(self):
+        """The level written as a horizontal line puts exactly `nkeep` curves below it.
+
+        It is what lets the three metrics of `5_background` be compared on one plot:
+        each is cut where it would retain as many curves as the selection did.
+        """
+        values = numpy.array([5.0, 1.0, 4.0, 2.0, 3.0])
+        for nkeep in range(1, 6):
+            level = hplc.threshold_at(values, nkeep)
+            self.assertEqual((values <= level).sum(), nkeep,
+                             f"{nkeep} curves must sit at or below the line")
+        self.assertTrue(numpy.isnan(hplc.threshold_at(values, 0)), "no curve, no line")
+        self.assertTrue(numpy.isnan(hplc.threshold_at(values, 6)), "more curves than there are")
+
+    def test_threshold_on_a_tied_metric_stops_separating(self):
+        """Ties put more curves on the line than it is meant to retain.
+
+        A count of bins — the CorMap statistic — takes few distinct values, so its line
+        is at the right level yet no longer cuts cleanly. That staircase is the reason
+        the score was replaced, and showing it is the point of plotting it.
+        """
+        values = numpy.array([1, 2, 2, 2, 2, 3], dtype=numpy.int32)
+        level = hplc.threshold_at(values, 3)
+        self.assertEqual(level, 2, "the third smallest value is still 2")
+        self.assertEqual((values <= level).sum(), 5, "but five curves sit on or below it")
+
     def test_knee_is_not_invariant_to_squaring_the_score(self):
         """A monotone change of the score leaves the ranking alone but moves the cut.
 
