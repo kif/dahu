@@ -8,9 +8,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/09/2026"
-__status__ = "development"
-__version__ = "0.4.0"
+__date__ = "08/10/2026"
+__status__ = "production"
+__version__ = "0.6.0"
 
 import copy
 import json
@@ -25,6 +25,7 @@ import freesas.cormap
 import h5py
 import numpy
 import pyFAI
+import scipy
 from urllib3.util import parse_url
 
 from dahu.factory import register
@@ -68,10 +69,18 @@ class Accumulators(NamedTuple):
     They are the unreduced quantities pyFAI sums up in every radial bin, kept so
     that frames can be merged afterwards without re-integrating anything:
     `I = sum_signal/sum_normalization`.
+
+    `sum_normalization2` and `count` are of no use for that simple average but are
+    required to rebuild an `Integrate1dResult`, hence to merge frames with `union`.
+    Beware that `sum_normalization2` only keeps its statistical meaning as long as
+    the curves are not renormalized: it is then propagated for the sake of pyFAI's
+    machinery alone. Downstream, use `sem` and never `std`.
     """
     sum_signal:numpy.ndarray
     sum_normalization:numpy.ndarray
+    sum_normalization2:numpy.ndarray
     sum_variance_azimuthal:numpy.ndarray
+    count:numpy.ndarray
     sum_variance_poisson:numpy.ndarray=None  # only needed when pixel splitting is enabled
 
 
@@ -81,6 +90,7 @@ class IntegrationResult(NamedTuple):
     sigma:numpy.ndarray
     spottiness:numpy.ndarray=None
     accumulators:Accumulators=None
+    raw_results:list=None
 
 
 class CormapResult(NamedTuple):
@@ -170,6 +180,9 @@ class IntegrateMultiframe(Plugin):
         self.to_pyarch = {}  # contains all the stuff to be sent to Ispyb and pyarch
         self.to_memcached = {}  # data to be shared via memcached
         self.seq = SequenceIndex(0)
+        self.spot_thres = 3
+        self.valid_frames = None  # Frames with flares
+        self.frame_ids = []
 
     def setup(self, kwargs=None):
         logger.debug("IntegrateMultiframe.setup")
@@ -194,14 +207,17 @@ class IntegrateMultiframe(Plugin):
             lst = list(os.path.splitext(self.input_file))
             lst.insert(1, "-integrate")
             dirname, basename = os.path.split("".join(lst))
-            dirname = dirname.replace("RAW_DATA", "PROCESSED_DATA")
+            if __status__ == "development":
+                dirname = dirname.replace("RAW_DATA", "NOBACKUP")
+            else:
+                dirname = dirname.replace("RAW_DATA", "PROCESSED_DATA")
             dirname = os.path.dirname(dirname)
             # dirname = os.path.join(dirname, "processed")
             dirname = os.path.join(dirname, "integrate")
             self.output_file = os.path.join(dirname, basename)
             if not os.path.isdir(dirname):
                 try:
-                    os.makedirs(dirname)
+                    os.makedirs(dirname, exist_ok=True)
                 except Exception as err:
                     self.log_warning(f"Unable to create dir {dirname}. {type(err)}: {err}")
 
@@ -217,8 +233,8 @@ class IntegrateMultiframe(Plugin):
         ispydict = self.input.get("ispyb", {})
         ispydict["gallery"] = gallery
         self.ispyb = Ispyb._fromdict(ispydict)
-
-        self.nb_frames = len(self.input.get("frame_ids", []))
+        self.frame_ids = numpy.ascontiguousarray(self.input.get("frame_ids", []), dtype=numpy.uint32)
+        self.nb_frames = len(self.frame_ids)
         self.npt = self.input.get("npt", self.npt)
         self.unit = pyFAI.units.to_unit(self.input.get("unit", self.unit))
         self.poni = self.input.get("poni_file")
@@ -232,8 +248,9 @@ class IntegrateMultiframe(Plugin):
             self.energy = numpy.float32(self.energy)  # It is important to fix the datatype of the energy
         self.monitor_values = numpy.array(self.input.get("monitor_values", 1), dtype=numpy.float64)
         if self.input.get("average_out_monitor_values"):
-            self.monitor_values = numpy.zeros_like(self.monitor_values) + self.monitor_values.mean()
             self.log_warning("Averaging-out the monitor values !")
+            self.monitor_values = numpy.zeros_like(self.monitor_values) + self.monitor_values.mean()
+
         self.compute_spottiness = bool(self.input.get("spottiness", True))
         self.normalization_factor = float(self.input.get("normalization_factor", 1))
         self.scale_factor = float(self.input.get("exposure_time", 1)) / self.normalization_factor
@@ -403,8 +420,8 @@ class IntegrateMultiframe(Plugin):
                                               data=numpy.ascontiguousarray(timestamps, dtype=numpy.float64))
         time_ds.attrs["units"] = "s"
         time_ds.attrs["interpretation"] = "spectrum"
-        frame_ds = detector_grp.create_dataset("frame_ids",
-                                              data=numpy.ascontiguousarray(self.input.get("frame_ids", []), dtype=numpy.uint32))
+
+        frame_ds = detector_grp.create_dataset("frame_ids", data=self.frame_ids)
         frame_ds.attrs["long_name"] = "Frame number"
         frame_ds.attrs["interpretation"] = "spectrum"
         if self.COPY_IMAGES:
@@ -459,6 +476,7 @@ class IntegrateMultiframe(Plugin):
 
     # Stage 1 processing: Integration frame per frame
         integrate1_result = self.process1_integration(self.input_frames)
+
         radial_unit, unit_name = str(self.unit).split("_", 1)
         q = numpy.ascontiguousarray(integrate1_result.radial, numpy.float32)
         I = numpy.ascontiguousarray(integrate1_result.intensity, dtype=numpy.float32)
@@ -490,17 +508,21 @@ class IntegrateMultiframe(Plugin):
             acc_grp = nxs.new_class(integration_grp, "accumulators", "NXcollection")
             acc_grp.attrs["comment"] = ("Unreduced sums of the azimuthal integration, one line per frame. "
                                         "The intensity of a set of frames is obtained without re-integrating "
-                                        "anything: sum_signal.sum(axis=0)/sum_normalization.sum(axis=0)")
+                                        "anything: sum_signal.sum(axis=0)/sum_normalization.sum(axis=0), or by "
+                                        "rebuilding Integrate1dResult objects and merging them with `union`.")
             acc_grp[radial_unit] = q_ds
             acc_grp["frame_ids"] = frame_ds
+            # sum_normalization2 and count are needed to rebuild an Integrate1dResult (i.e. for `union`)
             datasets = [("sum_signal", acc.sum_signal, "Σᵢ signalᵢ"),
                         ("sum_normalization", acc.sum_normalization, "Σᵢ normalizationᵢ"),
-                        ("sum_variance_azimuthal", acc.sum_variance_azimuthal, "Σᵢ varianceᵢ, azimuthal error model")]
+                        ("sum_normalization2", acc.sum_normalization2, "Σᵢ normalizationᵢ²"),
+                        ("sum_variance_azimuthal", acc.sum_variance_azimuthal, "Σᵢ varianceᵢ, azimuthal error model"),
+                        ("count", acc.count, "Σᵢ pixel countᵢ")]
             if acc.sum_variance_poisson is not None:
                 datasets.append(("sum_variance_poisson", acc.sum_variance_poisson,
                                  "Σᵢ varianceᵢ, poissonian error model"))
             for name, data, long_name in datasets:
-                acc_ds = acc_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32))
+                acc_ds = acc_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32), **cmp_float)
                 acc_ds.attrs["interpretation"] = "spectrum"
                 acc_ds.attrs["long_name"] = long_name
             if acc.sum_variance_poisson is None:
@@ -520,7 +542,10 @@ class IntegrateMultiframe(Plugin):
         if integrate1_result.spottiness is not None and integrate1_result.spottiness.size:
             spottiness = numpy.ascontiguousarray(integrate1_result.spottiness, dtype=numpy.float32)
             self.to_memcached["spottiness"] = spottiness
-            spot_ds = hplc_data.create_dataset("spottiness", data=spottiness)
+            aniso_data = nxs.new_class(integration_grp, "anisotropy", "NXdata")
+            aniso_data.attrs["title"] = "Anisotropy"
+            aniso_data["frame_ids"] = frame_ds
+            spot_ds = aniso_data.create_dataset("spottiness", data=spottiness)
             spot_ds.attrs["interpretation"] = "spectrum"
             spot_ds.attrs["long_name"] = "Spottiness (azimuthal heterogeneity)"
             spot_ds.attrs["formula"] = "sqrt(sum_q(I(q)*variance_azim(q)/signal(q)**2)/sum_q(I(q)))"
@@ -528,20 +553,102 @@ class IntegrateMultiframe(Plugin):
                                         "from the signal itself. Grows with any anisotropy of the scattering: "
                                         "meniscus in the capillary, parasitic scattering, crystallites... "
                                         "Frames departing from the baseline of this curve are to be masked out.")
-            hplc_data.attrs["auxiliary_signals"] = ["spottiness"]
+            aniso_data.attrs["auxiliary_signals"] = ["spottiness"]
             self.output["spottiness_median"] = float(numpy.median(spottiness))
             self.output["spottiness_max"] = float(spottiness.max())
+            median = numpy.median(integrate1_result.spottiness)
+            mad = numpy.median(abs(integrate1_result.spottiness-median))
+            threshold = max(median + self.spot_thres * mad, 1.1 * median)
+            self.valid_frames = integrate1_result.spottiness < max(median + self.spot_thres * mad, 1.1 * median)
+            aniso_data.create_dataset("isotropic", data=self.valid_frames).attrs["interpretation"] = "spectrum"
+            aniso_data.create_dataset("median", data=numpy.zeros(self.nb_frames, "float32") + median).attrs["interpretation"] = "spectrum"
+            aniso_data.create_dataset("threshold", data=numpy.zeros(self.nb_frames, "float32") + threshold).attrs["interpretation"] = "spectrum"
+            aniso_data.attrs["signal"] = "spottiness"
+            aniso_data.attrs["axes"] = "frame_ids"
+            aniso_data.attrs["auxiliary_signals"] = ["threshold", "median"]
+        else:
+            # Without spottiness, all frames are considered as valid
+            self.valid_frames = numpy.ones(self.nb_frames, dtype=bool)
 
         if self.input.get("hplc_mode"):
             entry_grp.attrs["default"] = posixpath.relpath(hplc_data.name, entry_grp.name)
             integration_grp.attrs["default"] = posixpath.relpath(hplc_data.name, integration_grp.name)
             self.log_warning("HPLC mode detected, stopping after frame per frame integration")
             return
-
+        # IF in HPLC mode, TOP HERE !
         integration_grp.attrs["default"] = posixpath.relpath(integration_data.name, integration_grp.name)
 
-    # Process 2: Freesas cormap
-        cormap_grp = nxs.new_class(entry_grp, "2_correlation_mapping", "NXprocess")
+
+    # Process 2: renormalize curves based on smoothed beam-stop diode values (& updated variance)
+        renormalize_grp = nxs.new_class(entry_grp, "2_renormalize", "NXprocess")
+        renormalize_result = self.process2_renormalize(integrate1_result, nxs, renormalize_grp)
+
+        q = numpy.ascontiguousarray(renormalize_result.radial, numpy.float32)
+        I = numpy.ascontiguousarray(renormalize_result.intensity, dtype=numpy.float32)
+        sigma = numpy.ascontiguousarray(renormalize_result.sigma, dtype=numpy.float32)
+
+        self.to_memcached[radial_unit] = q
+        self.to_memcached["I"] = I
+        self.to_memcached["sigma"] = sigma
+
+        renormalize_grp["sequence_index"] = self.seq()
+        renormalize_grp["program"] = "dahu.plugins.bm29.integrate"
+        renormalize_grp["version"] = __version__
+        renormalize_grp["date"] = get_isotime()
+        cfg_grp = nxs.new_class(renormalize_grp, "configuration", "NXnote")
+        cfg_grp.create_dataset("Smoothing", data='"linear"')
+        cfg_grp.create_dataset("format", data="text/json")
+        renormalize_data = nxs.new_class(renormalize_grp, "result", "NXdata")
+        renormalize_grp.attrs["title"] = str(self.sample)
+
+        q_ds = renormalize_data.create_dataset(radial_unit, data=q)
+        q_ds.attrs["units"] = unit_name
+        q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
+
+        int_ds = renormalize_data.create_dataset("I", data=I)
+        std_ds = renormalize_data.create_dataset("errors", data=sigma)
+        renormalize_data.attrs["signal"] = "I"
+        renormalize_data.attrs["axes"] = [".", radial_unit]
+        renormalize_data.attrs["SILX_style"] = SAXS_STYLE
+
+        int_ds.attrs["interpretation"] = "spectrum"
+        int_ds.attrs["units"] = "arbitrary"
+        int_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
+        # int_ds.attrs["uncertainties"] = "errors" This does not work
+        int_ds.attrs["scale"] = "log"
+        std_ds.attrs["interpretation"] = "spectrum"
+
+        if renormalize_result.accumulators is not None:
+            acc = renormalize_result.accumulators
+            acc_grp = nxs.new_class(renormalize_grp, "accumulators", "NXcollection")
+            acc_grp.attrs["comment"] = ("Unreduced sums of the azimuthal integration, one line per frame. "
+                                        "The intensity of a set of frames is obtained without re-integrating "
+                                        "anything: sum_signal.sum(axis=0)/sum_normalization.sum(axis=0), or by "
+                                        "rebuilding Integrate1dResult objects and merging them with `union`.")
+            acc_grp[radial_unit] = q_ds
+            acc_grp["frame_ids"] = frame_ds
+            # sum_normalization2 and count are needed to rebuild an Integrate1dResult (i.e. for `union`)
+            datasets = [("sum_signal", acc.sum_signal, "Σᵢ signalᵢ"),
+                        ("sum_normalization", acc.sum_normalization, "Σᵢ normalizationᵢ"),
+                        ("sum_normalization2", acc.sum_normalization2, "Σᵢ normalizationᵢ²"),
+                        ("sum_variance_azimuthal", acc.sum_variance_azimuthal, "Σᵢ varianceᵢ, azimuthal error model"),
+                        ("count", acc.count, "Σᵢ pixel countᵢ")]
+            if acc.sum_variance_poisson is not None:
+                datasets.append(("sum_variance_poisson", acc.sum_variance_poisson,
+                                 "Σᵢ varianceᵢ, poissonian error model"))
+            for name, data, long_name in datasets:
+                acc_ds = acc_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32), **cmp_float)
+                acc_ds.attrs["interpretation"] = "spectrum"
+                acc_ds.attrs["long_name"] = long_name
+            if acc.sum_variance_poisson is None:
+                # Without pixel splitting every coefficient is 1, hence the poissonian
+                # variance of a bin is simply the sum of the signal it contains.
+                acc_grp["sum_variance_poisson"] = acc_grp["sum_signal"]
+
+        renormalize_grp.attrs["default"] = posixpath.relpath(renormalize_data.name, renormalize_grp.name)
+
+    # Process 3: Freesas cormap
+        cormap_grp = nxs.new_class(entry_grp, "3_correlation_mapping", "NXprocess")
         cormap_grp["sequence_index"] = self.seq()
         cormap_grp["program"] = "freesas.cormap"
         cormap_grp["version"] = freesas.version
@@ -555,8 +662,8 @@ class IntegrateMultiframe(Plugin):
         cfg_grp["fidelity_abs"] = fidelity_abs
         cfg_grp["fidelity_rel"] = fidelity_rel
 
-    # Stage 2 processing
-        cormap_result = self.process2_cormap(integrate1_result.intensity, fidelity_abs, fidelity_rel)
+    # Stage 3 processing
+        cormap_result = self.process3_cormap(integrate1_result.intensity, fidelity_abs, fidelity_rel)
         cormap_data.attrs["signal"] = "probability"
         cormap_ds = cormap_data.create_dataset("probability", data=cormap_result.probability)
         cormap_ds.attrs["interpretation"] = "image"
@@ -572,121 +679,98 @@ class IntegrateMultiframe(Plugin):
         if self.ispyb.url:
             self.to_pyarch["merged"] = cormap_result.tomerge
 
-    # Process 3: time average and standard deviation
-        average_grp = nxs.new_class(entry_grp, "3_time_average", "NXprocess")
+    # Process 4: Average together diffierent frames from a time-sery
+        average_grp = nxs.new_class(entry_grp, "4_time_average", "NXprocess")
         average_grp["sequence_index"] = self.seq()
         average_grp["program"] = fully_qualified_name(self.__class__)
         average_grp["version"] = __version__
         average_data = nxs.new_class(average_grp, "result", "NXdata")
         average_data.attrs["SILX_style"] = SAXS_STYLE
-        average_data.attrs["signal"] = "intensity_normed"
+        average_data.attrs["signal"] = "I"
+        average_data.attrs["axes"] = [radial_unit]
 
-    # Stage 3 processing
-        res3 = self.process3_average(cormap_result.tomerge)
+    # Stage 4 merging
+        res3 = self.process4_merge(renormalize_result, cormap_result.tomerge)
 
-        Iavg = numpy.ascontiguousarray(res3.average, dtype=numpy.float32)
-        sigma_avg = numpy.ascontiguousarray(res3.deviation, dtype=numpy.float32)
-        norm = numpy.ascontiguousarray(res3.normalization, dtype=numpy.float32)
+        Iavg = numpy.ascontiguousarray(res3.intensity, dtype=numpy.float32)
+        sigma_avg = numpy.ascontiguousarray(res3.sem, dtype=numpy.float32)
+        norm = numpy.ascontiguousarray(res3.sum_normalization, dtype=numpy.float32)
 
-        int_avg_ds = average_data.create_dataset("intensity_normed",
-                                                  data=Iavg,
-                                                  **cmp_float)
-        int_avg_ds.attrs["interpretation"] = "image"
-        int_avg_ds.attrs["formula"] = "sum_i(signal_i))/sum_i(normalization_i)"
-        int_std_ds = average_data.create_dataset("intensity_std",
-                                                   data=sigma_avg,
-                                                   **cmp_float)
-        int_std_ds.attrs["interpretation"] = "image"
-        int_std_ds.attrs["formula"] = "sqrt(sum_i(variance_i)/sum_i(normalization_i))"
+        int_avg_ds = average_data.create_dataset("I", data=Iavg)
+        int_avg_ds.attrs["interpretation"] = "spectrum"
+        int_avg_ds.attrs["formula"] = "sum_i(sum_signal_i))/sum_i(sum_normalization_i)"
+        int_avg_ds.attrs["units"] = "arbitrary"
+        int_avg_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
+
+        int_std_ds = average_data.create_dataset("errors", data=sigma_avg)
+        int_std_ds.attrs["interpretation"] = "spectrum"
+        int_std_ds.attrs["formula"] = "sqrt(sum_i(sum_variance_i))/sum_i(sum_normalization_i)"
         int_std_ds.attrs["method"] = "Propagated error from weighted mean assuming poissonian behavour of every data-point"
-
         int_nrm_ds = average_data.create_dataset("normalization", data=norm)
         int_nrm_ds.attrs["formula"] = "sum_i(normalization_i))"
-
         average_grp.attrs["default"] = posixpath.relpath(average_data.name, average_grp.name)
 
-    # Process 4: Azimuthal integration of the time average image
-        ai2_grp = nxs.new_class(entry_grp, "4_azimuthal_integration", "NXprocess")
-        ai2_grp["sequence_index"] = self.seq()
-        ai2_grp["program"] = "pyFAI"
-        ai2_grp["version"] = pyFAI.version
-        ai2_grp["date"] = get_isotime()
-        ai2_data = nxs.new_class(ai2_grp, "result", "NXdata")
-        ai2_data.attrs["signal"] = "I"
-        ai2_data.attrs["axes"] = radial_unit
-        ai2_data.attrs["SILX_style"] = SAXS_STYLE
-        ai2_data.attrs["title"] = str(self.sample)
-
-        ai2_grp["configuration"] = integration_grp["configuration"]
-        # ai2_grp["polarization_factor"] = integration_grp["polarization_factor"]
-        # ai2_grp["integration_method"] = integration_grp["integration_method"]
-        ai2_grp.attrs["default"] = posixpath.relpath(ai2_data.name, ai2_grp.name)
-
-    # Stage 4 processing
-        intensity_std = res3.deviation
-        if numexpr is None:
-            variance = intensity_std * intensity_std
-        else:
-            variance = numexpr.evaluate("intensity_std**2")
-        res2 = self.ai._integrate1d_ng(res3.average, self.npt,
-                                       variance=variance,
-                                       polarization_factor=polarization_factor,
-                                       unit=self.unit,
-                                       safe=False,
-                                       method=method)
         if self.ispyb.url:
-            self.to_pyarch["avg"] = res2
+            self.to_pyarch["avg"] = res3
 
-        _, self.to_memcached["I_avg"], self.to_memcached["sigma_avg"] = res2
-        ai2_q_ds = ai2_data.create_dataset(radial_unit,
-                                           data=numpy.ascontiguousarray(res2.radial, dtype=numpy.float32))
+        _, self.to_memcached["I_avg"], self.to_memcached["sigma_avg"] = res3
+        ai2_q_ds = average_data.create_dataset(radial_unit,
+                                           data=numpy.ascontiguousarray(res3.radial, dtype=numpy.float32))
         ai2_q_ds.attrs["units"] = unit_name
         ai2_q_ds.attrs["long_name"] = "Scattering vector q (nm⁻¹)"
 
-        ai2_int_ds = ai2_data.create_dataset("I", data=numpy.ascontiguousarray(res2.intensity, dtype=numpy.float32))
-        ai2_std_ds = ai2_data.create_dataset("errors",
-                                             data=numpy.ascontiguousarray(res2.sigma, dtype=numpy.float32))
+        # Provide also accumulators:
+        accu2_grp = nxs.new_class(average_grp, "accumulators", "NXcollection")
+        accu2_grp.attrs["comment"] = ("Unreduced sums of the renormalized azimuthal integration, summed over "
+                                      "the merged frames (listed in `merged`). The averaged intensity is "
+                                      "sum_signal/sum_normalization and its uncertainty "
+                                      "sqrt(sum_variance)/sum_normalization")
+        accu2_grp.attrs["error_model"] = res3.error_model.name
+        accu2_grp[radial_unit] = ai2_q_ds
+        accu2_grp["merged"] = numpy.arange(self.nb_frames)[slice(*cormap_result.tomerge)]
+        # sum_normalization2 and count are needed to rebuild an Integrate1dResult (i.e. for `union`)
+        datasets = [("sum_signal", res3.sum_signal, "Σᵢ signalᵢ"),
+                    ("sum_normalization", res3.sum_normalization, "Σᵢ normalizationᵢ"),
+                    ("sum_normalization2", res3.sum_normalization2, "Σᵢ normalizationᵢ²"),
+                    ("sum_variance", res3.sum_variance, "Σᵢ varianceᵢ, Poissonnian error-model + diode noise"),
+                    ("count", res3.count, "Σᵢ pixel countᵢ")]
+        for name, data, long_name in datasets:
+            acc_ds = accu2_grp.create_dataset(name, data=numpy.ascontiguousarray(data, dtype=numpy.float32), **cmp_float)
+            acc_ds.attrs["interpretation"] = "spectrum"
+            acc_ds.attrs["long_name"] = long_name
 
-        ai2_int_ds.attrs["interpretation"] = "spectrum"
-        ai2_int_ds.attrs["units"] = "arbitrary"
-        ai2_int_ds.attrs["long_name"] = "Intensity (absolute, normalized on water)"
-        # ai2_int_ds.attrs["uncertainties"] = "errors" #this does not work
-        ai2_std_ds.attrs["interpretation"] = "spectrum"
-        ai2_int_ds.attrs["units"] = "arbitrary"
-        # Finally declare the default entry and default dataset ...
-        entry_grp.attrs["default"] = posixpath.relpath(ai2_data.name, entry_grp.name)
+        entry_grp.attrs["default"] = posixpath.relpath(average_data.name, entry_grp.name)
 
-        # Export this to the output JSON
-        # self.output["q"] = res2.radial
-        # self.output["I"] = res2.intensity
-        # self.output["std"] = res2.sigma
 
     def process1_integration(self, data):
         "First step of the processing, integrate all frames, return a IntegrationResult namedtuple"
         logger.debug("in process1_integration")
         intensity = numpy.empty((self.nb_frames, self.npt), dtype=numpy.float32)
         sigma = numpy.empty((self.nb_frames, self.npt), dtype=numpy.float32)
+        raw = []
         if self.compute_spottiness:
             shape = (self.nb_frames, self.npt)
             spottiness = numpy.zeros(self.nb_frames, dtype=numpy.float32)
-            accumulators = Accumulators(numpy.zeros(shape, dtype=numpy.float32),
-                                        numpy.zeros(shape, dtype=numpy.float32),
-                                        numpy.zeros(shape, dtype=numpy.float32),
+            accumulators = Accumulators(sum_signal=numpy.zeros(shape, dtype=numpy.float32),
+                                        sum_normalization=numpy.zeros(shape, dtype=numpy.float32),
+                                        sum_normalization2=numpy.zeros(shape, dtype=numpy.float32),
+                                        sum_variance_azimuthal=numpy.zeros(shape, dtype=numpy.float32),
+                                        count=numpy.zeros(shape, dtype=numpy.float32),
                                         # redundant with sum_signal unless pixels are split
-                                        None if method.split == "no" else numpy.zeros(shape, dtype=numpy.float32))
+                                        sum_variance_poisson=None if method.split == "no" else numpy.zeros(shape, dtype=numpy.float32))
         else:
-            spottiness = accumulators = None
-        idx = 0
-        for i1, frame in zip(self.monitor_values, data):
+            accumulators = spottiness = None
+        for idx, (i1, frame) in enumerate(zip(self.monitor_values, data)):
             res = self.ai._integrate1d_ng(frame, self.npt,
                                           normalization_factor=i1 * self.scale_factor,
-                                          error_model="poisson",
+                                          variance = numpy.maximum(0, frame),
                                           polarization_factor=polarization_factor,
                                           unit=self.unit,
                                           safe=False,
                                           method=method)
             intensity[idx] = res.intensity
             sigma[idx] = res.sigma
+            raw.append(res)
             if spottiness is not None:
                 # A second integration is needed: the azimuthal error model provides the
                 # scatter of the pixels within each ring, which the poissonian one does not.
@@ -701,7 +785,9 @@ class IntegrateMultiframe(Plugin):
                     spottiness[idx] = calc_spottiness(azim)
                     accumulators.sum_signal[idx] = azim.sum_signal
                     accumulators.sum_normalization[idx] = azim.sum_normalization
+                    accumulators.sum_normalization2[idx] = azim.sum_normalization2
                     accumulators.sum_variance_azimuthal[idx] = azim.sum_variance
+                    accumulators.count[idx] = azim.count
                     if accumulators.sum_variance_poisson is not None:
                         accumulators.sum_variance_poisson[idx] = res.sum_variance
                 except Exception as err:
@@ -709,50 +795,110 @@ class IntegrateMultiframe(Plugin):
                     spottiness = accumulators = None
             if self.ispyb.url:
                 self.to_pyarch[idx] = res
-            idx += 1
-        if idx == 0:
+        if len(self.monitor_values) == 0 or len(data)==0:
             self.log_error(f"No frame iterated over in process1_integration! len(frames): {len(data)} len(monitor): {len(self.monitor_values)}", do_raise=False)
             radial = numpy.zeros(self.npt, dtype=numpy.float32)
         else:
             radial = res.radial
-        return IntegrationResult(radial, intensity, sigma, spottiness, accumulators)
+        return IntegrationResult(radial, intensity, sigma, spottiness, accumulators, raw)
 
-    def process2_cormap(self, curves, fidelity_abs, fidelity_rel):
+    def process2_renormalize(self,
+                             result:IntegrationResult,
+                             nxs: Nexus=None,
+                             group: h5py.Group=None):
+        """When in sample-changer mode:
+        renormalize intensities and sem based on the the
+        linear regression of the diode values.
+        Inject the variance of the diode into the corresponding array.
+        """
+        diode = self.monitor_values
+        mask = self.valid_frames
+        linreg = scipy.stats.linregress(self.frame_ids[mask], diode[mask])
+        smooth_diode = linreg.slope * self.frame_ids + linreg.intercept
+        delta2 = (diode-smooth_diode)**2
+        delta2 = delta2[mask]
+        nb_valid = sum(mask)
+        if nb_valid<3:
+            self.log_warning(f"Limited number of valid frames found! Investigate ({nb_valid})")
+            var_diode = delta2.mean()
+        else:
+            var_diode = delta2.sum() / (nb_valid -2)
+        if nxs is not None and group is not None:
+            nrm_grp = nxs.new_class(group, "diode", "NXdata")
+            diode_ds = nrm_grp.create_dataset("raw", data=diode.astype("float32"))
+            diode_ds.attrs["interpretation"] = "spectrum"
+            diode_ds.attrs["long_name"] = "Beam-stop diode intensity"
+            smooth_ds = nrm_grp.create_dataset("smooth", data=smooth_diode.astype("float32"))
+            smooth_ds.attrs["interpretation"] = "spectrum"
+            smooth_ds.attrs["formula"] = "linear regression"
+            smooth_err_ds = nrm_grp.create_dataset("smooth_errors", data=numpy.sqrt(var_diode)+numpy.zeros(self.nb_frames, "float32"))
+            smooth_err_ds.attrs["interpretation"] = "spectrum"
+            smooth_err_ds.attrs["formula"] = "Incertainty on the smoothed diode value"
+            frame_ds = nrm_grp.create_dataset("frame_idx", data=self.frame_ids)
+            frame_ds.attrs["interpretation"] = "spectrum"
+            frame_ds.attrs["long_name"] = "Frame number"
+            nrm_grp.attrs["axes"] = "frame_idx"
+            nrm_grp.attrs["signal"] = "raw"
+            nrm_grp.attrs["auxiliary_signals"] = ["smooth"]
+            nrm_grp.attrs["title"] = "Renormalization"
+
+        for idx, azim in enumerate(result.raw_results):
+            azim.renormalize(smooth_diode[idx] * self.scale_factor,
+                             copy=False)
+            azim._sum_variance += (var_diode/smooth_diode[idx]**2) * azim.sum_signal**2
+            # Nota: r.sem is correct but r.std is wrong !
+            # see: https://github.com/silx-kit/pyFAI/issues/2955
+            azim.__recalculate_means__()
+            accumulators = result.accumulators
+            if accumulators is not None:
+                # `renormalize` scales sum_normalization by the ratio and
+                # sum_normalization2 by its square; count is left untouched.
+                accumulators.sum_normalization[idx] = azim.sum_normalization
+                accumulators.sum_normalization2[idx] = azim.sum_normalization2
+                # accumulators.sum_variance_azimuthal[idx] = azim.sum_variance
+                if accumulators.sum_variance_poisson is not None:
+                    accumulators.sum_variance_poisson[idx] = azim.sum_variance
+            result.intensity[idx] = azim.intensity
+            result.sigma[idx] = azim.sem
+        return result # Modified in place !
+
+    def process3_cormap(self, curves, fidelity_abs, fidelity_rel, spottiness=None):
         "Take the integrated data as input, returns a CormapResult namedtuple"
         logger.debug("in process2_cormap")
         count = numpy.empty((self.nb_frames, self.nb_frames), dtype=numpy.uint16)
         proba = numpy.empty((self.nb_frames, self.nb_frames), dtype=numpy.float32)
         for i in range(self.nb_frames):
-            proba[i, i] = 1.0
-            count[i, i] = 0
-            for j in range(i):
-                res = freesas.cormap.gof(curves[i], curves[j])
-                proba[i, j] = proba[j, i] = res.P
-                count[i, j] = count[j, i] = res.c
+            if not self.valid_frames[i]:
+                # Discard this frame !
+                proba[i, :] = 0.0
+                proba[:, i] = 0.0
+                count[:, i] = 65535
+                count[i, :] = 65535
+            else:
+                proba[i, i] = 1.0
+                count[i, i] = 0
+                for j in range(i):
+                    if self.valid_frames[j]:
+                        res = freesas.cormap.gof(curves[i], curves[j])
+                        proba[i, j] = proba[j, i] = res.P
+                        count[i, j] = count[j, i] = res.c
+
         tomerge = get_equivalent_frames(proba, fidelity_abs, fidelity_rel)
         return CormapResult(proba, count, tomerge)
 
-    def process3_average(self, tomerge):
-        "Average out the valid frames and return an AverageResult namedtuple"
-        logger.debug("in process3_average")
+    def process4_merge(self, result:IntegrationResult, tomerge:list):
+        "Average out the valid results. Return a single IntegrateResult"
+        logger.debug("in process4_merge")
         valid_slice = slice(*tomerge)
-        mask = self.ai.detector.mask
-        # Accumulate in float64: integer detector data would overflow and, worse,
-        # an unsigned accumulator is rejected by numexpr further down.
-        sum_data = (self.input_frames[valid_slice]).sum(axis=0, dtype=numpy.float64)
-        sum_norm = self.scale_factor * sum(self.monitor_values[valid_slice])
-        if numexpr is not None:
-            # Numexpr is many-times faster than numpy when it comes to element-wise operations
-            intensity_avg = numexpr.evaluate("where(mask==0, sum_data/sum_norm, 0.0)")
-            intensity_std = numexpr.evaluate("where(mask==0, sqrt(sum_data)/sum_norm, 0.0)") # Assuming Poisson, no uncertainties on the diode
+        valid_results = result.raw_results[valid_slice]
+        if len(valid_results)>1:
+            out = copy.deepcopy(valid_results[0])
+            for other in valid_results[1:]:
+                out = out.union(other)
         else:
-            with numpy.errstate(divide='ignore'):
-                intensity_avg = sum_data / sum_norm
-                intensity_std = numpy.sqrt(sum_data)/sum_norm
-            wmask = numpy.where(mask)
-            intensity_avg[wmask] = 0.0
-            intensity_std[wmask] = 0.0
-        return AverageResult(intensity_avg, intensity_std, sum_norm)
+            out = valid_results[0]
+        return out
+
 
     def send_to_ispyb(self):
         if self.input.get("hplc_mode") == 0:
@@ -763,6 +909,10 @@ class IntegrateMultiframe(Plugin):
                 self.log_warning(f"Not sending to ISPyB: no valid URL {self.ispyb.url}")
 
     def send_to_icat(self):
+        if not (self.ispyb.url and parse_url(self.ispyb.url).host):
+            self.log_warning("Not sending to iCat: ISPyB metadata not valid")
+            return
+
         #Some more metadata for iCat, as strings:
         to_icat = copy.copy(self.to_pyarch)
         to_icat["experiment_type"] = "hplc" if self.input.get("hplc_mode") else "sample-changer"
@@ -797,4 +947,3 @@ class IntegrateMultiframe(Plugin):
             key = f"{key_base}_{k}"
             dico[key] = json.dumps(self.to_memcached[k], cls=NumpyEncoder)
         return to_memcached(dico)
-

@@ -13,3 +13,4 @@ urllib3
 siphash24
 pyopencl
 stompest
+esrf-ontologies
