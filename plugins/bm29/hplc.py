@@ -51,6 +51,7 @@ from dahu.plugin import Plugin
 
 from .analysis import saxs_analysis
 from .common import (
+    LOG_STYLE,
     NORMAL_STYLE,
     SAXS_STYLE,
     Ispyb,
@@ -1691,8 +1692,16 @@ class HPLC(Plugin):
         Two NXdata holding the same three columns: the z-score the cut is made on, the
         same deviation under an L2 norm, and the longest run of residuals of one sign,
         which is what CorMap measures and what this step used before. `scores` plots
-        them against the time of each curve, `sorted_scores` against their rank by
-        increasing z-score, which is the curve `knee_threshold` cuts.
+        them against the time of each curve; `sorted_scores` holds every column
+        reordered by increasing z-score and plots them against the rank, which is the
+        curve `knee_threshold` cuts. The rank has to stay the plain 0..n-1 there: it is
+        the only abscissa the sorted columns are monotone against, and a viewer draws a
+        line, not a scatter, so any other one zigzags. `frames` and `timestamps` ride
+        along reordered, to tell where in the run a rejected curve came from.
+
+        Both are plotted on a logarithmic ordinate: the streak is some tens of bins and
+        the two z-scores are around one, so on a linear axis the latter are flattened
+        onto the abscissa.
 
         The point of writing the two unused metrics is to make the selection auditable:
         if the three order the candidates alike and bend at the same place, the frames
@@ -1705,64 +1714,85 @@ class HPLC(Plugin):
         the three comparable — whether the same points fall below is then read off the
         plot. Mind the scales, the streak is a count of bins and the other two are
         dimensionless.
+
+        In `scores` the candidates are not consecutive frames — the elution and its
+        shoulders are missing from the middle of the run — and a viewer joining them
+        would draw one straight segment right across the hole, which reads as a drift
+        that is not there. A row of NaN is inserted at every discontinuity so the line
+        breaks instead. Those rows carry the frame and the time where the gap starts,
+        which keeps both abscissae monotone, and the thresholds keep their value, being
+        reference levels rather than data.
         """
         order = numpy.argsort(scores.zscore, kind="stable")
         mask = numpy.isin(candidates, kept).astype(numpy.int8)
         timed = len(timestamps) > candidates.max(initial=-1)
         time = (numpy.asarray(timestamps, dtype=numpy.float64)[candidates] if timed
-                else candidates.astype(numpy.float64))
+                else numpy.full(len(candidates), numpy.nan))
         nkept = int(mask.sum())
+        # where the candidates stop being consecutive frames: one NaN row goes in there
+        holes = numpy.flatnonzero(numpy.diff(candidates) > 1) + 1
+        first_missing = candidates[holes - 1] + 1 if holes.size else numpy.empty(0, int)
 
         def flat(values):
             "the threshold of a metric, spread over the axis so it plots as a line"
             return numpy.full(len(candidates), threshold_at(values, nkept), numpy.float32)
 
+        nan = numpy.nan
+        # (name, values, dtype, what fills a gap row, long_name)
         columns = (
-            ("zscore", scores.zscore, numpy.float32,
+            ("zscore", scores.zscore, numpy.float32, nan,
              "Mean |I - reference| / σ over the whole q-range"),
-            ("zscore_rms", scores.zscore_rms, numpy.float32,
+            ("zscore_rms", scores.zscore_rms, numpy.float32, nan,
              "Root mean square of the same deviation (L2 norm)"),
-            ("longest_streak", scores.longest_streak, numpy.int32,
+            ("longest_streak", scores.longest_streak, numpy.float32, nan,
              "Longest run of residuals of one sign, in bins (CorMap statistic)"),
-            ("zscore_threshold", flat(scores.zscore), numpy.float32,
+            ("zscore_threshold", flat(scores.zscore), numpy.float32, "keep",
              "Level the z-score was cut at: the curves below it make the background"),
-            ("zscore_rms_threshold", flat(scores.zscore_rms),
-             numpy.float32, "Level the L2 norm would have to be cut at to retain as many"),
-            ("longest_streak_threshold", flat(scores.longest_streak),
-             numpy.float32, "Level the streak would have to be cut at to retain as many"),
-            ("frames", candidates, numpy.int32, "Index of the curve in the run"),
-            ("kept", mask, numpy.int8, "1 if the curve was averaged into the background"),
+            ("zscore_rms_threshold", flat(scores.zscore_rms), numpy.float32, "keep",
+             "Level the L2 norm would have to be cut at to retain as many"),
+            ("longest_streak_threshold", flat(scores.longest_streak), numpy.float32,
+             "keep", "Level the streak would have to be cut at to retain as many"),
+            ("frames", candidates, numpy.int32, first_missing,
+             "Index of the curve in the run"),
+            ("kept", mask, numpy.int8, 0,
+             "1 if the curve was averaged into the background"),
         )
-        for name, title, axis in (
+        if timed:
+            columns += (("timestamps", time, numpy.float64,
+                         numpy.asarray(timestamps, numpy.float64)[first_missing],
+                         "Time (s)"),)
+        for name, title, index, axis in (
                 ("scores", "Scores of the background candidates against time",
-                 ("timestamps", time, "Time (s)", "s") if timed else
-                 ("frame", time, "Index of the curve in the run", "")),
-                ("sorted_scores", "The same, sorted by increasing z-score",
-                 ("rank", numpy.arange(len(candidates), dtype=numpy.float64),
-                  "Rank by increasing z-score", ""))):
+                 slice(None), "timestamps" if timed else "frames"),
+                ("sorted_scores", "The same, every column sorted by increasing z-score",
+                 order, "rank")):
             data = nxs.new_class(bg_grp, name, "NXdata")
-            index = slice(None) if name == "scores" else order
-            ax_name, ax_value, ax_long, ax_unit = axis
-            ax_ds = data.create_dataset(
-                ax_name, data=numpy.ascontiguousarray(ax_value[index], dtype=numpy.float64))
-            ax_ds.attrs["long_name"] = ax_long
-            if ax_unit:
-                ax_ds.attrs["units"] = ax_unit
-            for col, value, dtype, info in columns:
-                ds = data.create_dataset(
-                    col, data=numpy.ascontiguousarray(value[index], dtype=dtype))
+            if axis == "rank":
+                # deliberately NOT reordered: the sorted columns are monotone against it
+                rank_ds = data.create_dataset(
+                    "rank", data=numpy.arange(len(candidates), dtype=numpy.int32))
+                rank_ds.attrs["long_name"] = "Rank by increasing z-score"
+            for col, value, dtype, fill, info in columns:
+                column = numpy.asarray(value, dtype=dtype)[index]
+                if axis != "rank" and holes.size:
+                    # a threshold is a level, not a measurement: it spans the gap
+                    column = numpy.insert(column, holes,
+                                          column[holes - 1] if isinstance(fill, str) else fill)
+                ds = data.create_dataset(col, data=numpy.ascontiguousarray(column, dtype))
                 ds.attrs["long_name"] = info
                 ds.attrs["interpretation"] = "spectrum"
-            # `frames` is a second abscissa over the same dimension, not a signal;
-            # `kept` is a flag aligned on it and is left undeclared on purpose
-            if ax_name != "frames":
-                data.attrs["frames_indices"] = 0
+                if col == "timestamps":
+                    ds.attrs["units"] = "s"
+            # the columns which are coordinates rather than signals
+            for col in ("frames", "timestamps"):
+                if col in data and col != axis:
+                    data.attrs[f"{col}_indices"] = 0
             data.attrs["signal"] = "zscore"
             data.attrs["auxiliary_signals"] = [
                 "zscore_threshold", "zscore_rms", "zscore_rms_threshold",
                 "longest_streak", "longest_streak_threshold"]
-            data.attrs["axes"] = ax_name
-            data.attrs["SILX_style"] = NORMAL_STYLE
+            data.attrs["axes"] = axis
+            data.attrs["SILX_style"] = LOG_STYLE
             data.attrs["title"] = title
 
     def one_fraction(self, fraction, index, nxs, top_grp):

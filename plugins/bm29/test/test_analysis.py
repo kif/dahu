@@ -553,6 +553,95 @@ class TestBackgroundSelection(unittest.TestCase):
         self.assertNotEqual(plain.sum(), squared.sum(), "yet it does change the cut")
 
 
+class TestBackgroundScoresGroup(unittest.TestCase):
+    """The two NXdata `5_background` writes to make the selection auditable.
+
+    They exist to be looked at, so what is checked here is what a viewer does with
+    them: a line plot needs a monotone abscissa and a break over missing data.
+    """
+
+    def setUp(self):
+        self.workdir = tempfile.mkdtemp(prefix="bm29_scores_")
+        rng = numpy.random.default_rng(31)
+        # 60 curves, of which 20 in the middle are an elution and never candidates
+        self.candidates = numpy.concatenate([numpy.arange(0, 20), numpy.arange(40, 60)])
+        intensity = 100.0 * (1 + 0.002 * rng.standard_normal((60, 120)))
+        self.scores = hplc.BackgroundScores(
+            zscore=numpy.abs(rng.standard_normal(len(self.candidates))) + 0.8,
+            zscore_rms=numpy.abs(rng.standard_normal(len(self.candidates))) + 1.0,
+            longest_streak=rng.integers(5, 40, len(self.candidates)).astype(numpy.int32))
+        self.timestamps = numpy.arange(60, dtype=numpy.float64) * 2.0
+        self.kept = self.candidates[:30]
+        self.intensity = intensity
+
+    def tearDown(self):
+        shutil.rmtree(self.workdir, ignore_errors=True)
+
+    def _write(self):
+        plugin = hplc.HPLC()
+        plugin.sequence_index = SequenceIndex(1)
+        path = os.path.join(self.workdir, "scores.h5")
+        with Nexus(path, mode="w") as nxs:
+            entry = nxs.new_entry("entry", "test", force_time="2026-01-01T00:00:00")
+            grp = nxs.new_class(entry, "5_background", "NXprocess")
+            plugin._save_background_scores(nxs, grp, self.scores, self.candidates,
+                                           self.timestamps, self.kept)
+        return path
+
+    def test_a_gap_in_the_frames_breaks_the_line(self):
+        "Missing frames get a NaN row, so a viewer does not span the elution"
+        with h5py.File(self._write(), "r") as f:
+            g = f["entry_0000/5_background/scores"]
+            zscore = g["zscore"][()]
+            holes = numpy.flatnonzero(numpy.isnan(zscore))
+            self.assertEqual(len(holes), 1, "one discontinuity, one break")
+            self.assertEqual(len(zscore), len(self.candidates) + 1, "one row inserted")
+            self.assertEqual(g["frames"][holes[0]], 20, "the break sits on the first missing frame")
+            for col in ("zscore_rms", "longest_streak"):
+                self.assertTrue(numpy.isnan(g[col][holes[0]]), f"{col} breaks too")
+            for col in ("zscore_threshold", "zscore_rms_threshold", "longest_streak_threshold"):
+                self.assertFalse(numpy.isnan(g[col][()]).any(),
+                                 f"{col} is a level, it must span the gap")
+
+    def test_both_abscissae_stay_monotone(self):
+        "A line plot against time or against the frame index must not go backwards"
+        with h5py.File(self._write(), "r") as f:
+            g = f["entry_0000/5_background/scores"]
+            for col in ("timestamps", "frames"):
+                self.assertTrue((numpy.diff(g[col][()]) > 0).all(),
+                                f"{col} must increase, inserted rows included")
+
+    def test_sorted_group_is_sorted_against_a_plain_rank(self):
+        """Every column is reordered, except the rank which stays 0..n-1.
+
+        Reordering the rank too is the bug this pins: the scores would still come out
+        sorted while the abscissa was a permutation, and the line plot zigzagged.
+        """
+        with h5py.File(self._write(), "r") as f:
+            g = f["entry_0000/5_background/sorted_scores"]
+            n = len(self.candidates)
+            numpy.testing.assert_array_equal(g["rank"][()], numpy.arange(n),
+                                             "the rank is the abscissa, not a column to sort")
+            self.assertTrue((numpy.diff(g["zscore"][()]) >= 0).all(), "z-scores increase")
+            self.assertFalse(numpy.isnan(g["zscore"][()]).any(), "no gap against a rank")
+            order = numpy.argsort(self.scores.zscore, kind="stable")
+            numpy.testing.assert_array_equal(g["frames"][()], self.candidates[order],
+                                             "frames follow the same order")
+            numpy.testing.assert_allclose(g["timestamps"][()], self.timestamps[self.candidates][order],
+                                          err_msg="so do the time stamps")
+
+    def test_both_groups_are_plottable_on_a_log_ordinate(self):
+        "Every plotted column is strictly positive, or NaN where the line breaks"
+        with h5py.File(self._write(), "r") as f:
+            for name in ("scores", "sorted_scores"):
+                g = f[f"entry_0000/5_background/{name}"]
+                self.assertIn("log", g.attrs["SILX_style"], f"{name} wants a log ordinate")
+                for col in [g.attrs["signal"]] + list(g.attrs["auxiliary_signals"]):
+                    value = g[col][()]
+                    self.assertTrue((value[~numpy.isnan(value)] > 0).all(),
+                                    f"{name}/{col} must not reach zero on a log axis")
+
+
 class TestFractionWidth(unittest.TestCase):
     """Where `search_peaks` cuts the flanks of a peak, which PEAK_REL_HEIGHT sets."""
 
@@ -597,6 +686,7 @@ def suite():
     testsuite = unittest.TestSuite()
     testsuite.addTest(loader(TestAnalysis))
     testsuite.addTest(loader(TestBackgroundSelection))
+    testsuite.addTest(loader(TestBackgroundScoresGroup))
     testsuite.addTest(loader(TestFractionWidth))
     return testsuite
 

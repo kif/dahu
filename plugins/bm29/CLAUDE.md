@@ -50,7 +50,8 @@ The NeXus output is then:
 3_SVD            4_NMF            6_SEC_fractions         7_ISPyB
 5_background     result/ (I, errors, q)   kept, candidates, eluting, keep
                  scores/ and sorted_scores/ (zscore, zscore_rms, longest_streak,
-                 frames, kept) — the audit of the selection
+                 their three *_threshold, frames, timestamps, kept) — the audit of
+                 the selection, on a log ordinate
 ```
 
 **1_renormalize.** The diode is smoothed and the curves are divided by the smoothed
@@ -182,8 +183,18 @@ sit beside the background: `scores`, the candidates against their time stamp, an
 `sorted_scores`, the same sorted by increasing z-score — the curve `knee_threshold`
 actually cuts. Each carries three columns, the z-score, its L2 counterpart and the
 longest run of residuals of one sign that CorMap is built on, plus the frame index and a
-`kept` flag. Each metric also gets a constant `*_threshold` column, which plots as the
-horizontal line where its curve is cut: the one on the z-score is the cut that was
+`kept` flag, and `timestamps`. Both are plotted on a **logarithmic ordinate**
+(`LOG_STYLE`): the streak is some tens of bins where the two z-scores are around one, so
+a linear axis flattens the latter onto the abscissa. In `sorted_scores` every column is
+reordered by `argsort(zscore)` **except the rank**, which stays the plain 0..n-1 — it is
+the only abscissa the sorted columns are monotone against, and a viewer draws a line and
+not a scatter, so any other one zigzags into noise. In `scores` the candidates are not
+consecutive frames — the elution is missing from the middle — so a **row of NaN** is
+inserted at every discontinuity and the line breaks instead of spanning the hole with a
+straight segment that reads as a drift. Those rows carry the frame and the time where
+the gap starts, which keeps both abscissae monotone, and the thresholds keep their value
+across them, being levels rather than measurements. Each metric also gets a constant
+`*_threshold` column, which plots as the horizontal line where its curve is cut: the one on the z-score is the cut that was
 applied, ceiling included, the two others the level retaining the same number of curves
 (`threshold_at()`), which is what makes the three comparable. The two continuous scores
 separate exactly on every run of the corpus; the streak's line leaves up to 4 % more
