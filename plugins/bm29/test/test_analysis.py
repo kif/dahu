@@ -450,7 +450,7 @@ class TestBackgroundSelection(unittest.TestCase):
         intensity = solvent * (1 + 0.002 * rng.standard_normal((40, q.size)))
         intensity[17] += 20.0 * sphere(q) / sphere(q).max()      # one frame with a solute
         std = 0.002 * intensity
-        bg_avg, bg_std, to_keep, candidates = hplc.build_background(intensity, std)
+        bg_avg, bg_std, to_keep, candidates, _ = hplc.build_background(intensity, std)
         self.assertNotIn(17, to_keep, "the contaminated frame made it into the background")
         self.assertGreater(len(to_keep), len(intensity) // 2,
                            "a clean pool must not be decimated")
@@ -469,6 +469,62 @@ class TestBackgroundSelection(unittest.TestCase):
         self.assertTrue(set(capped) <= set(wide), "capping only removes the worst scores")
         # a ceiling of 100 % is no ceiling at all: the knee still has the last word
         numpy.testing.assert_array_equal(hplc.build_background(intensity, std, keep=1.0)[2], wide)
+
+    def test_build_background_reports_the_three_metrics(self):
+        """The two metrics that do not decide are returned beside the one that does.
+
+        They are written next to the background so the cut can be audited: if the three
+        rank the candidates alike, the frames retained owe nothing to the metric that
+        happened to be chosen. Only their shape and alignment are checked here.
+        """
+        rng = numpy.random.default_rng(23)
+        intensity = 100.0 * (1 + 0.002 * rng.standard_normal((80, 150)))
+        std = 0.002 * intensity
+        intensity[7] *= 1 + 0.02 * numpy.linspace(1, -1, 150)   # one curve bent out of shape
+        bg = hplc.build_background(intensity, std)
+        for name in ("zscore", "zscore_rms", "longest_streak"):
+            self.assertEqual(getattr(bg.scores, name).shape, bg.candidates.shape,
+                             f"{name} must carry one value per candidate")
+        self.assertTrue(numpy.issubdtype(bg.scores.longest_streak.dtype, numpy.integer),
+                        "a longest run is a count of bins")
+        self.assertTrue((bg.scores.longest_streak <= intensity.shape[1]).all(),
+                        "a run cannot be longer than the curve")
+        numpy.testing.assert_allclose(bg.scores.zscore,
+                                      hplc.background_zscore(intensity[bg.candidates],
+                                                             *self._reference(intensity, std)),
+                                      rtol=1e-12, err_msg="zscore must be the score that decides")
+        self.assertTrue((bg.scores.zscore_rms >= bg.scores.zscore).all(),
+                        "the L2 norm of a vector is never below its L1 mean")
+        # the bent curve must stand out on every metric, whatever each one cuts at
+        worst = numpy.flatnonzero(bg.candidates == 7)
+        for name in ("zscore", "zscore_rms"):
+            self.assertEqual(int(numpy.argmax(getattr(bg.scores, name))), int(worst[0]),
+                             f"{name} must rank the bent curve worst")
+
+    @staticmethod
+    def _reference(intensity, std):
+        "the SVD fundamental `build_background` scores against, and the matching σ"
+        U, S, V = numpy.linalg.svd(intensity.T, full_matrices=False)
+        return numpy.median(V[0]) * S[0] * U[:, 0], std
+
+    def test_knee_is_not_invariant_to_squaring_the_score(self):
+        """A monotone change of the score leaves the ranking alone but moves the cut.
+
+        Squaring every score reorders nothing, so an L1 norm and an L2 one rank the
+        candidates alike; the knee nevertheless answers differently, because it reads
+        the *shape* of the sorted curve and not the order. Which way it moves is not
+        predictable run by run, so only the non-invariance is pinned here — the
+        direction, looser in the median, is a corpus measurement and lives in the
+        docstring. This matters because an L2 score is the natural thing to reach for
+        when the selection looks too permissive, and it is not a lever on that.
+        """
+        rng = numpy.random.default_rng(3)
+        score = numpy.abs(rng.standard_normal((400, 200))).mean(axis=-1)
+        plain = hplc.knee_threshold(score)
+        squared = hplc.knee_threshold(score ** 2)
+        numpy.testing.assert_array_equal(numpy.argsort(score), numpy.argsort(score ** 2),
+                                         "squaring must not change the ranking")
+        self.assertNotEqual(plain.sum(), squared.sum(), "yet it does change the cut")
 
 
 class TestFractionWidth(unittest.TestCase):

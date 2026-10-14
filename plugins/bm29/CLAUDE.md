@@ -47,8 +47,10 @@ The NeXus output is then:
 1_renormalize    diode/ (raw, smooth, smooth_errors, frame_idx, timestamps)
                  result/ (I, errors, q)        accumulators/ (the six, corrected)
 2_chromatogram   SAXS/ (sum_q_range, sum, diode)   UV-Vis/   result/ (SAXS + UV, 0-1)
-3_SVD            4_NMF            5_background            6_SEC_fractions
-7_ISPyB
+3_SVD            4_NMF            6_SEC_fractions         7_ISPyB
+5_background     result/ (I, errors, q)   kept, candidates, eluting, keep
+                 scores/ and sorted_scores/ (zscore, zscore_rms, longest_streak,
+                 frames, kept) — the audit of the selection
 ```
 
 **1_renormalize.** The diode is smoothed and the curves are divided by the smoothed
@@ -124,9 +126,76 @@ selection bias: averaging a tight subset drags the result towards whichever side
 reference that subset sits on. Over those 97 runs, keeping 30 % shifted the background by
 −0.13 % at 1–2 nm⁻¹ against the pool it came from, where the knee shifted it by −0.005 %,
 and 0.13 % matters because the subtracted signal there is only 0.33 % of the background.
-Cutting tighter is worse on both counts: averaging 5 % of the candidates instead of 85 %
-doubled the negative points in the subtracted fractions, by making the background noisier
-without moving its level.
+Cutting tighter is worse on both counts, and monotonically so. Walking a ceiling down
+from the 86 % the knee keeps, over 97 runs and 162 fractions: the uncertainty of the
+background at 1–2 nm⁻¹ goes 0.029 → 0.032 → 0.038 → 0.049 → 0.084 % at 86, 70, 50, 30 and
+10 % kept, the significance of the subtracted fractions follows it down, 4.86 → 4.78 →
+4.67 → 3.89 → 3.23, and the negative points never improve. **If the selection looks too
+permissive, that feeling is not supported by the corpus** — and reaching for an L2 score
+is not a lever on it either, see below.
+
+Two traps worth knowing before touching this code.
+
+*The knee is not invariant to a monotone change of the score.* Squaring the scores reorders
+nothing, yet it moves the cut, because Kneedle reads the shape of the sorted curve and not
+the order. Over 97 runs the knee keeps 86.2 % of the pool scored with L1, 86.7 % with
+`sqrt(mean(z**2))` and 87.9 % with the χ² — an L2 norm cuts *looser*, not tighter.
+`background_keep` is the only honest lever. Pinned by
+`test_knee_is_not_invariant_to_squaring_the_score`.
+
+*L1 and L2 are interchangeable here, except on wild bins.* Area under the roc curve,
+injected contaminants against solvent: 97.5 % for L1 and 98.4 % for L2 at a 2 % dose of
+elution frames, 88.1 against 87.4 at 20 %, with L1 a point ahead on a shape tilt. End to
+end over 162 fractions, 10.1 % of negative points against 9.5 %, significance 4.86
+against 4.79, the same Rg to a thousandth of a nm. L2 wins only on curves given three
+bins at +30 σ (roc 100 % against 81 %, every one dropped against two in five) — a
+detector artefact whose fix belongs in the mask. L1 is kept because L2 concentrates:
+half its weight sits on a tenth of the bins against a quarter for L1, so a bin whose
+uncertainty is underestimated speaks for the whole curve, and in a tenth of the runs one
+single bin is among the most deviant of over half the pool.
+
+*The error model is poissonian but honest.* `result/errors` is computed from the counts,
+not from the scatter of the pixels in the ring, so it cannot by itself see a curve
+noisier than its counting statistics — which makes any test of the form "does the score
+favour noisy curves?" vacuous if it uses σ as the proxy. Checked against the azimuthal
+variance pyFAI accumulates beside it, which *is* the measured scatter: the two agree to
+1–2 % from 0.1 to 8 nm⁻¹, the score comes out at 0.80 for the √(2/π) = 0.798 a correct
+model predicts, and rebuilding the selection on the azimuthal σ ranks the curves the
+same way (rank correlation 0.993). The model fails only below 0.1 nm⁻¹, in the shadow of
+the beamstop, where it underestimates the scatter 5.7-fold; that band is 1 % of the bins
+and 0.3 % of the variance of the score, and dropping it leaves 99.2 % of the selection
+unchanged. σ also varies by only 0.7 % from one curve to the next, so the score sorts on
+the deviation and little else.
+
+*Per-fraction backgrounds were tried and removed* (October 2026). Taking the retained
+curves closest in time on either side of a fraction, or weighting all of them by their
+distance in time, made the result worse at every width tried. The drift of the solvent
+is real — 0.31 % over a run in median absolute value at 1–2 nm⁻¹, stronger at low q,
+which looks like capillary fouling rather than the eluent changing — but the clean
+curves near a peak are not near, since the elution and its shoulders are excluded on
+both sides, so localisation loses more in variance than it recovers in bias. A SVD of
+the candidates does not recover the pollution pattern either: the second component is
+0.84 % of the first, flat in q, and correlated with time in a quarter of the runs.
+
+*The cut does not hinge on the metric, and `5_background` now shows it.* Two NXdata
+sit beside the background: `scores`, the candidates against their time stamp, and
+`sorted_scores`, the same sorted by increasing z-score — the curve `knee_threshold`
+actually cuts. Each carries three columns, the z-score, its L2 counterpart and the
+longest run of residuals of one sign that CorMap is built on, plus the frame index and a
+`kept` flag. Over 97 runs, ranking by L2 instead picks 99.1 % of the same curves
+(p10 97.0 %) and ranking by the streak 94.7 % (p10 87.8 %), so the selection survives the
+choice of metric. The streak's staircase is visible in the same plot: its rank
+correlation with the z-score is only 0.655 against 0.978 for L2, which is the degeneracy
+that got it replaced. Mind the scales when reading the plot — the streak is a count of
+bins, the other two are dimensionless.
+
+*The selection does earn its 6 % of significance.* On a clean pool, averaging everything
+beats the knee on every metric, which makes the selection look like dead weight. It is
+insurance: with 5 % of elution frames slipped into the pool, the background comes out
++0.46 % off at 0.1–0.5 nm⁻¹ with no selection against +0.017 % with the knee, a factor 29,
+and +1.82 % against +0.26 % at 20 % contamination. Against 0.33 % of subtracted signal,
+that is the difference between a usable fraction and a wrong one. Full measurements in
+`sandbox/analysis/metrique_tampon.md`, section 12.
 
 On the dataset the gates were built from, they took the bias of the background from
 −0.76 % to +0.03 %, the high-q residual of the subtracted peak from +1.07 % to +0.37 %,
@@ -161,9 +230,10 @@ with the UV-Vis chromatogram.
 
 ### Constants to revisit
 
-All in `hplc.py` unless noted, each with the measurement behind it in its docstring.
-They were tuned on BM29 data of 2026 and are the first things to look at if the beamline,
-the detector or the elution conditions change.
+All in `hplc.py` unless noted. The docstrings say what each one does; the measurements
+behind the values are here and in `sandbox/analysis/metrique_tampon.md`. They were tuned
+on BM29 data of 2026 and are the first things to look at if the beamline, the detector
+or the elution conditions change.
 
 | Constant | Value | What it is |
 |---|---|---|
@@ -185,8 +255,8 @@ inputs the day they need tuning: `nsigma = 5.0`, the width of both gates, and
 
 Inputs of `bm29.hplc`, beyond the files: `nmf_components`, `diode_medfilt`,
 `diode_filter` (one of `SMOOTHING_ALGORITHMS`), `uv_datafile`, `uv_offset`,
-`background_keep` — the last one now a ceiling on the fraction of candidates averaged,
-unset by default, the cut being left to the knee.
+`background_keep` — a ceiling on the fraction of candidates averaged, unset by default,
+the cut being left to the knee.
 
 ## NeXus conventions
 

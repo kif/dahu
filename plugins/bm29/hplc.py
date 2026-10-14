@@ -8,9 +8,9 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "12/10/2026"
+__date__ = "14/10/2026"
 __status__ = "development"
-__version__ = "0.7.0"
+__version__ = "0.8.0"
 
 import copy
 import glob
@@ -28,6 +28,7 @@ from typing import NamedTuple
 
 import freesas
 import freesas.autorg
+import freesas.cormap
 import freesas.invariants
 import h5py
 import matplotlib.pyplot
@@ -388,10 +389,9 @@ SOLUTE_QRANGE = (0.1, 0.5)
 DIODE_FILTER_SIZE = 11
 """Width, in frames, of the filter smoothing the beam-stop diode.
 
-Measured over 177 HPLC runs: the noise of the diode goes into the curves one for one,
-and smoothing it away takes some 75 % of the scatter of the chromatogram out. Wider is
-not better, as the diode also drifts and steps: beyond ~15 frames the filter starts
-cutting into those, and at 31 it biases one run out of six by more than 3σ."""
+The noise of the diode goes into the curves one for one, so smoothing it away takes
+most of the scatter of the chromatogram out. Wider is not better: the diode also drifts
+and steps, and beyond ~15 frames the filter starts cutting into those."""
 
 DIODE_NOISE_LIMIT = 1.0
 "Relative noise of the diode, in %, above which normalizing on it makes little sense"
@@ -568,9 +568,8 @@ PEAK_PROMINENCE = 10.0
 PEAK_EDGE_MARGIN = 10
 """Frames at either end of the run where a lone excess is taken for a start-up artefact.
 
-An elution still rising at the last frame is a different matter and is kept: measured
-over 174 runs, every spurious flag at an edge was confined to a handful of frames,
-while a truncated elution spanned hundreds."""
+An elution still rising at the last frame is a different matter and is kept: a
+start-up artefact spans a handful of frames, a truncated elution hundreds."""
 
 PEAK_REL_HEIGHT = 0.5
 """Where a fraction is cut on the flank of its peak, as a fraction of the prominence
@@ -578,24 +577,15 @@ measured down from the summit. 0.5 is the width at half maximum, 0.95 nearly the
 
 Averaging frames of concentration cᵢ against a noise σ gives the mean a signal to noise
 of Σcᵢ/(σ·√N), so one more frame helps as long as it carries more than half the mean
-concentration of those already in: the optimum sits near the half maximum, not at the
-summit. Measured over 97 runs and 161 fractions, the significance of the subtracted
-curve at 0.1-0.5 nm⁻¹ peaks indeed in the middle of the range — 56.1 σ at 0.95, 61.3 at
-0.5, 63.6 at 0.65, back to 56.7 at 0.3 — and the share of fractions yielding a usable
-Guinier region follows, 42 % at 0.95 against 45 % at 0.5 and 47 % at 0.65. Rg does not
-move (3.95 nm throughout), so nothing here is a concentration effect. No fraction is
-lost on the way: the same 161 survive `minimum_size` at every setting.
+concentration of those already in: the statistical optimum sits near the half maximum,
+not at the summit. Half maximum is taken rather than that free optimum because the
+flanks are not merely dilute but contaminated — larger species leave a size exclusion
+column first, so the leading edge is enriched in oligomers and the trailing edge bleeds
+into whatever follows.
 
-The free optimum of the significance alone would be 0.65. Half maximum is taken instead
-because the flanks are not merely dilute, they are contaminated: larger species leave a
-size exclusion column first, so the leading edge of a peak is enriched in oligomers and
-the trailing edge bleeds into whatever follows. Cutting at half maximum buys most of the
-statistical gain and drops both.
-
-This does **not** reduce the negative points of the subtracted curves — 10.1 % at 0.5
-against 9.9 % at 0.95, flat over the whole sweep. Those live above 2 nm⁻¹ where the
-protein no longer scatters, and narrowing the fraction raises the signal and the noise
-there in the same ratio. See `sandbox/analysis/metrique_tampon.md`."""
+It does **not** reduce the negative points of the subtracted curves, which live above
+2 nm⁻¹ where the protein no longer scatters and where narrowing the fraction raises
+signal and noise in the same ratio. See `plugins/bm29/CLAUDE.md`."""
 
 
 def contiguous_blocks(mask, minlen=1):
@@ -618,10 +608,9 @@ def search_peaks(intensity, q, wmin=10, prominence=PEAK_PROMINENCE, nsigma=5.0,
     """Label all peak regions of the chromatogram
 
     Peaks are looked for on the sum over CHROMATOGRAM_QRANGE rather than over the whole
-    range: above 1 nm⁻¹ there is solvent and noise and nothing else, and dropping those
-    bins buys a factor 3 on the signal to noise. The prominence is given in units of the
-    noise of that chromatogram, measured on the data themselves, so the threshold does
-    not have to be retuned when the beam or the exposure change.
+    range, since above 1 nm⁻¹ there is solvent and noise and nothing else. The
+    prominence is given in units of the noise of that chromatogram, measured on the data
+    themselves, so the threshold survives a change of beam or of exposure.
 
     Regions span the width of each peak at PEAK_REL_HEIGHT of its prominence and are cut
     at the lowest point between two summits, which keeps them disjoint. Taking the width
@@ -715,9 +704,9 @@ def solute_frames(intensity, q, nsigma=5.0):
     the two rises with the solute and does not care about the overall scale. It needs no
     summit either, which is why `search_peaks` falls back on it.
 
-    It covers the whole elution, shoulders included, and that is what a background needs:
-    leaving the shoulders of a peak in is worse than leaving the whole peak, because they
-    drag the SVD fundamental along without standing out enough to be scored away later.
+    It covers the whole elution, shoulders included — what a background needs, since
+    shoulders drag the SVD fundamental along without standing out enough to be scored
+    away afterwards.
 
     :param intensity: 2D array of shape (nframes, nbins)
     :param q: scattering vector, same unit as SOLUTE_QRANGE and BACKGROUND_QRANGE
@@ -745,16 +734,12 @@ def solute_frames(intensity, q, nsigma=5.0):
 def solute_free_frames(intensity, q, nsigma=5.0):
     """Index of the frames where no solute can be detected at all
 
-    `solute_frames` asks whether something is *clearly* eluting and scales its threshold
-    on the spread of the indicator over the whole run. That spread is inflated by the
-    elution itself — by a factor 6 in the median over 153 runs, and by several hundred
-    when the peak covers much of the acquisition — so "5 deviations" really means some
-    30 times the noise. That is the right question for the peak search, which must not
-    fire on noise, and the wrong one for a background, which has to be free of any trace
-    of solute rather than merely outside the obvious peaks.
-
-    Here the scale is the point to point noise of the indicator, which a smooth elution
-    does not inflate, so `nsigma` means what it says.
+    Same indicator as `solute_frames`, different scale. There the threshold is set on
+    the spread of the indicator over the whole run, which the elution itself inflates,
+    so `nsigma` buys a much wider margin than it says — the right question for a peak
+    search, which must not fire on noise, and the wrong one for a background, which has
+    to be free of any trace of solute rather than merely outside the obvious peaks.
+    Here the scale is the point to point noise, which a smooth elution does not inflate.
 
     :param intensity: 2D array of shape (nframes, nbins)
     :param q: scattering vector, same unit as SOLUTE_QRANGE and BACKGROUND_QRANGE
@@ -783,36 +768,31 @@ def solute_free_frames(intensity, q, nsigma=5.0):
 BACKGROUND_MIN_FRAMES = 8
 """Smallest number of curves ever averaged into a background.
 
-The knee of `knee_threshold` is a shape, not a significance test: on a candidate pool
-that holds nothing but solvent it still falls somewhere, and on a pool of a handful of
-curves it can fall almost anywhere. This floor keeps a pathological run from building
-its background out of two frames."""
+`knee_threshold` always finds a knee, wherever the scores sit, and on a small pool it
+can fall almost anywhere. This floor keeps a pathological run from building its
+background out of two frames."""
 
 
 def knee_threshold(score, minimum=BACKGROUND_MIN_FRAMES):
     """Cut a set of scores at the knee of their sorted curve.
 
-    Sorting the scores and walking up the curve, the slope stays flat as long as the
-    curves only differ by noise and turns up where they start to differ for a reason.
-    The knee is taken the Kneedle way: the sorted scores are mapped into the unit
-    square and the cut falls where the curve runs furthest *below* the chord joining
-    its two ends. Nothing has to be tuned, which is the point — it replaces a fraction
-    picked by hand.
+    The scores are sorted, mapped into the unit square, and the cut falls where the
+    curve runs furthest below the chord joining its two ends — the Kneedle rule. It
+    takes no tuning, which is why it replaces a fraction picked by hand.
 
-    Two warnings on what this does **not** do. The knee is not a detector: the sorted
-    scores of a pool of pure noise are the order statistics of a half normal, which are
-    convex too, so a knee is found whether or not anything is wrong. Measured over 97
-    runs it lands at 84 % of the pool on real data and at 83 % on gaussian draws of the
-    same size — the position alone says nothing about contamination. And being a shape,
-    it is sensitive to a single wild score, which flattens everything else against the
-    chord; `minimum` is the guard on the other side.
+    Three things it does not do, each of which has bitten:
 
-    What it buys over a fixed fraction is the absence of a selection bias. Averaging a
-    tight subset of the candidates biases the result towards whichever side of the
-    reference that subset sits on: over the same 97 runs, keeping 30 % shifted the
-    background by -0.13 % at 1-2 nm⁻¹ against the pool it was drawn from, where the knee
-    shifted it by -0.005 %. That 0.13 % matters because the subtracted signal there is
-    only 0.33 % of the background.
+    * it is **not a detector**. A knee is found whether or not anything is wrong, since
+      the sorted scores of a pure-noise pool are convex too. Where it lands says
+      nothing on its own about contamination;
+    * being a shape, it is **sensitive to a single wild score**, which flattens
+      everything else against the chord. `minimum` guards the other side;
+    * it is **not invariant to a monotone change of the score**. Squaring the scores
+      reorders nothing yet moves the cut, and on this data it moves it looser. An L2
+      norm is therefore no way to tighten the selection; only `build_background(keep=)`
+      is.
+
+    Measurements behind these three are in `plugins/bm29/CLAUDE.md`.
 
     :param score: 1d array, one value per curve, the smaller the more background-like
     :param minimum: never cut below that many curves, whatever the knee says
@@ -841,46 +821,63 @@ def background_zscore(intensity, reference, std):
 
     The reference comes out of a SVD and carries no uncertainty of its own, while every
     curve does, so the deviation is weighed with the curve's. The uncertainty grows at
-    both ends of the q-range, where few pixels contribute — behind the beamstop and in
-    the corners of the detector — so the score leans by itself on the middle of the
-    range, where the statistics are best, and no q-range has to be chosen.
+    both ends of the q-range, where few pixels contribute, so the score leans by itself
+    on the middle of the range and no q-range has to be chosen. The whole range is used
+    rather than the high q end alone, because it is at low q that a solute shows.
 
-    The whole range is used rather than the high q end alone: it costs little weight and
-    it is at low q that a solute shows. Injecting elution frames into the candidate pool
-    of 94 runs, this score left 31 % of them in the background when restricted to
-    BACKGROUND_QRANGE against 69 % rejected over the whole range, and at 20 %
-    contamination the background came out +0.90 % too high at 0.1-0.5 nm⁻¹ in the first
-    case against +0.12 % in the second.
+    The deviations are averaged in **absolute value**, an L1 norm, not signed. A signed
+    average would measure the *net* offset of a curve and be blind to any defect whose
+    deviations cancel over the range, which is most of what is being looked for here:
+    crystallites and parasitic scattering are defects of shape. A uniform change of
+    scale, the one defect a signed average would catch better, is `stationary_frames`'
+    job and not this one's.
 
-    The deviations are averaged in absolute value — an L1 norm — and not signed. Signing
-    them first would make the score the size of the *net* offset of a curve, which is
-    blind to any defect whose deviations cancel over the range. That blindness is not
-    hypothetical: tilting 1 % of a candidate's bins up at low q and down at high q, for a
-    net offset of zero, the signed average rejected 16 to 18 % of the tilted curves —
-    chance — where this one rejected 37 to 100 % depending on the dose. On curves
-    genuinely carrying a solute it is also the better of the two, 100 % against 83 %
-    rejected at a 2 % dose.
-
-    A signed average does win on one defect, a uniform change of scale: 79 % against 70 %
-    rejected at a 5 % dose, because it then measures the offset itself rather than the
-    squared excess it adds to the scatter. That case is not this function's to catch —
-    `stationary_frames` compares levels over BACKGROUND_QRANGE and is exactly a detector
-    of scale — while the defects left to this one, crystallites and parasitic scattering,
-    are defects of shape.
-
-    An L2 norm would do the same job; L1 is kept because it does not let one wild bin
-    decide, and a detector does produce wild bins.
+    An L2 norm was measured against this one and the two are interchangeable except on
+    curves holding a few wild bins, where L2 is the sharper and L1 the more robust; see
+    `plugins/bm29/CLAUDE.md`.
 
     :param intensity: 2D array of shape (ncurves, nbins)
     :param reference: 1d array of nbins, the curve everything is compared to
     :param std: uncertainties of `intensity`, same shape
-    :return: 1d array of ncurves, the smaller the more background-like. On pure noise it
-             sits at √(2/π) ≈ 0.80, the mean of a folded standard normal, rather than at
-             zero: it measures the scatter of a curve about the reference, so it has a
-             floor that a signed average does not have.
+    :return: 1d array of ncurves, the smaller the more background-like. It measures the
+             scatter of a curve about the reference, so on pure noise it sits at the
+             mean of a folded standard normal, √(2/π) ≈ 0.80, and not at zero.
     """
     deviation = (intensity - reference) / numpy.maximum(std, numpy.finfo(numpy.float64).tiny)
     return numpy.abs(deviation).mean(axis=-1)
+
+
+class BackgroundScores(NamedTuple):
+    """Three ways of measuring how far a background candidate sits from the reference.
+
+    Only `zscore` takes part in the selection. The other two are computed for the
+    diagnostic written beside the background: `zscore_rms` is the same deviation under
+    an L2 norm, `longest_streak` the statistic CorMap is built on, which this step used
+    before. Plotting the three over the same curves shows whether the cut owes anything
+    to the metric chosen.
+    """
+
+    zscore: numpy.ndarray
+    "mean of |deviation| in units of σ, the score the selection is made on"
+    zscore_rms: numpy.ndarray
+    "root mean square of the same deviation"
+    longest_streak: numpy.ndarray
+    "longest run of residuals of one sign against the reference, in bins"
+
+
+class Background(NamedTuple):
+    "What `build_background` returns"
+
+    avg: numpy.ndarray
+    "the background itself, 1d of nbins"
+    std: numpy.ndarray
+    "its uncertainty, same shape"
+    kept: numpy.ndarray
+    "index of the frames averaged into it"
+    candidates: numpy.ndarray
+    "index of the frames the gates let through, which `scores` is indexed on"
+    scores: BackgroundScores
+    "the three metrics, one value per candidate"
 
 
 def build_background(intensity, std=None, keep=None, q=None, nsigma=5.0, accumulators=None):
@@ -893,42 +890,30 @@ def build_background(intensity, std=None, keep=None, q=None, nsigma=5.0, accumul
     2. score every candidate against that approximation with `background_zscore`
     3. average those below the knee of the sorted scores (`knee_threshold`)
 
-    The two gates of step 0 answer orthogonal questions, and neither replaces the score
+    The two gates of step 0 answer orthogonal questions and neither replaces the score
     of step 2: one compares levels at high q, where only the solvent speaks, the other
     the low to high q ratio, which the solute raises. A curve offset by a change of
-    solvent keeps the shape of a background and the score lets it through; conversely
-    the shoulders of a peak keep the level of a background. The score is left to catch
-    what neither sees, crystallites or parasitic scattering.
-
-    Step 2 used to measure a cormap distance, which is the length of the longest run of
-    residuals of one sign. That is an integer, and a small one: over 872 to 1377
-    candidates it took only 30 to 55 distinct values, so at the cut 94 to 191 frames
-    were strictly tied for 16 to 70 remaining places and the sort settled them
-    arbitrarily. The z-score is continuous, it uses the uncertainties that are
-    propagated all the way here for nothing otherwise, and it ranks without ties.
-    Neither the change of score nor the change of threshold moves the background by
-    more than a tenth of a percent on a clean pool — both were measured on 97 reprocessed
-    runs — they only remove two arbitrary choices from a step that feeds everything else.
+    solvent keeps the shape of a background, and the shoulders of a peak keep its level,
+    so each gate is blind to what the other catches; the score then catches crystallites
+    and parasitic scattering, which neither sees.
 
     :param intensity: 2D array of shape (nframes, nbins)
     :param std: same as intensity but with the standard deviation. Without it the frames
                 are scored on their relative deviation instead, which weighs the noisy
                 ends of the q-range as much as its middle.
     :param keep: ceiling on the fraction of the candidates averaged (<1!), or None to
-                 let the knee alone decide. The gates having already weeded out the odd
-                 ones, there is little left to reject here, and cutting tighter costs
-                 more than it saves: over 97 runs, averaging 5 % of the candidates
-                 instead of the 85 % the knee keeps doubled the number of negative
-                 points in the subtracted fractions, by making the background noisier
-                 without moving its level.
+                 let the knee alone decide. Leave it unset unless there is a reason:
+                 the gates have already weeded out the odd curves, and on this data
+                 every tighter setting only made the background noisier and the
+                 subtracted fractions less significant.
     :param q: scattering vector; without it the stationarity gate is skipped
     :param nsigma: width of the stationarity gate, in robust standard deviations
     :param accumulators: unreduced sums of the integration, one line per frame. Given
                          those, frames are merged the way pyFAI does rather than with a
                          plain mean of the ratios.
-    :return: (bg_avg, bg_std, to_keep, candidates): the background and its uncertainty,
-             each 1d of size nbins, then the index of the frames averaged into it and
-             the index of those the gates of step 0 let through
+    :return: a `Background`: the background and its uncertainty, the index of the frames
+             averaged into it, the index of those the gates of step 0 let through, and
+             the scores of those candidates
     """
     if q is None:
         candidates = numpy.arange(intensity.shape[0])
@@ -958,17 +943,25 @@ def build_background(intensity, std=None, keep=None, q=None, nsigma=5.0, accumul
         else:
             bg_std = None
     else:
-        # Summing the unreduced sums is exactly what `Integrate1dResult.union` does for
-        # this error model, without the copies: every frame is weighted by its own
-        # normalization, which a mean of the ratios silently takes as equal, and the
-        # uncertainty comes out as the sem of that weighted mean, diode noise included.
+        # Summing the unreduced sums is `Integrate1dResult.union` without the copies:
+        # every frame carries its own normalization, which a mean of ratios would take
+        # as equal, and the uncertainty comes out as the sem of that weighted mean.
         variance = (accumulators.sum_variance_azimuthal
                     if accumulators.sum_variance_poisson is None
                     else accumulators.sum_variance_poisson)
         normalization = accumulators.sum_normalization[to_keep].sum(axis=0, dtype=numpy.float64)
         bg_avg = accumulators.sum_signal[to_keep].sum(axis=0, dtype=numpy.float64) / normalization
         bg_std = numpy.sqrt(variance[to_keep].sum(axis=0, dtype=numpy.float64)) / normalization
-    return bg_avg, bg_std, to_keep, candidates
+    deviation = intensity[candidates] - bg1
+    scores = BackgroundScores(
+        zscore=score,
+        zscore_rms=numpy.sqrt(((deviation / numpy.maximum(
+            std[candidates] if std is not None else bg1,
+            numpy.finfo(numpy.float64).tiny)) ** 2).mean(axis=-1)),
+        longest_streak=numpy.array(
+            [freesas.cormap.measure_longest(numpy.ascontiguousarray(d, dtype=numpy.float64))
+             for d in deviation], dtype=numpy.int32))
+    return Background(bg_avg, bg_std, to_keep, candidates, scores)
 
 
 ZIP_COMPRESSION = zipfile.ZIP_DEFLATED
@@ -1578,7 +1571,7 @@ class HPLC(Plugin):
             "background; -1 means no ceiling, the cut being then left to the knee of "
             "the sorted z-scores alone, which is the default"
         )
-        bg_avg, bg_std, to_keep, candidates = build_background(
+        bg_avg, bg_std, to_keep, candidates, scores = build_background(
             I, sigma, keep=keep, q=q, accumulators=accumulators)
         to_keep = numpy.ascontiguousarray(to_keep, dtype=numpy.int32)
         kept_ds = bg_grp.create_dataset("kept", data=to_keep)
@@ -1604,6 +1597,7 @@ class HPLC(Plugin):
                          f"{len(I) - len(eluting) - len(candidates)} did not scatter like "
                          f"the solvent of the run. {len(to_keep)} of the candidates sit "
                          "below the knee of their z-score and make up the background")
+        self.background_frames = to_keep
         self.to_pyarch["buffer_frames"] = to_keep
         self.to_pyarch["buffer_I"] = bg_avg
         self.to_pyarch["buffer_Stdev"] = bg_std
@@ -1627,6 +1621,7 @@ class HPLC(Plugin):
             "errors", data=numpy.ascontiguousarray(bg_std, dtype=numpy.float32)
         )
         bg_std_ds.attrs["interpretation"] = "spectrum"
+        self._save_background_scores(nxs, bg_grp, scores, candidates, timestamps, to_keep)
         bg_grp.attrs["default"] = posixpath.relpath(bg_data.name, bg_grp.name)
         I_sub = I - bg_avg
         Istd_sub = numpy.sqrt(sigma**2 + bg_std**2)
@@ -1670,6 +1665,65 @@ class HPLC(Plugin):
 
         # Mind to close the file
         nxs.close()
+
+    def _save_background_scores(self, nxs, bg_grp, scores, candidates, timestamps, kept):
+        """Write the scores of the background candidates, as given and sorted.
+
+        Two NXdata holding the same three columns: the z-score the cut is made on, the
+        same deviation under an L2 norm, and the longest run of residuals of one sign,
+        which is what CorMap measures and what this step used before. `scores` plots
+        them against the time of each curve, `sorted_scores` against their rank by
+        increasing z-score, which is the curve `knee_threshold` cuts.
+
+        The point of writing the two unused metrics is to make the selection auditable:
+        if the three order the candidates alike and bend at the same place, the frames
+        retained owe nothing to the metric that happened to be chosen. Mind the scales,
+        the streak is a count of bins and the other two are dimensionless.
+        """
+        order = numpy.argsort(scores.zscore, kind="stable")
+        mask = numpy.isin(candidates, kept).astype(numpy.int8)
+        timed = len(timestamps) > candidates.max(initial=-1)
+        time = (numpy.asarray(timestamps, dtype=numpy.float64)[candidates] if timed
+                else candidates.astype(numpy.float64))
+        columns = (
+            ("zscore", scores.zscore, numpy.float32,
+             "Mean |I - reference| / σ over the whole q-range"),
+            ("zscore_rms", scores.zscore_rms, numpy.float32,
+             "Root mean square of the same deviation (L2 norm)"),
+            ("longest_streak", scores.longest_streak, numpy.int32,
+             "Longest run of residuals of one sign, in bins (CorMap statistic)"),
+            ("frames", candidates, numpy.int32, "Index of the curve in the run"),
+            ("kept", mask, numpy.int8, "1 if the curve was averaged into the background"),
+        )
+        for name, title, axis in (
+                ("scores", "Scores of the background candidates against time",
+                 ("timestamps", time, "Time (s)", "s") if timed else
+                 ("frame", time, "Index of the curve in the run", "")),
+                ("sorted_scores", "The same, sorted by increasing z-score",
+                 ("rank", numpy.arange(len(candidates), dtype=numpy.float64),
+                  "Rank by increasing z-score", ""))):
+            data = nxs.new_class(bg_grp, name, "NXdata")
+            index = slice(None) if name == "scores" else order
+            ax_name, ax_value, ax_long, ax_unit = axis
+            ax_ds = data.create_dataset(
+                ax_name, data=numpy.ascontiguousarray(ax_value[index], dtype=numpy.float64))
+            ax_ds.attrs["long_name"] = ax_long
+            if ax_unit:
+                ax_ds.attrs["units"] = ax_unit
+            for col, value, dtype, info in columns:
+                ds = data.create_dataset(
+                    col, data=numpy.ascontiguousarray(value[index], dtype=dtype))
+                ds.attrs["long_name"] = info
+                ds.attrs["interpretation"] = "spectrum"
+            # `frames` is a second abscissa over the same dimension, not a signal;
+            # `kept` is a flag aligned on it and is left undeclared on purpose
+            if ax_name != "frames":
+                data.attrs["frames_indices"] = 0
+            data.attrs["signal"] = "zscore"
+            data.attrs["auxiliary_signals"] = ["zscore_rms", "longest_streak"]
+            data.attrs["axes"] = ax_name
+            data.attrs["SILX_style"] = NORMAL_STYLE
+            data.attrs["title"] = title
 
     def one_fraction(self, fraction, index, nxs, top_grp):
         """
@@ -1735,11 +1789,13 @@ class HPLC(Plugin):
                         if acc.sum_variance_poisson is None
                         else acc.sum_variance_poisson)
             normalization = acc.sum_normalization[fraction].sum(axis=0, dtype=numpy.float64)
+            bg_I = self.to_pyarch["buffer_I"]
+            bg_std = self.to_pyarch["buffer_Stdev"]
             I_frc = (acc.sum_signal[fraction].sum(axis=0, dtype=numpy.float64)
-                     / normalization - self.to_pyarch["buffer_I"])
+                     / normalization - bg_I)
             sigma_frc = numpy.sqrt(
                 variance[fraction].sum(axis=0, dtype=numpy.float64) / normalization ** 2
-                + self.to_pyarch["buffer_Stdev"] ** 2)
+                + bg_std ** 2)
         ai2_int_ds = avg_data.create_dataset(
             "I", data=numpy.ascontiguousarray(I_frc, dtype=numpy.float32)
         )
