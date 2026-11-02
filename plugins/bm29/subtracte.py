@@ -8,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "05/10/2026"
+__date__ = "02/11/2026"
 __status__ = "development"
 __version__ = "0.4.0"
 
@@ -577,13 +577,14 @@ class SubtractBuffer(Plugin):
             self.to_pyarch["guinier"] = guinier
         if guinier is None:
             entry_grp.attrs["default"] = posixpath.relpath(ai2_data.name, entry_grp.name)
-            self.log_error("No Guinier region found, data of dubious quality", do_raise=True)
-        self.Rg = guinier.Rg
-        self.I0 = guinier.I0
-        self.Vc = analysis.rti.Vc
-        self.mass = analysis.rti.mass
-        self.to_pyarch["volume"] = analysis.volume
-        self.to_pyarch["rti"] = analysis.rti
+            self.log_error("No Guinier region found, data of dubious quality", do_raise=False)
+        else:
+            self.Rg = guinier.Rg
+            self.I0 = guinier.I0
+            self.Vc = analysis.rti.Vc
+            self.mass = analysis.rti.mass
+            self.to_pyarch["volume"] = analysis.volume
+            self.to_pyarch["rti"] = analysis.rti
         if analysis.bift is not None:
             self.Dmax = analysis.bift.Dmax_avg
             self.to_pyarch["bift"] = analysis.bift
