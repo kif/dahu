@@ -449,6 +449,7 @@ class IntegrateMultiframe(Plugin):
         diode_ds = diode_grp.create_dataset("diode",
                                             data=numpy.ascontiguousarray(self.monitor_values, numpy.float32))
         diode_ds.attrs["interpretation"] = "spectrum"
+        diode_ds.attrs["units"] = "A"
         diode_ds.attrs["comment"] = "I1 = raw flux (I0) multiplied with the absorption of the sample"
         nf_ds = diode_grp.create_dataset("normalization_factor", data=self.normalization_factor)
         nf_ds.attrs["comment"] = "used to convert in abolute scattering"
@@ -828,12 +829,15 @@ class IntegrateMultiframe(Plugin):
             diode_ds = nrm_grp.create_dataset("raw", data=diode.astype("float32"))
             diode_ds.attrs["interpretation"] = "spectrum"
             diode_ds.attrs["long_name"] = "Beam-stop diode intensity"
+            diode_ds.attrs["units"] = "A"
             smooth_ds = nrm_grp.create_dataset("smooth", data=smooth_diode.astype("float32"))
             smooth_ds.attrs["interpretation"] = "spectrum"
             smooth_ds.attrs["formula"] = "linear regression"
+            smooth_ds.attrs["units"] = "A"
             smooth_err_ds = nrm_grp.create_dataset("smooth_errors", data=numpy.sqrt(var_diode)+numpy.zeros(self.nb_frames, "float32"))
             smooth_err_ds.attrs["interpretation"] = "spectrum"
             smooth_err_ds.attrs["formula"] = "Incertainty on the smoothed diode value"
+            smooth_err_ds.attrs["units"] = "A"
             frame_ds = nrm_grp.create_dataset("frame_idx", data=self.frame_ids)
             frame_ds.attrs["interpretation"] = "spectrum"
             frame_ds.attrs["long_name"] = "Frame number"

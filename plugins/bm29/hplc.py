@@ -1274,14 +1274,17 @@ class HPLC(Plugin):
         raw_ds = diode_data.create_dataset("raw", data=diode_raw.astype(numpy.float32))
         raw_ds.attrs["interpretation"] = "spectrum"
         raw_ds.attrs["long_name"] = "Beam-stop diode intensity"
+        raw_ds.attrs["units"] = "A"
         smooth_ds = diode_data.create_dataset("smooth", data=diode_smooth.astype(numpy.float32))
         smooth_ds.attrs["interpretation"] = "spectrum"
         smooth_ds.attrs["formula"] = ("left untouched" if algorithm == "none" else
                                       f"{algorithm} filter, {2 * (filter_size // 2) + 1} frames wide")
+        smooth_ds.attrs["units"] = "A"
         smooth_err_ds = diode_data.create_dataset(
             "smooth_errors", data=numpy.full(nframes, diode_error, dtype=numpy.float32))
         smooth_err_ds.attrs["interpretation"] = "spectrum"
         smooth_err_ds.attrs["formula"] = "Incertainty on the smoothed diode value"
+        smooth_err_ds.attrs["units"] = "A"
         smooth_err_ds.attrs["comment"] = ("`noise` when nothing is smoothed, `residual` "
                                           "otherwise, both in absolute units")
         frame_ds = diode_data.create_dataset("frame_idx", data=ids)
