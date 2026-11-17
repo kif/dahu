@@ -8,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/09/2026"
+__date__ = "14/11/2026"
 __status__ = "development"
 __version__ = "0.3.0"
 
@@ -27,7 +27,7 @@ try:
     from esrf_ontologies import technique
 except ImportError:
     technique = None
-    METADATA = {'technique_pid': 'https://w3id.org/PaN/ESRFET#BioSAXS https://w3id.org/PaN/ESRFET#SAXS', 'definition': 'BioSAXS SAXS', 'technique_pid_esrfet_version': '0.1.0'}
+    METADATA = {'technique_pid': 'https://w3id.org/PaN/ESRFET#BioSAXS https://w3id.org/PaN/ESRFET#SAXS', 'definition': 'BioSAXS', 'technique_pid_esrfet_version': '0.1.0'}
 
 version = __version__
 
@@ -101,7 +101,7 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     if metadata is None:
         metadata = {}
     if technique is not None:
-        metadata.update(technique.get_technique_metadata("SAXS", "BIOSAXS").get_dataset_metadata())
+        metadata.update(technique.get_technique_metadata("BIOSAXS").get_dataset_metadata())
     else:
         metadata.update(METADATA)
 
