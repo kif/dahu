@@ -27,8 +27,8 @@ try:
     from esrf_ontologies import technique
 except ImportError:
     technique = None
-    METADATA = {'technique_pid': 'https://w3id.org/PaN/ESRFET#BioSAXS https://w3id.org/PaN/ESRFET#SAXS', 
-                'definition': 'BioSAXS', 
+    METADATA = {'technique_pid': 'https://w3id.org/PaN/ESRFET#BioSAXS https://w3id.org/PaN/ESRFET#SAXS',
+                'definition': 'BioSAXS',
                 'technique_pid_esrfet_version': '0.1.0'}
 
 version = __version__
