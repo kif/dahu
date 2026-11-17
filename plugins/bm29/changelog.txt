@@ -1,0 +1,121 @@
+Changelog of the BM29 plugins (dahu/plugins/bm29)
+=================================================
+
+Summary of the changes made by Jérôme Kieffer, reconstructed from
+`git log -- plugins/bm29` (about 370 commits, February 2020 → November 2026).
+#NNN refer to GitHub issues/PRs.
+
+
+2026-10 / 2026-11: branch BM29_diode_noise
+------------------------------------------
+* Push to icat even when there is no Guinier region (2026-11-02).
+* Graphs: threshold line, plot of the selection, z-score stored, polish
+  (2026-10-14).
+* Better selection of the background frames; improved background detection;
+  exclusion of the solvent bubble; many more frames kept so that those of the
+  peaks can be discarded; peaks merged with unions based on accumulators (better
+  statistics). Lessons learned from 150+ HPLC datasets.
+* Noise of the beam-stop diode:
+  - diode noise injected into the global variance;
+  - scattering signal and accumulators scaled for the diode variations;
+  - blocks from different input data joined, diode signal smoothed; the diode
+    signal is now always present;
+  - renormalization always performed.
+* Accumulators propagated to the HPLC pipeline and included in NexusJuice;
+  accumulator datasets compressed with ZFP.
+* UV data read from the Bliss master file when readable.
+* Archive also exported as a zip file.
+* Curves inverted for anisotropy; polish of the renormalization and of the
+  Nexus representation.
+* No communication with ispyb/icat when ispyb is invalid; development mode
+  removed.
+* Fixes found while reprocessing data, documentation and requirements updated,
+  ruff, typos.
+
+2026-09 / 2026-10: rewrite of the data-reduction pipeline (BM29_refactor_analysis)
+----------------------------------------------------------------------------------
+* Time averaging rewritten on top of accumulators; processing stages renamed;
+  data-reduction pipeline corrected.
+* Renormalization implemented as part of the pipeline, before cormap.
+* Buffer averaging based on pyFAI's IntegrateResults; subtraction done in 1D
+  instead of 2D; better assessment of the diode variance.
+* NexusJuice adapted to the new file format; NXdata of the Kratky plots fixed.
+* Agent guidance files for dahu/BM29 (CLAUDE.md).
+* Spottiness used to detect the meniscus (2026-09-21).
+* NexusJuice classes refactored (easier to maintain/extend); HDF5 strings
+  decoded when needed.
+* #114: strictly increasing sequence index; #105: error bars fixed in Guinier;
+  #106/#107: ontologies / icat; #106 closed.
+* Code modernization: ruff (auto-fix and unsafe fixes), typos.
+* More robust plugin loading (ImportError); more flexible file names for zipped
+  data.
+
+2026-02 / 2026-04: HPLC, UV and monitor noise
+---------------------------------------------
+* Noise measurement of the monitor value; statistics computed before assuming
+  everything is fine.
+* Smoothing of the beam-stop intensity; beam-stop diode signal also saved in
+  the chromatogram.
+* Integration of UV data (HDF5 writing, HPLC results, overlaid SAXS/UV curves).
+* HPLC fraction expressed in seconds instead of frames; upper boundary of the
+  time-slice fixed.
+* Start of the transposition implementation (2025-12).
+* Less verbose; order of the checks; ruff format; typos.
+
+2025: mesh-scan, icat/DRAC, exports
+-----------------------------------
+* Mesh-scan for BM29: reading of individual frames, saving of map_ptr and of
+  the configuration, "results" renamed "result" (consistency with pyFAI);
+  Kratky plot display fixed.
+* SC experiments and HPLC datasets exported as zip; HPLC export as CSV.
+* Richer icat/DRAC metadata, type of experiment propagated to icat; icat
+  declaration separated from ispyb; two memcached servers.
+* No ispyb communication when it is broken.
+* Relative paths fixed for the "default" attribute/dataset.
+* Workaround for the noisy beam-stop diode (2025-06-04).
+* Saving of large arrays disabled; h5py files guaranteed to be closed; context
+  managers for open()/fabio.open().
+* Fixes done live on the beamline (2025-02-24/25); subtracted data with several
+  sources; processing of "old" style data.
+* Compatibility with Ubuntu 24.04 and installation through pip (2024-12).
+* Fixes: memcached key length, common prefix discarded, output directory
+  "PROCESSED_DATA".
+
+2022-2024: standard deviation, icat, meson
+------------------------------------------
+* 2024-02: all meson files declared, installation path declared.
+* 2022-11: normalization fixed with the standard deviations of the buffers.
+* 2022-09: upload of the data to icat (start, metadata, HPLC), gallery
+  (thumbnail of the curve, IFT + Guinier + Kratky plots, saving of the curves),
+  saving into the "processed" directory, resilience when NMF fails.
+* 2022-06: standard-deviation formula fixed (Poissonian noise), timeout,
+  uncertainty propagation fixed.
+* 2022-04: subtraction through memcached (q/I/sigma no longer part of the
+  output), uncertainties propagated in the 2D merge, saving of the normalization
+  factor, tolerance to files being written.
+
+2021: ISPyB connection and automatic HPLC
+-----------------------------------------
+* Data collection, then ISPyB connector (April); background analysis, selection
+  of the buffer frames, automatic fraction collection in HPLC mode.
+* Normalization by exposure time; adaptation to the new freesas; ISPyB export
+  (NaN → 0); more robust wait_for; memory clean-up.
+
+2020: creation of the BM29 plugins
+----------------------------------
+* 2020-02: plugins as packages; common data structure (sample + ispyb
+  authentication); search for the largest set of statistically equivalent
+  curves; cormap implemented; AutoSub pipeline; energy instead of wavelength;
+  1/Å units in addition to 1/nm.
+* 2020-03: Nexus formatting (compliance, "@units").
+* 2020-05: ZFP compression; Guinier, Kratky and IFT integrated into the
+  subtraction; external links always relative.
+* 2020-06: SILX_style in NXdata (JSON string, log scale); Rg and I0 exported;
+  start of the ISPyB storage of subtracted data; list of known dependencies.
+* 2020-09: Dmax, source of the Guinier fit, sample information, frame ids,
+  synchronization with the integration plugins, default outputs in HPLC/SC
+  mode, cormap skipped in HPLC mode.
+* 2020-10: HPLC processing for BioSaxs; sending to ISPyB (SC mode, test_mode);
+  generic ISPyB workflow; saving of individual buffers; plots as PNG/SVG;
+  workaround for HDF5 locking; JSON export fixed.
+* 2020-12: light renderer and closing of the figures.
