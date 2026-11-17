@@ -23,6 +23,8 @@ Summary of the changes made by Jérôme Kieffer, reconstructed from
   - renormalization always performed.
 * Accumulators propagated to the HPLC pipeline and included in NexusJuice;
   accumulator datasets compressed with ZFP.
+* Beam-stop diode datasets (raw, smooth, smooth_errors, in integrate and hplc)
+  now carry the attribute units = "A".
 * UV data read from the Bliss master file when readable.
 * Archive also exported as a zip file.
 * Curves inverted for anisotropy; polish of the renormalization and of the
