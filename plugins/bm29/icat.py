@@ -1,30 +1,35 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """Data Analysis plugin for BM29: BioSaxs
 
 Everything to send data to iCat, the data catalogue
- 
+
 """
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "21/02/2025" 
+__date__ = "17/09/2026"
 __status__ = "development"
-version = "0.3.0"
+__version__ = "0.3.0"
 
 
+import logging
 import os
 import tempfile
-import logging
+
 logger = logging.getLogger(__name__)
 try:
     from pyicat_plus.client.main import IcatClient
 except ImportError:
     logger.error("iCat connection will no work")
     IcatClient = None
+try:
+    from esrf_ontologies import technique
+except ImportError:
+    technique = None
+    METADATA = {'technique_pid': 'https://w3id.org/PaN/ESRFET#BioSAXS https://w3id.org/PaN/ESRFET#SAXS', 'definition': 'BioSAXS SAXS', 'technique_pid_esrfet_version': '0.1.0'}
+
+version = __version__
 
 def _ensure_gallery(gallery):
     if gallery:
@@ -42,11 +47,11 @@ def _ensure_gallery(gallery):
 
 def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None, raw=None,  data=None, gallery=None, metadata=None):
     """Send some data to icat, the data-catalogue
-    
+
     :param proposal: mx1324
     :param beamline: name of the beamline
     :param sample: sample name as registered in icat
-    :param dataset: name given by BLISS
+    :param dataset: name of the dataset: integration, subtraction, HPLC, ...
     :param path: directory name where processed data are staying
     :param raw: list of directory name of the raw data (not the processed ones)
     :param data: dict with all data sent to iCat
@@ -56,42 +61,50 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     """
     gallery = _ensure_gallery(gallery)
     tmp = gallery.strip("/").split("/")
-    idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")][-1]
-    if tmp[idx_process] == "processed":
-        assert idx_process>=6
-        if proposal is None:
-            proposal = tmp[idx_process-6]
-        if beamline is None:
-            beamline = tmp[idx_process-5]
-        if sample is None:
-            sample = tmp[idx_process-2]
-        if dataset is None:
-            dataset = tmp[idx_process+1]
-        if path is None:
-            path = os.path.dirname(gallery)
-        if raw is None:            
-            raw = os.path.abspath(gallery[:gallery.lower().index("process")])
-    elif tmp[idx_process] == "PROCESSED_DATA":           
-        if proposal is None:
-            proposal = tmp[idx_process-3]
-        if beamline is None:
-            beamline = tmp[idx_process-2]
-        if sample is None:
-            sample = tmp[idx_process+1]
-        if dataset is None:
-            dataset = tmp[idx_process+2]
-        if path is None:
-            path = os.path.dirname(gallery)
-        if raw is None:            
-            raw = os.path.dirname(os.path.dirname(os.path.abspath(gallery.replace("PROCESSED_DATA", "RAW_DATA"))))
+    idx_process = [i for i,j in enumerate(tmp) if j.lower().startswith("process")]
+    if idx_process:
+        idx_process=idx_process[-1]
+        if tmp[idx_process] == "processed":
+            assert idx_process>=6
+            if proposal is None:
+                proposal = tmp[idx_process-6]
+            if beamline is None:
+                beamline = tmp[idx_process-5]
+            if sample is None:
+                sample = tmp[idx_process-2]
+            if dataset is None:
+                dataset = tmp[idx_process+1]
+            if path is None:
+                path = os.path.dirname(gallery)
+            if raw is None:
+                raw = os.path.abspath(gallery[:gallery.lower().index("process")])
+        elif tmp[idx_process] == "PROCESSED_DATA":
+            if proposal is None:
+                proposal = tmp[idx_process-3]
+            if beamline is None:
+                beamline = tmp[idx_process-2]
+            if sample is None:
+                sample = tmp[idx_process+1]
+            if dataset is None:
+                dataset = tmp[idx_process+2]
+            if path is None:
+                path = os.path.dirname(gallery)
+            if raw is None:
+                raw = os.path.dirname(os.path.dirname(os.path.abspath(gallery.replace("PROCESSED_DATA", "RAW_DATA"))))
+        else:
+            logger.error("Unrecognized path layout")
+            return
     else:
-        logger.error("Unrecognized path layout")
-    
+        logger.error("No gallery provided")
+        return
+
     if metadata is None:
         metadata = {}
-    metadata["definition"] = "SAXS",
-   # metadata["Sample_name"] = sample
-    
+    if technique is not None:
+        metadata.update(technique.get_technique_metadata("SAXS", "BIOSAXS").get_dataset_metadata())
+    else:
+        metadata.update(METADATA)
+
     for k,v in data.items():
         if isinstance(k, str) and k.startswith("SAXS_"):
             metadata[k] = v
@@ -120,8 +133,8 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     bift = data.get("bift")
     if bift:
         metadata["SAXS_rg"] =  f"{bift.Rg_avg:.1f}±{bift.Rg_std:.1f}"
-        metadata["SAXS_rg_std"] =  f"{bift.Rg_avg:.1f}"
-        metadata["SAXS_rg_avg"] =  f"{bift.Rg_std:.1f}"
+        metadata["SAXS_rg_avg"] =  f"{bift.Rg_avg:.1f}"
+        metadata["SAXS_rg_std"] =  f"{bift.Rg_std:.1f}"
         metadata["SAXS_d_max"] = f"{bift.Dmax_avg:.1f}±{bift.Dmax_std:.1f}"
         metadata["SAXS_chi2r"] = f"{bift.chi2r_avg:.2f}"
         metadata["SAXS_chi2r_error"] = f"{bift.chi2r_std:.2f}"
@@ -129,10 +142,10 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     tomerge = data.get("merged")
     if tomerge:
         metadata["SAXS_frames_averaged"] = f"{tomerge[0]}-{tomerge[1]}"
-    
+
     volume = data.get("volume")
     if volume:
-        metadata["SAXS_porod_volume"] = str(volume) 
+        metadata["SAXS_porod_volume"] = str(volume)
     rti = data.get("rti")
     if rti:
         "Vc sigma_Vc Qr sigma_Qr mass sigma_mass"
@@ -140,19 +153,18 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
         metadata["SAXS_vc_error"] = f"{rti.sigma_Vc:.2f}"
         metadata["SAXS_mass"] = f"{rti.mass:.2f}"
         metadata["SAXS_mass_error"] = f"{rti.sigma_mass:.2f}"
-        
+
     if not isinstance(raw, list):
         raw = [raw]
     #Other metadata one may collect ...
     metadata["SAXS_experiment_type"]= data.get("experiment_type", "UNKNOWN")
     metadata["datasetName"] = dataset
     icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
-    kwargs = {"beamline":beamline, 
-              "proposal":proposal, 
-              "dataset":dataset, 
-              "path":path, 
-              "metadata":metadata, 
+    kwargs = {"beamline":beamline,
+              "proposal":proposal,
+              "dataset":dataset,
+              "path":path,
+              "metadata":metadata,
               "raw":raw}
-    #print(kwargs)
     icat_client.store_processed_data(**kwargs)
     return kwargs

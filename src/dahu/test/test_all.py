@@ -1,10 +1,7 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 
 """Test suite for all dahu modules."""
-
-from __future__ import with_statement, print_function
 
 __authors__ = ["Jérôme Kieffer"]
 __contact__ = "jerome.kieffer@esrf.eu"
@@ -14,12 +11,11 @@ __data__ = "10/06/2016"
 
 import sys
 import unittest
-from .utilstest import getLogger
-logger = getLogger(__file__)
 
-from . import test_job
-from . import test_plugin
-from . import test_cache
+from . import test_cache, test_factory, test_job, test_plugin, test_server
+from .utilstest import getLogger
+
+logger = getLogger(__file__)
 
 
 def suite():
@@ -27,6 +23,8 @@ def suite():
     testSuite.addTest(test_job.suite())
     testSuite.addTest(test_plugin.suite())
     testSuite.addTest(test_cache.suite())
+    testSuite.addTest(test_factory.suite())
+    testSuite.addTest(test_server.suite())
     return testSuite
 
 if __name__ == '__main__':

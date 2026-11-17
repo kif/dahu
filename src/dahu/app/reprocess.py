@@ -4,11 +4,17 @@
 Reprocess a job using the current
 """
 
-import os, json, logging, time
+import json
+import logging
+import os
+import time
 from argparse import ArgumentParser
+
 import dahu.factory
-from dahu.job import Job
-from dahu.utils import get_workdir, NumpyEncoder
+
+from ..job import Job
+from ..utils import NumpyEncoder, get_workdir
+
 logging.basicConfig()
 
 STATE_UNINITIALIZED = Job.STATE_UNINITIALIZED
@@ -23,15 +29,16 @@ def parse():
     """
     Parse the command line a return the parsed arguments
     """
-    # TODO
     parser = ArgumentParser(description='reProcess some data using the Dahu')
     parser.add_argument("-d", '--debug', dest='debug', action='store_true',
                         default=False, help='debug mode')
+    parser.add_argument("-o", '--output', dest='output',
+                        default=None, help='Destination directory for output')
     parser.add_argument(dest='args', nargs='+', help='job inputs to be re-processed')
     args = parser.parse_args()
     if args.debug:
         logging.root.setLevel(logging.DEBUG)
-    return args.args
+    return args
 
 
 def _run_(plugin, what):
@@ -56,31 +63,30 @@ def _run_(plugin, what):
                 method()
             except Exception as error:
                 import traceback
-                err_msg = [traceback.format_exc(limit=10), ""
-                           "Error %s while calling %s.%s" %
-                           (error, plugin.__class__.__name__, what)]
+                err_msg = [traceback.format_exc(limit=10), (""
+                           f"Error {error} while calling {plugin.__class__.__name__}.{what}")]
                 print(os.linesep.join(err_msg))
                 return STATE_FAILURE
             else:
                 return STATE_RUNNING
     else:
-        print("No such method %s in class %s" % (what, plugin.__class__.__name__))
+        print(f"No such method {what} in class {plugin.__class__.__name__}")
         return STATE_FAILURE
 
 
 def process(args):
     """Process a set of arguments
-    
-    :param args: list of files to process
+
+    :param args: Argparse parsed arguments
     """
     working_dir = get_workdir()
-    for idx, fn in enumerate(args):
+    for idx, fn in enumerate(args.args):
         print("Processing #%i: %s" % (idx, fn))
         if os.path.exists(fn):
             with open(fn, "r") as fp:
                 dico = json.load(fp)
         else:
-            logging.warning("No such file: %s" % fn)
+            logging.warning(f"No such file: {fn}")
             continue
         plugin_name = dico["plugin_name"]
         dico["job_id"] = idx
@@ -99,7 +105,7 @@ def process(args):
                 state = STATE_SUCCESS
             else:
                 state = STATE_FAILURE
-        print("Finished with state: %s" % state)
+        print(f"Finished with state: {state}")
         plugin.output["job_runtime"] = time.time() - start_time
         result = json.dumps(plugin.output, indent=4, cls=NumpyEncoder)
         print(result)
@@ -108,6 +114,11 @@ def process(args):
             fp.write(result)
         with open(basename + ".inp", "w") as fp:
             json.dump(plugin.input, fp, indent=4, cls=NumpyEncoder)
+        if args.output:
+            dest = os.path.join(args.output, fn.replace(".inp", ".out"))
+            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            with open(dest, "w") as fp:
+                fp.write(result)
 
 
 def main():

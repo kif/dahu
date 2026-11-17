@@ -14,11 +14,17 @@ __date__ = "25/03/2020"
 __status__ = "development"
 __version__ = "1.0.0"
 
-from dahu.factory import register
-from .metadata import Metadata
-from .single_detector import SingleDetector
-from .xpcs import XPCS
+from dahu.factory import optional_plugin, register
 
-register(Metadata, fqn="id02.metadata")
-register(SingleDetector, fqn="id02.singledetector")
-register(XPCS, fqn="id02.xpcs")
+# One block per plugin: a missing dependency disables only the plugin concerned.
+with optional_plugin("id02.metadata"):
+    from .metadata import Metadata
+    register(Metadata, fqn="id02.metadata")
+
+with optional_plugin("id02.singledetector"):
+    from .single_detector import SingleDetector
+    register(SingleDetector, fqn="id02.singledetector")
+
+with optional_plugin("id02.xpcs"):
+    from .xpcs import XPCS
+    register(XPCS, fqn="id02.xpcs")

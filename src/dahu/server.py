@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-# coding: utf-8
-from __future__ import with_statement, print_function, absolute_import, division
 
 """
-Data Analysis RPC server over Tango: 
+Data Analysis RPC server over Tango:
 
 Tango device server
 """
@@ -11,37 +9,44 @@ __author__ = "Jérôme Kieffer"
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "09/07/2021"
+__date__ = "11/03/2026"
 __status__ = "production"
 __docformat__ = 'restructuredtext'
 
-import sys
-import os
-import json
-import threading
 import logging
+import os
+import sys
+import threading
 import time
-import types
-import multiprocessing
-import six
-if six.PY2:
-    from Queue import Queue
-else:
-    from queue import Queue
+from queue import Queue
+
+import PyTango
+
+from .job import Job, plugin_factory
 
 logger = logging.getLogger("dahu.server")
 # set loglevel at least at INFO
 if logger.getEffectiveLevel() > logging.INFO:
     logger.setLevel(logging.INFO)
 
-import PyTango
-from .job import Job, plugin_factory
-
 try:
     from rfoo.utils import rconsole
     rconsole.spawn_server()
 except ImportError:
     logger.debug("No socket opened for debugging -> please install rfoo")
+
+
+def summarize(docstring):
+    """Extract a one line description out of a docstring
+
+    :param docstring: the docstring of a plugin, possibly None
+    :return: the first non empty line of it
+    """
+    for line in (docstring or "").splitlines():
+        line = line.strip()
+        if line:
+            return line
+    return "no documentation"
 
 
 class DahuDS(PyTango.LatestDeviceImpl):
@@ -74,10 +79,10 @@ class DahuDS(PyTango.LatestDeviceImpl):
 
     def delete_device(self):
 
-        logger.debug("[Device delete_device method] for device %s" % self.get_name())
+        logger.debug(f"[Device delete_device method] for device {self.get_name()}")
 
     def init_device(self):
-        logger.debug("In %s.init_device()" % self.get_name())
+        logger.debug(f"In {self.get_name()}.init_device()")
 
         self.set_state(PyTango.DevState.ON)
         self.get_device_properties(self.get_device_class())
@@ -89,7 +94,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
         pass
 
     def read_attr_hardware(self, data):
-        logger.debug("In %s.read_attr_hardware()" % self.get_name())
+        logger.debug(f"In {self.get_name()}.read_attr_hardware()")
 
     def read_jobSuccess(self, attr):
         attr.set_value(self.last_success)
@@ -104,52 +109,60 @@ class DahuDS(PyTango.LatestDeviceImpl):
         attr.set_value(bool(self._serialize))
 
     def write_serialize(self, attr):
-        self._serialize = bool(attr.get_write_value)
+        self._serialize = bool(attr.get_write_value())
 
     def getJobState(self, jobId):
         return Job.getStatusFromID(jobId)
 
     def cleanJob(self, jobId):
-        return Job.cleanJobFromID(jobId)
+        return Job.clean_job_from_id(jobId)
 
     def listPlugins(self):
         """
         List all plugin currently loaded .... with a brief description
         """
-        logger.debug("In %s.listPlugins" % (self.get_name()))
+        logger.debug(f"In {self.get_name()}.listPlugins")
         res = ["List of all plugin currently loaded (use initPlugin to loaded additional plugins):"]
-        plugins = list(plugin_factory.registry.keys())
-        plugins.sort()
-        return os.linesep.join(res + [" %s : %s" % (i, plugin_factory.registry[i].__doc__.split("\n")[0]) for i in plugins])
+        for name in sorted(plugin_factory.registry):
+            res.append(f" {name} : {summarize(plugin_factory.registry[name].__doc__)}")
+        unavailable = plugin_factory.unavailable
+        if unavailable:
+            res.append("")
+            res.append("Plugins which failed to be loaded:")
+            for name in sorted(unavailable):
+                res.append(f" {name} : {unavailable[name]}")
+        return os.linesep.join(res)
 
     def initPlugin(self, name):
         """
         Creates a job with the given plugin
         """
-        logger.debug("In %s.initPlugin(%s)" % (self.get_name(), name))
-        err = None
+        logger.debug(f"In {self.get_name()}.initPlugin({name})")
+        plugin = err = None
         try:
             plugin = plugin_factory(name)
         except Exception as error:
-            err = "plugin %s failed to be instanciated: %s" % (name, error)
-            logger.error(err)
-        if plugin is None or err:
-            return "Plugin not found: %s, err" % (name, err)
+            err = f"{type(error).__name__}: {error}"
+            logger.error(f"plugin {name} failed to be instanciated, {err}")
+        if plugin is None:
+            if err is None:
+                # the plugin may have been disabled at registration time
+                err = plugin_factory.unavailable.get(name.lower(), "no such plugin")
+            return f"Plugin not found: {name}, {err}"
         else:
-            return "Plugin loaded: %s%s%s" % (name, os.linesep, plugin.__doc__)
+            return f"Plugin loaded: {name}{os.linesep}{plugin.__doc__}"
 
     def abort(self, jobId):
         """
         Aborts a job
 
-        @param  jobId: ID of the job to stop
-        """
-        pass
+        The plugin has to honour it: it is expected to check `is_aborted`.
 
-    def quitDahu(self):
-        logger.debug("In %s.quitDahu()" % self.get_name())
-        logger.info("Quitting DahuDS")
-        sys.exit()
+        @param  jobId: ID of the job to stop
+        @return: True if the job was running and has been asked to stop
+        """
+        logger.debug(f"In {self.get_name()}.abort({jobId})")
+        return Job.abort_job_from_id(jobId)
 
     def startJob(self, argin):
         """
@@ -158,7 +171,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
         @param argin: 2-list [<Dahu plugin to execute>, <JSON serialized dict>]
         @return: jobID which is an int (-1 for error)
         """
-        logger.debug("In %s.startJob()" % self.get_name())
+        logger.debug(f"In {self.get_name()}.startJob()")
         name, data_input = argin[:2]
         if data_input.strip() == "":
             return -1
@@ -185,7 +198,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
 
         @param job: instance of dahu.job.Job
         """
-        logger.debug("In %s.finished_processing id:%s (%s)" % (self.get_name(), job.id, job.status))
+        logger.debug(f"In {self.get_name()}.finished_processing id:{job.id} ({job.status})")
 #         self._ncpu_sem.release()
         job.clean(wait=False)
         if job.status == job.STATE_SUCCESS:
@@ -243,7 +256,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
         with self.stat_lock:
             fStartStat = time.time()
             self.last_stats = Job.stats()
-            self.last_stats += os.linesep + "Statistics collected on %s, the collect took: %.3fs" % (time.asctime(), time.time() - fStartStat)
+            self.last_stats += os.linesep + f"Statistics collected on {time.asctime()}, the collect took: {time.time() - fStartStat:.3f}s"
             self.push_change_event("statisticsCollected", self.last_stats)
 
     def getStatistics(self):
@@ -283,7 +296,7 @@ class DahuDS(PyTango.LatestDeviceImpl):
         Wait for a job to be finished and returns the status.
         May cause Tango timeout if too slow to finish ....
         May do polling to wait the job actually started
-        
+
         @param jobId: identifier of the job (int)
         @return: status of the job
         """
@@ -351,5 +364,5 @@ class DahuDSClass(PyTango.DeviceClass):
 
     def __init__(self, name):
         PyTango.DeviceClass.__init__(self, name)
-        self.set_type(name);
+        self.set_type(name)
         logger.debug("In DahuDSClass  constructor")

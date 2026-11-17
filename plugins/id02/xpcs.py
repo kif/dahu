@@ -32,12 +32,16 @@ from .common import Nexus, get_isotime
 from pyFAI.detectors import Detector
 from pyFAI.geometry import Geometry
 from pyFAI.units import CONST_hc
-from dynamix import version as dynamix_version
-from dynamix.correlator import dense
+try:
+    from dynamix import version as dynamix_version
+    from dynamix.correlator import dense
+except ImportError:
+    logger.error("Dynamix module is missing, the XPCS plugin will not be able to correlate")
+    dynamix_version = dense = None
 # Dummy factory for correlators
-CORRELATORS = {i: getattr(dense, i)
-               for i in dir(dense)
-               if i.endswith("Correlator")}
+CORRELATORS = {} if dense is None else {i: getattr(dense, i)
+                                        for i in dir(dense)
+                                        if i.endswith("Correlator")}
 COMPRESSION = hdf5plugin.Bitshuffle()
 
 
