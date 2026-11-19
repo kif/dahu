@@ -8,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "14/10/2026"
+__date__ = "19/11/2026"
 __status__ = "development"
 __version__ = "0.8.0"
 
@@ -454,9 +454,10 @@ def _select_scan(h5file, image_file):
         for scan in scans:
             for name in scan["measurement"]:
                 dataset = scan["measurement"].get(name)
-                if isinstance(dataset, h5py.Dataset) and dataset.is_virtual:
-                    if any(target == os.path.basename(source.file_name)
-                           for source in dataset.virtual_sources()):
+                if (isinstance(dataset, h5py.Dataset) and
+                    dataset.is_virtual and
+                    any(target == os.path.basename(source.file_name)
+                           for source in dataset.virtual_sources())):
                         return scan
     return scans[0] if len(scans) == 1 else None
 

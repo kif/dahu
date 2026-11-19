@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-#
 
 """Non-regression tests for the SAXS analysis of BM29: Guinier -> Kratky -> invariants -> BIFT
 
@@ -450,7 +448,7 @@ class TestBackgroundSelection(unittest.TestCase):
         intensity = solvent * (1 + 0.002 * rng.standard_normal((40, q.size)))
         intensity[17] += 20.0 * sphere(q) / sphere(q).max()      # one frame with a solute
         std = 0.002 * intensity
-        bg_avg, bg_std, to_keep, candidates, _ = hplc.build_background(intensity, std)
+        bg_avg, bg_std, to_keep, _candidates, _ = hplc.build_background(intensity, std)
         self.assertNotIn(17, to_keep, "the contaminated frame made it into the background")
         self.assertGreater(len(to_keep), len(intensity) // 2,
                            "a clean pool must not be decimated")
