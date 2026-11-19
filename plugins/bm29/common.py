@@ -43,6 +43,11 @@ SAXS_STYLE = json.dumps({"signal_scale_type": "log"},
 NORMAL_STYLE = json.dumps({"signal_scale_type": "linear"},
                           indent=2,
                           separators=(",\r\n", ":\t"))
+# same as SAXS_STYLE, named for what it does rather than for what it plots: for curves
+# which are not scattering but still span decades, several signals on one pair of axes
+LOG_STYLE = json.dumps({"signal_scale_type": "log"},
+                       indent=2,
+                       separators=(",\r\n", ":\t"))
 
 
 # Constants associated to the azimuthal integrator to be used in all plugins:
