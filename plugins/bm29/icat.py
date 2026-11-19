@@ -8,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "17/11/2026"
+__date__ = "19/11/2026"
 __status__ = "development"
 __version__ = "0.3.1"
 
@@ -115,34 +115,34 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
         if  isinstance(sample, str):
             metadata["Sample_name"] = metadata["SAXS_code"] = sample
         else:
-            metadata["SAXS_concentration"] = f"{sample.concentration} mg/mL"
+            metadata["SAXS_concentration"] = (sample.concentration, "mg/mL")
             metadata["Sample_name"] = metadata["SAXS_code"] = str(sample.name)
             metadata["SAXS_comments"] = str(sample.description)
-            metadata["SAXS_storage_temperature"] = f"{sample.temperature_env} °C"
-            metadata["SAXS_exposure_temperature"] = f"{sample.temperature} °C"
+            metadata["SAXS_storage_temperature"] = (sample.temperature_env, "°C")
+            metadata["SAXS_exposure_temperature"] = (sample.temperature, "°C")
             if sample.hplc:
                 metadata["SAXS_column_type"] = str(sample.hplc)
             #"buffer": "description of buffer, pH, ...",
 
     guinier = data.get("guinier")
     if guinier:
-        metadata["SAXS_guinier_rg"] = f"{guinier.Rg:.1f} nm"
-        metadata["SAXS_guinier_sigma_rg"] = f"{guinier.sigma_Rg:.1f} nm"
-        metadata["SAXS_guinier_points_start"] = f"{guinier.start_point}"
-        metadata["SAXS_guinier_points_end"] = f"{guinier.end_point}"
-        metadata["SAXS_guinier_i0"] = f"{guinier.I0:.1f} 1/cm"
-        metadata["SAXS_guinier_i0_error"] = f"{guinier.sigma_I0:.1f} 1/cm"
+        metadata["SAXS_guinier_rg"] = (guinier.Rg, "nm")
+        metadata["SAXS_guinier_sigma_rg"] = (guinier.sigma_Rg, "nm")
+        metadata["SAXS_guinier_points_start"] = guinier.start_point
+        metadata["SAXS_guinier_points_end"] = guinier.end_point
+        metadata["SAXS_guinier_i0"] = (guinier.I0, "1/cm")
+        metadata["SAXS_guinier_i0_error"] = (guinier.sigma_I0, "1/cm")
 
     bift = data.get("bift")
     if bift:
-        metadata["SAXS_rg"] =  f"{bift.Rg_avg:.1f} nm"
-        metadata["SAXS_rg_error"] =  f"{bift.Rg_std:.1f} nm"
-        metadata["SAXS_rg_avg"] =  f"{bift.Rg_avg:.1f} nm"
-        metadata["SAXS_rg_std"] =  f"{bift.Rg_std:.1f} nm"
-        metadata["SAXS_d_max"] = f"{bift.Dmax_avg:.1f} nm"
-        metadata["SAXS_d_max_error"] = f"{bift.Dmax_std:.1f} nm"
-        metadata["SAXS_chi2r"] = f"{bift.chi2r_avg:.2f}"
-        metadata["SAXS_chi2r_error"] = f"{bift.chi2r_std:.2f}"
+        metadata["SAXS_rg"] =  (bift.Rg_avg, "nm")
+        metadata["SAXS_rg_error"] =  (bift.Rg_std, "nm")
+        metadata["SAXS_rg_avg"] =  (bift.Rg_avg, "nm")
+        metadata["SAXS_rg_std"] =  (bift.Rg_std, "nm")
+        metadata["SAXS_d_max"] = (bift.Dmax_avg, "nm")
+        metadata["SAXS_d_max_error"] = (bift.Dmax_std, "nm")
+        metadata["SAXS_chi2r"] = bift.chi2r_avg
+        metadata["SAXS_chi2r_error"] = bift.chi2r_std
 
     tomerge = data.get("merged")
     if tomerge:
@@ -150,14 +150,14 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
 
     volume = data.get("volume")
     if volume:
-        metadata["SAXS_porod_volume"] = f"{volume} nm³"
+        metadata["SAXS_porod_volume"] = (volume, "nm³")
     rti = data.get("rti")
     if rti:
         "Vc sigma_Vc Qr sigma_Qr mass sigma_mass"
-        metadata["SAXS_vc"] = f"{rti.Vc:.2f} nm²"
-        metadata["SAXS_vc_error"] = f"{rti.sigma_Vc:.2f} nm²"
-        metadata["SAXS_mass"] = f"{rti.mass:.2f} kDa"
-        metadata["SAXS_mass_error"] = f"{rti.sigma_mass:.2f} kDa"
+        metadata["SAXS_vc"] = (rti.Vc, "nm²")
+        metadata["SAXS_vc_error"] = (rti.sigma_Vc, "nm²")
+        metadata["SAXS_mass"] = (rti.mass, "kDa")
+        metadata["SAXS_mass_error"] = (rti.sigma_mass, "kDa")
 
     if not isinstance(raw, list):
         raw = [raw]

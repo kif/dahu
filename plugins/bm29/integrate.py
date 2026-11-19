@@ -8,7 +8,7 @@ __authors__ = ["Jérôme Kieffer"]
 __contact__ = "Jerome.Kieffer@ESRF.eu"
 __license__ = "MIT"
 __copyright__ = "European Synchrotron Radiation Facility, Grenoble, France"
-__date__ = "08/10/2026"
+__date__ = "19/11/2026"
 __status__ = "production"
 __version__ = "0.6.0"
 
@@ -922,17 +922,17 @@ class IntegrateMultiframe(Plugin):
         to_icat["experiment_type"] = "hplc" if self.input.get("hplc_mode") else "sample-changer"
         to_icat["sample"] = self.sample
         to_icat["SAXS_maskFile"] = self.mask
-        to_icat["SAXS_waveLength"] = str(self.ai.wavelength)
-        to_icat["SAXS_normalisation"] = str(self.normalization_factor)
-        to_icat["SAXS_diode_currents"] = str(self.monitor_values)
-        to_icat["SAXS_numberFrames"] = str(self.nb_frames)
+        to_icat["SAXS_waveLength"] = (self.ai.wavelength, "m")
+        to_icat["SAXS_normalisation"] = self.normalization_factor
+        to_icat["SAXS_diode_currents"] = (self.monitor_values, "A")
+        to_icat["SAXS_numberFrames"] = (self.nb_frames)
         to_icat["SAXS_timePerFrame"] = self.input.get("exposure_time", "?")
-        to_icat["SAXS_detector_distance"] = str(self.ai.dist)
-        to_icat["SAXS_pixelSizeX"] = str(self.ai.detector.pixel2)
-        to_icat["SAXS_pixelSizeY"] = str(self.ai.detector.pixel1)
+        to_icat["SAXS_detector_distance"] = (self.ai.dist, "m")
+        to_icat["SAXS_pixelSizeX"] = (self.ai.detector.pixel2, "m")
+        to_icat["SAXS_pixelSizeY"] = (self.ai.detector.pixel1, "m")
         f2d = self.ai.getFit2D()
-        to_icat["SAXS_beam_center_x"] = str(f2d["centerX"])
-        to_icat["SAXS_beam_center_y"] = str(f2d["centerY"])
+        to_icat["SAXS_beam_center_x"] = (f2d["centerX"])
+        to_icat["SAXS_beam_center_y"] = (f2d["centerY"])
 
         metadata = {"scanType": "integration"}
         return send_icat(sample=self.sample.name,
