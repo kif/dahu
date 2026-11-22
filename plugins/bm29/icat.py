@@ -117,7 +117,9 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
         else:
             metadata["SAXS_concentration"] = (sample.concentration, "mg/mL")
             metadata["Sample_name"] = metadata["SAXS_code"] = str(sample.name)
-            metadata["SAXS_comments"] = str(sample.description)
+            metadata["SAXS_comments"] = (
+                str(sample.description) if sample.description is not None else None
+            )
             metadata["SAXS_storage_temperature"] = (sample.temperature_env, "°C")
             metadata["SAXS_exposure_temperature"] = (sample.temperature, "°C")
             if sample.hplc:
@@ -137,8 +139,6 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     if bift:
         metadata["SAXS_rg"] =  (bift.Rg_avg, "nm")
         metadata["SAXS_rg_error"] =  (bift.Rg_std, "nm")
-        metadata["SAXS_rg_avg"] =  (bift.Rg_avg, "nm")
-        metadata["SAXS_rg_std"] =  (bift.Rg_std, "nm")
         metadata["SAXS_d_max"] = (bift.Dmax_avg, "nm")
         metadata["SAXS_d_max_error"] = (bift.Dmax_std, "nm")
         metadata["SAXS_chi2r"] = bift.chi2r_avg
@@ -162,7 +162,7 @@ def send_icat(proposal=None, beamline=None, sample=None, dataset=None, path=None
     if not isinstance(raw, list):
         raw = [raw]
     #Other metadata one may collect ...
-    metadata["SAXS_experiment_type"]= data.get("experiment_type", "UNKNOWN")
+    metadata["SAXS_experiment_type"]= data.get("experiment_type", None)
     metadata["datasetName"] = dataset
     icat_client = IcatClient(metadata_urls=["bcu-mq-01.esrf.fr:61613", "bcu-mq-02.esrf.fr:61613"])
     kwargs = {"beamline":beamline,

@@ -926,7 +926,7 @@ class IntegrateMultiframe(Plugin):
         to_icat["SAXS_normalisation"] = self.normalization_factor
         to_icat["SAXS_diode_currents"] = (self.monitor_values, "A")
         to_icat["SAXS_numberFrames"] = (self.nb_frames)
-        to_icat["SAXS_timePerFrame"] = self.input.get("exposure_time", "?")
+        to_icat["SAXS_timePerFrame"] = self.input.get("exposure_time", None)
         to_icat["SAXS_detector_distance"] = (self.ai.dist, "m")
         to_icat["SAXS_pixelSizeX"] = (self.ai.detector.pixel2, "m")
         to_icat["SAXS_pixelSizeY"] = (self.ai.detector.pixel1, "m")
